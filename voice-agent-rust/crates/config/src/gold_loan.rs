@@ -38,6 +38,32 @@ pub struct GoldLoanConfig {
     /// Competitor comparison rates
     #[serde(default)]
     pub competitor_rates: CompetitorRates,
+
+    /// P2 FIX: Tiered interest rates based on loan amount
+    #[serde(default)]
+    pub tiered_rates: TieredRates,
+}
+
+/// P2 FIX: Tiered interest rates structure
+///
+/// Interest rates vary based on loan amount - higher amounts get better rates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TieredRates {
+    /// Rate for loans up to tier1_threshold
+    #[serde(default = "default_tier1_rate")]
+    pub tier1_rate: f64,
+    /// Threshold for tier 1 (loans up to this amount get tier1_rate)
+    #[serde(default = "default_tier1_threshold")]
+    pub tier1_threshold: f64,
+    /// Rate for loans between tier1 and tier2 thresholds
+    #[serde(default = "default_tier2_rate")]
+    pub tier2_rate: f64,
+    /// Threshold for tier 2
+    #[serde(default = "default_tier2_threshold")]
+    pub tier2_threshold: f64,
+    /// Rate for loans above tier2 threshold (premium customers)
+    #[serde(default = "default_tier3_rate")]
+    pub tier3_rate: f64,
 }
 
 /// Gold purity factors for different karats
@@ -127,6 +153,27 @@ fn default_other_nbfc_rate() -> f64 {
     20.0
 }
 
+// P2 FIX: Tiered rate defaults
+fn default_tier1_rate() -> f64 {
+    11.5 // Standard rate for small loans
+}
+
+fn default_tier1_threshold() -> f64 {
+    100000.0 // Up to 1 lakh
+}
+
+fn default_tier2_rate() -> f64 {
+    10.5 // Better rate for medium loans
+}
+
+fn default_tier2_threshold() -> f64 {
+    500000.0 // 1-5 lakh
+}
+
+fn default_tier3_rate() -> f64 {
+    9.5 // Premium rate for high-value loans
+}
+
 impl Default for GoldLoanConfig {
     fn default() -> Self {
         Self {
@@ -138,6 +185,20 @@ impl Default for GoldLoanConfig {
             processing_fee_percent: default_processing_fee(),
             purity_factors: PurityFactors::default(),
             competitor_rates: CompetitorRates::default(),
+            tiered_rates: TieredRates::default(),
+        }
+    }
+}
+
+/// P2 FIX: Default tiered rates
+impl Default for TieredRates {
+    fn default() -> Self {
+        Self {
+            tier1_rate: default_tier1_rate(),
+            tier1_threshold: default_tier1_threshold(),
+            tier2_rate: default_tier2_rate(),
+            tier2_threshold: default_tier2_threshold(),
+            tier3_rate: default_tier3_rate(),
         }
     }
 }
@@ -204,6 +265,27 @@ impl GoldLoanConfig {
         let kotak_monthly = loan_amount * (self.kotak_interest_rate / 100.0 / 12.0);
         current_monthly - kotak_monthly
     }
+
+    /// P2 FIX: Get the interest rate based on loan amount using tiered rates.
+    ///
+    /// Higher loan amounts qualify for better (lower) rates.
+    pub fn get_tiered_rate(&self, loan_amount: f64) -> f64 {
+        if loan_amount <= self.tiered_rates.tier1_threshold {
+            self.tiered_rates.tier1_rate
+        } else if loan_amount <= self.tiered_rates.tier2_threshold {
+            self.tiered_rates.tier2_rate
+        } else {
+            self.tiered_rates.tier3_rate
+        }
+    }
+
+    /// P2 FIX: Calculate monthly savings using tiered rates
+    pub fn calculate_monthly_savings_tiered(&self, loan_amount: f64, current_rate: f64) -> f64 {
+        let tiered_rate = self.get_tiered_rate(loan_amount);
+        let current_monthly = loan_amount * (current_rate / 100.0 / 12.0);
+        let kotak_monthly = loan_amount * (tiered_rate / 100.0 / 12.0);
+        current_monthly - kotak_monthly
+    }
 }
 
 #[cfg(test)]
@@ -238,5 +320,22 @@ mod tests {
         let savings = config.calculate_monthly_savings(100000.0, 18.0);
         // (100000 * 18/100/12) - (100000 * 10.5/100/12) = 1500 - 875 = 625
         assert!((savings - 625.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_tiered_rates() {
+        let config = GoldLoanConfig::default();
+
+        // Tier 1: Up to 1 lakh gets 11.5%
+        assert_eq!(config.get_tiered_rate(50000.0), 11.5);
+        assert_eq!(config.get_tiered_rate(100000.0), 11.5);
+
+        // Tier 2: 1-5 lakh gets 10.5%
+        assert_eq!(config.get_tiered_rate(200000.0), 10.5);
+        assert_eq!(config.get_tiered_rate(500000.0), 10.5);
+
+        // Tier 3: Above 5 lakh gets 9.5%
+        assert_eq!(config.get_tiered_rate(600000.0), 9.5);
+        assert_eq!(config.get_tiered_rate(1000000.0), 9.5);
     }
 }

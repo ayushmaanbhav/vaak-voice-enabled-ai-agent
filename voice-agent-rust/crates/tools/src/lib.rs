@@ -17,32 +17,12 @@ pub use gold_loan::{
     BranchLocatorTool,
 };
 
-use thiserror::Error;
+/// P2 FIX: Removed redundant ToolsError enum.
+/// Use mcp::ToolError for tool execution errors instead.
+/// This unifies error handling across the tools crate.
 
-/// Tool errors
-#[derive(Error, Debug)]
-pub enum ToolsError {
-    #[error("Tool not found: {0}")]
-    NotFound(String),
-
-    #[error("Invalid input: {0}")]
-    InvalidInput(String),
-
-    #[error("Execution error: {0}")]
-    Execution(String),
-
-    #[error("API error: {0}")]
-    Api(String),
-
-    #[error("Timeout")]
-    Timeout,
-
-    #[error("Permission denied: {0}")]
-    PermissionDenied(String),
-}
-
-impl From<ToolsError> for voice_agent_core::Error {
-    fn from(err: ToolsError) -> Self {
+impl From<ToolError> for voice_agent_core::Error {
+    fn from(err: ToolError) -> Self {
         voice_agent_core::Error::Tool(voice_agent_core::error::ToolError::ExecutionFailed(err.to_string()))
     }
 }

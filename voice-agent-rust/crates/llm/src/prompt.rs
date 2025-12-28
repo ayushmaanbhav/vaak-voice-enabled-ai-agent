@@ -6,12 +6,16 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 /// Message role
+///
+/// P2 FIX: Added Tool role for function calling support.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
     User,
     Assistant,
+    /// Tool/function response role
+    Tool,
 }
 
 impl fmt::Display for Role {
@@ -20,6 +24,7 @@ impl fmt::Display for Role {
             Role::System => write!(f, "system"),
             Role::User => write!(f, "user"),
             Role::Assistant => write!(f, "assistant"),
+            Role::Tool => write!(f, "tool"),
         }
     }
 }
@@ -49,6 +54,14 @@ impl Message {
     pub fn assistant(content: impl Into<String>) -> Self {
         Self {
             role: Role::Assistant,
+            content: content.into(),
+        }
+    }
+
+    /// P2 FIX: Added tool() constructor for function calling responses.
+    pub fn tool(content: impl Into<String>) -> Self {
+        Self {
+            role: Role::Tool,
             content: content.into(),
         }
     }

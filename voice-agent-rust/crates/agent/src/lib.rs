@@ -61,8 +61,9 @@ impl From<voice_agent_llm::LlmError> for AgentError {
     }
 }
 
-impl From<voice_agent_tools::ToolsError> for AgentError {
-    fn from(err: voice_agent_tools::ToolsError) -> Self {
+/// P2 FIX: Use ToolError instead of removed ToolsError.
+impl From<voice_agent_tools::ToolError> for AgentError {
+    fn from(err: voice_agent_tools::ToolError) -> Self {
         AgentError::Tool(err.to_string())
     }
 }

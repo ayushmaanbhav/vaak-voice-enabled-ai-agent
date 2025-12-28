@@ -245,6 +245,10 @@ pub struct TurnMetadata {
     /// Latency in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<u64>,
+    /// P2 FIX: Speaker ID for diarization support.
+    /// Used to identify different speakers when processing multi-speaker audio.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker_id: Option<String>,
 }
 
 impl TurnMetadata {
@@ -255,6 +259,7 @@ impl TurnMetadata {
             stage: None,
             confidence: None,
             latency_ms: None,
+            speaker_id: None,
         }
     }
 
@@ -270,6 +275,12 @@ impl TurnMetadata {
 
     pub fn with_latency(mut self, latency_ms: u64) -> Self {
         self.latency_ms = Some(latency_ms);
+        self
+    }
+
+    /// P2 FIX: Set speaker ID for diarization
+    pub fn with_speaker_id(mut self, speaker_id: impl Into<String>) -> Self {
+        self.speaker_id = Some(speaker_id.into());
         self
     }
 }

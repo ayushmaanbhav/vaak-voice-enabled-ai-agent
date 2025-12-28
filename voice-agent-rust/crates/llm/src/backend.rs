@@ -106,6 +106,9 @@ pub trait LlmBackend: Send + Sync {
 }
 
 /// Ollama backend
+///
+/// P2 FIX: Now derives Clone for better composability.
+#[derive(Clone)]
 pub struct OllamaBackend {
     client: Client,
     config: LlmConfig,

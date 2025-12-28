@@ -6,7 +6,7 @@
 //! - Named entity boosting
 //! - Stability-based partial emission
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use parking_lot::RwLock;
 
 use crate::PipelineError;
@@ -83,7 +83,8 @@ pub struct EnhancedDecoder {
     /// Stable prefix (already emitted)
     stable_prefix: RwLock<String>,
     /// Frame history for stability
-    frame_history: RwLock<Vec<u32>>,
+    /// P2 FIX: VecDeque for O(1) pop_front instead of Vec::remove(0)
+    frame_history: RwLock<VecDeque<u32>>,
 }
 
 impl EnhancedDecoder {
@@ -107,7 +108,7 @@ impl EnhancedDecoder {
                 stability: 0,
             }]),
             stable_prefix: RwLock::new(String::new()),
-            frame_history: RwLock::new(Vec::new()),
+            frame_history: RwLock::new(VecDeque::new()),
         }
     }
 
@@ -188,9 +189,9 @@ impl EnhancedDecoder {
         // Update stability
         if let Some(best) = new_beam.first() {
             if let Some(&last_token) = best.tokens.last() {
-                frame_history.push(last_token);
+                frame_history.push_back(last_token);
                 if frame_history.len() > self.config.stability_window {
-                    frame_history.remove(0);
+                    frame_history.pop_front(); // P2 FIX: O(1) instead of O(n)
                 }
             }
         }
@@ -280,7 +281,7 @@ impl EnhancedDecoder {
         }
 
         // Check if last N frames agree
-        let last = frame_history.last().copied();
+        let last = frame_history.back().copied(); // P2 FIX: VecDeque uses back() not last()
         let stable = frame_history.iter()
             .rev()
             .take(self.config.stability_window)

@@ -2,7 +2,7 @@
 //!
 //! Manages tool registration, discovery, and execution.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 use async_trait::async_trait;
@@ -135,15 +135,17 @@ pub struct ToolCall {
 }
 
 /// Tool call tracker
+///
+/// P2 FIX: Uses VecDeque for O(1) removal from front.
 pub struct ToolCallTracker {
-    calls: Vec<ToolCall>,
+    calls: VecDeque<ToolCall>,
     max_history: usize,
 }
 
 impl ToolCallTracker {
     pub fn new(max_history: usize) -> Self {
         Self {
-            calls: Vec::with_capacity(max_history),
+            calls: VecDeque::with_capacity(max_history),
             max_history,
         }
     }
@@ -151,20 +153,28 @@ impl ToolCallTracker {
     /// Record a tool call
     pub fn record(&mut self, call: ToolCall) {
         if self.calls.len() >= self.max_history {
-            self.calls.remove(0);
+            self.calls.pop_front(); // P2 FIX: O(1) instead of O(n)
         }
-        self.calls.push(call);
+        self.calls.push_back(call);
     }
 
-    /// Get recent calls
-    pub fn recent(&self, n: usize) -> &[ToolCall] {
-        let start = self.calls.len().saturating_sub(n);
-        &self.calls[start..]
+    /// Get recent calls as a slice
+    ///
+    /// P2 FIX: Returns contiguous slice by ensuring make_contiguous.
+    pub fn recent(&mut self, n: usize) -> &[ToolCall] {
+        self.calls.make_contiguous();
+        let (slice, _) = self.calls.as_slices();
+        let start = slice.len().saturating_sub(n);
+        &slice[start..]
     }
 
-    /// Get all calls
-    pub fn all(&self) -> &[ToolCall] {
-        &self.calls
+    /// Get all calls as a slice
+    ///
+    /// P2 FIX: Returns contiguous slice by ensuring make_contiguous.
+    pub fn all(&mut self) -> &[ToolCall] {
+        self.calls.make_contiguous();
+        let (slice, _) = self.calls.as_slices();
+        slice
     }
 
     /// Get calls by tool name

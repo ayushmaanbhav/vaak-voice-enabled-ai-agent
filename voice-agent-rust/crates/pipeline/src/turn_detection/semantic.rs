@@ -4,6 +4,7 @@
 //! Trained on Indian English + Hindi patterns.
 
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::path::Path;
 
 #[cfg(feature = "onnx")]
@@ -84,7 +85,8 @@ pub struct SemanticTurnDetector {
     #[allow(dead_code)] // Used by model_classify() when ONNX enabled
     config: SemanticConfig,
     /// Cache recent predictions for smoothing
-    prediction_cache: Mutex<Vec<(CompletenessClass, f32)>>,
+    /// P2 FIX: VecDeque for O(1) pop_front instead of Vec::remove(0)
+    prediction_cache: Mutex<VecDeque<(CompletenessClass, f32)>>,
 }
 
 impl SemanticTurnDetector {
@@ -111,7 +113,7 @@ impl SemanticTurnDetector {
             session,
             tokenizer,
             config,
-            prediction_cache: Mutex::new(Vec::with_capacity(10)),
+            prediction_cache: Mutex::new(VecDeque::with_capacity(10)),
         })
     }
 
@@ -130,7 +132,7 @@ impl SemanticTurnDetector {
     pub fn simple(config: SemanticConfig) -> Result<Self, PipelineError> {
         Ok(Self {
             config,
-            prediction_cache: Mutex::new(Vec::with_capacity(10)),
+            prediction_cache: Mutex::new(VecDeque::with_capacity(10)),
         })
     }
 
@@ -277,9 +279,9 @@ impl SemanticTurnDetector {
 
         // Update cache for smoothing
         let mut cache = self.prediction_cache.lock();
-        cache.push((class, max_prob));
+        cache.push_back((class, max_prob));
         if cache.len() > 5 {
-            cache.remove(0);
+            cache.pop_front(); // P2 FIX: O(1) instead of O(n)
         }
 
         Ok((class, max_prob))

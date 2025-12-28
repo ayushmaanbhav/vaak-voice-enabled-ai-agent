@@ -577,16 +577,22 @@ impl SpeculativeExecutor {
     }
 
     /// Update statistics
+    ///
+    /// P2 FIX: Uses Welford's online algorithm for numerically stable mean updates.
+    /// The formula `mean += (x - mean) / n` avoids accumulating floating-point errors
+    /// that can occur with the naive `(mean * (n-1) + x) / n` formula.
     fn update_stats(&self, used_slm: bool, used_llm: bool, duration: Duration) {
         let mut stats = self.stats.lock();
+        let duration_ms = duration.as_millis() as f32;
 
         if used_slm {
             stats.slm_calls += 1;
             if !used_llm {
                 stats.slm_successes += 1;
             }
-            stats.avg_slm_time_ms = (stats.avg_slm_time_ms * (stats.slm_calls - 1) as f32
-                + duration.as_millis() as f32) / stats.slm_calls as f32;
+            // Welford's algorithm: mean += (x - mean) / n
+            let delta = duration_ms - stats.avg_slm_time_ms;
+            stats.avg_slm_time_ms += delta / stats.slm_calls as f32;
         }
 
         if used_llm {
@@ -594,8 +600,9 @@ impl SpeculativeExecutor {
             if used_slm {
                 stats.llm_fallbacks += 1;
             }
-            stats.avg_llm_time_ms = (stats.avg_llm_time_ms * (stats.llm_calls - 1) as f32
-                + duration.as_millis() as f32) / stats.llm_calls as f32;
+            // Welford's algorithm: mean += (x - mean) / n
+            let delta = duration_ms - stats.avg_llm_time_ms;
+            stats.avg_llm_time_ms += delta / stats.llm_calls as f32;
         }
     }
 

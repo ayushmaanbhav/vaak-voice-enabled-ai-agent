@@ -5,7 +5,7 @@
 //! - Episodic memory: Summarized past segments
 //! - Semantic memory: Key facts and entities
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
@@ -105,7 +105,8 @@ pub struct ConversationMemory {
     /// Working memory (recent turns)
     working: RwLock<Vec<MemoryEntry>>,
     /// Episodic memory (summaries)
-    episodic: RwLock<Vec<EpisodicSummary>>,
+    /// P2 FIX: Uses VecDeque for O(1) removal from front.
+    episodic: RwLock<VecDeque<EpisodicSummary>>,
     /// Semantic memory (facts)
     semantic: RwLock<HashMap<String, SemanticFact>>,
     /// Total turns processed
@@ -118,7 +119,7 @@ impl ConversationMemory {
         Self {
             config,
             working: RwLock::new(Vec::new()),
-            episodic: RwLock::new(Vec::new()),
+            episodic: RwLock::new(VecDeque::new()),
             semantic: RwLock::new(HashMap::new()),
             total_turns: RwLock::new(0),
         }
@@ -176,11 +177,11 @@ impl ConversationMemory {
         };
 
         let mut episodic_memory = self.episodic.write();
-        episodic_memory.push(episodic);
+        episodic_memory.push_back(episodic);
 
-        // Trim if too many
+        // Trim if too many - P2 FIX: O(1) removal with VecDeque
         if episodic_memory.len() > self.config.max_episodic_summaries {
-            episodic_memory.remove(0);
+            episodic_memory.pop_front();
         }
     }
 
@@ -220,7 +221,7 @@ impl ConversationMemory {
 
     /// Get episodic summaries
     pub fn episodic_summaries(&self) -> Vec<EpisodicSummary> {
-        self.episodic.read().clone()
+        self.episodic.read().iter().cloned().collect()
     }
 
     /// Get context for LLM (formatted)

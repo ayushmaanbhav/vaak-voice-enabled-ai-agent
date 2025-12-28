@@ -217,13 +217,18 @@ impl CustomerProfile {
         self.gold_weight.is_some() && self.gold_purity.is_some()
     }
 
-    /// Estimate gold value (rough calculation)
-    pub fn estimated_gold_value(&self) -> Option<f64> {
+    /// P2 FIX: Default gold price per gram (INR). Should be fetched from API/config.
+    pub const DEFAULT_GOLD_PRICE_PER_GRAM: f64 = 7500.0;
+
+    /// Estimate gold value
+    ///
+    /// P2 FIX: Now accepts configurable gold_price_per_gram parameter.
+    /// Use `CustomerProfile::DEFAULT_GOLD_PRICE_PER_GRAM` or pass value from config.
+    pub fn estimated_gold_value(&self, gold_price_per_gram: Option<f64>) -> Option<f64> {
         let weight = self.gold_weight?;
         let purity = self.gold_purity.as_ref()?;
 
-        // Gold price per gram (approximate, should be fetched from API)
-        let base_price = 6500.0;
+        let base_price = gold_price_per_gram.unwrap_or(Self::DEFAULT_GOLD_PRICE_PER_GRAM);
 
         let purity_factor = match purity.to_uppercase().as_str() {
             "24K" => 1.0,
@@ -331,7 +336,7 @@ mod tests {
 
         assert!(profile.is_switcher());
         assert!(profile.has_gold_details());
-        assert!(profile.estimated_gold_value().is_some());
+        assert!(profile.estimated_gold_value(None).is_some());
     }
 
     #[test]
