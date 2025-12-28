@@ -44,28 +44,90 @@ ls models/vad/silero_vad.onnx
 
 IndicConformer is the recommended STT model for Hindi. It provides excellent accuracy on Indian languages.
 
-#### Option A: AI4Bharat Model (Recommended)
+#### Option A: AI4Bharat IndicConformer (Recommended)
 
-1. Visit [AI4Bharat IndicConformer](https://github.com/AI4Bharat/IndicConformer)
-2. Download the pre-trained model
-3. Export to ONNX:
+The IndicConformer models from AI4Bharat are in `.nemo` format (PyTorch Lightning). They can be converted to ONNX.
+
+**References:**
+- [HuggingFace Discussion - ONNX Export](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual/discussions/5)
+- [Community Notebook - Hindi Quantization](https://github.com/Quantize_speech_Recognition_For_Hindi)
+
+**Step 1: Download the .nemo model**
+
+```bash
+# Download from HuggingFace
+pip install huggingface_hub
+python -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download(
+    repo_id='ai4bharat/indic-conformer-600m-multilingual',
+    filename='ai4b_indicconformer_hi.nemo',
+    local_dir='models/stt'
+)
+"
+```
+
+**Step 2: Extract PyTorch model from .nemo**
+
+The `.nemo` file is a compressed archive containing the PyTorch model:
+
+```bash
+cd models/stt
+unzip ai4b_indicconformer_hi.nemo -d indicconformer_extracted
+# Contains: model_weights.ckpt, model_config.yaml, etc.
+```
+
+**Step 3: Convert to ONNX**
 
 ```python
-from indicconformer import IndicConformerASR
 import torch
+import nemo.collections.asr as nemo_asr
 
-model = IndicConformerASR.from_pretrained("ai4bharat/indicconformer-hi")
+# Load the NeMo model
+model = nemo_asr.models.EncDecCTCModelBPE.restore_from("models/stt/ai4b_indicconformer_hi.nemo")
+model.eval()
 
-# Export encoder
-dummy_audio = torch.randn(1, 16000)  # 1 second of audio
+# Export to ONNX
+# Method 1: Using NeMo's built-in export
+model.export("models/stt/indicconformer_hi.onnx")
+
+# Method 2: Manual PyTorch export with dynamic axes
+dummy_input = torch.randn(1, 16000)  # 1 second at 16kHz
+dummy_length = torch.tensor([16000])
+
 torch.onnx.export(
-    model.encoder,
-    dummy_audio,
-    "models/stt/indicconformer_encoder.onnx",
-    input_names=["audio"],
-    output_names=["features"],
-    dynamic_axes={"audio": {1: "length"}}
+    model,
+    (dummy_input, dummy_length),
+    "models/stt/indicconformer_hi.onnx",
+    input_names=["audio_signal", "length"],
+    output_names=["logprobs"],
+    dynamic_axes={
+        "audio_signal": {0: "batch", 1: "time"},
+        "length": {0: "batch"},
+        "logprobs": {0: "batch", 1: "time"}
+    },
+    opset_version=14
 )
+```
+
+**Step 4: Optimize for inference**
+
+```bash
+pip install onnxruntime onnx onnxoptimizer
+
+python -c "
+import onnx
+from onnxruntime.transformers import optimizer
+
+# Optimize the model
+optimized_model = optimizer.optimize_model(
+    'models/stt/indicconformer_hi.onnx',
+    model_type='bert',  # Use transformer optimization
+    num_heads=8,
+    hidden_size=512
+)
+optimized_model.save_model_to_file('models/stt/indicconformer_hi_optimized.onnx')
+"
 ```
 
 #### Option B: Whisper (Alternative)

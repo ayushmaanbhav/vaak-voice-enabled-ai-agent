@@ -58,59 +58,128 @@ download_vad() {
     log_info "VAD model downloaded to $vad_path"
 }
 
-# Download IndicConformer STT model (placeholder - requires AI4Bharat access)
+# Download IndicConformer STT model
 download_stt() {
     log_info "Setting up STT model..."
     local stt_path="$MODELS_DIR/stt"
 
+    # Check if Python and required packages are available
+    if command -v python3 &> /dev/null; then
+        log_info "Attempting to download IndicConformer model from HuggingFace..."
+
+        python3 << 'PYTHON_SCRIPT' || log_warn "Auto-download failed, manual setup required"
+import sys
+try:
+    from huggingface_hub import hf_hub_download
+    import os
+
+    models_dir = os.environ.get('MODELS_DIR', './models')
+    stt_path = os.path.join(models_dir, 'stt')
+    os.makedirs(stt_path, exist_ok=True)
+
+    # Download the Hindi model
+    print("Downloading ai4b_indicconformer_hi.nemo from HuggingFace...")
+    hf_hub_download(
+        repo_id='ai4bharat/indic-conformer-600m-multilingual',
+        filename='ai4b_indicconformer_hi.nemo',
+        local_dir=stt_path
+    )
+    print(f"Downloaded to {stt_path}/ai4b_indicconformer_hi.nemo")
+    print("\nNext step: Convert to ONNX using:")
+    print("  python scripts/convert_indicconformer.py")
+
+except ImportError:
+    print("huggingface_hub not installed. Install with: pip install huggingface_hub")
+    sys.exit(1)
+except Exception as e:
+    print(f"Download failed: {e}")
+    sys.exit(1)
+PYTHON_SCRIPT
+    fi
+
+    # Create conversion script
+    cat > "$MODELS_DIR/../scripts/convert_indicconformer.py" << 'EOF'
+#!/usr/bin/env python3
+"""Convert IndicConformer .nemo model to ONNX format."""
+
+import os
+import sys
+
+def main():
+    models_dir = os.environ.get('MODELS_DIR', './models')
+    nemo_path = os.path.join(models_dir, 'stt', 'ai4b_indicconformer_hi.nemo')
+    onnx_path = os.path.join(models_dir, 'stt', 'indicconformer_hi.onnx')
+
+    if not os.path.exists(nemo_path):
+        print(f"Error: {nemo_path} not found")
+        print("Run: ./scripts/download_models.sh --stt")
+        sys.exit(1)
+
+    try:
+        import torch
+        import nemo.collections.asr as nemo_asr
+    except ImportError:
+        print("Required packages not installed. Run:")
+        print("  pip install nemo_toolkit[asr] torch")
+        sys.exit(1)
+
+    print(f"Loading model from {nemo_path}...")
+    model = nemo_asr.models.EncDecCTCModelBPE.restore_from(nemo_path)
+    model.eval()
+
+    print(f"Exporting to {onnx_path}...")
+    # NeMo has built-in ONNX export
+    model.export(onnx_path)
+
+    print(f"Model exported to {onnx_path}")
+
+    # Optimize if onnxruntime is available
+    try:
+        from onnxruntime.transformers import optimizer
+        print("Optimizing model...")
+        optimized = optimizer.optimize_model(onnx_path, model_type='bert')
+        opt_path = onnx_path.replace('.onnx', '_optimized.onnx')
+        optimized.save_model_to_file(opt_path)
+        print(f"Optimized model saved to {opt_path}")
+    except ImportError:
+        print("onnxruntime not installed, skipping optimization")
+
+if __name__ == '__main__':
+    main()
+EOF
+    chmod +x "$MODELS_DIR/../scripts/convert_indicconformer.py"
+
     cat > "$stt_path/README.md" << 'EOF'
 # IndicConformer STT Model
 
-This model requires manual setup due to licensing:
+## Quick Setup
 
-## Option 1: AI4Bharat IndicConformer (Recommended for Hindi)
+1. Download the .nemo model (auto or manual):
+   ```bash
+   ./scripts/download_models.sh --stt
+   ```
 
-1. Visit https://github.com/AI4Bharat/IndicConformer
-2. Request access to the pre-trained models
-3. Download the ONNX export or convert using:
+2. Convert to ONNX:
+   ```bash
+   pip install nemo_toolkit[asr] torch onnxruntime
+   python scripts/convert_indicconformer.py
+   ```
 
-```python
-import torch
-from indicconformer import IndicConformerASR
+## Manual Download
 
-model = IndicConformerASR.from_pretrained("ai4bharat/indicconformer-hi")
-model.export_onnx("indicconformer_hi.onnx")
-```
+If auto-download fails, manually download from:
+https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual
 
-4. Place the model file at: models/stt/indicconformer_hi.onnx
+Place the .nemo file at: models/stt/ai4b_indicconformer_hi.nemo
 
-## Option 2: Whisper (Alternative)
+## References
 
-For quick testing, you can use Whisper:
-
-```bash
-pip install openai-whisper
-python -c "
-import whisper
-from onnxruntime.transformers import optimizer
-# Export to ONNX (requires additional setup)
-"
-```
-
-## Option 3: Wav2Vec2 Hindi
-
-```bash
-pip install transformers optimum
-optimum-cli export onnx --model facebook/wav2vec2-large-xlsr-53-hindi models/stt/wav2vec2
-```
-
-## Vocabulary Files
-
-The vocabulary files are auto-generated based on the model type.
-See crates/pipeline/src/stt/vocab.rs for details.
+- [HuggingFace Model](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual)
+- [ONNX Export Discussion](https://huggingface.co/ai4bharat/indic-conformer-600m-multilingual/discussions/5)
+- [AI4Bharat GitHub](https://github.com/AI4Bharat/IndicConformer)
 EOF
 
-    log_warn "STT model requires manual setup. See $stt_path/README.md"
+    log_info "STT setup complete. See $stt_path/README.md for conversion steps."
 }
 
 # Download TTS model (Piper Hindi voice)
