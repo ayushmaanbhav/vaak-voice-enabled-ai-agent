@@ -46,6 +46,13 @@ config = "0.14"
 ort = { version = "2.0.0-rc.9" }
 ndarray = "0.16"
 
+# ML/AI - Candle (SafeTensors, native Rust inference)
+candle-core = "0.8"
+candle-nn = "0.8"
+candle-transformers = "0.8"
+safetensors = "0.4"
+hf-hub = "0.3"
+
 # Tokenization
 tokenizers = "0.15"
 
