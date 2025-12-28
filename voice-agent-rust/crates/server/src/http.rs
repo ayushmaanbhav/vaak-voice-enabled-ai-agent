@@ -6,11 +6,11 @@ use axum::{
     routing::{get, post, delete},
     Router,
     extract::{State, Path, Json},
-    http::StatusCode,
+    http::{StatusCode, HeaderValue, Method},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{CorsLayer, Any, AllowOrigin};
 use tower_http::trace::TraceLayer;
 use tower_http::compression::CompressionLayer;
 
@@ -21,6 +21,9 @@ use voice_agent_tools::ToolExecutor;
 
 /// Create the application router
 pub fn create_router(state: AppState) -> Router {
+    // P0 FIX: Build CORS layer from configured origins instead of wildcard Any
+    let cors_layer = build_cors_layer(&state.config.server.cors_origins, state.config.server.cors_enabled);
+
     Router::new()
         // Session endpoints
         .route("/api/sessions", post(create_session))
@@ -48,13 +51,56 @@ pub fn create_router(state: AppState) -> Router {
         // Middleware
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        )
+        .layer(cors_layer)
         .with_state(state)
+}
+
+/// P0 FIX: Build CORS layer from configured origins
+///
+/// - If cors_enabled is false, returns permissive layer (for dev)
+/// - If cors_origins is empty, defaults to localhost:3000 for safety
+/// - Otherwise, uses the configured origins
+fn build_cors_layer(origins: &[String], enabled: bool) -> CorsLayer {
+    if !enabled {
+        // CORS disabled - allow all (only for development!)
+        tracing::warn!("CORS is disabled - allowing all origins (NOT FOR PRODUCTION)");
+        return CorsLayer::permissive();
+    }
+
+    if origins.is_empty() {
+        // No origins configured - default to localhost for safety
+        tracing::info!("No CORS origins configured, defaulting to localhost:3000");
+        return CorsLayer::new()
+            .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+            .allow_headers(Any);
+    }
+
+    // Parse configured origins
+    let parsed_origins: Vec<HeaderValue> = origins
+        .iter()
+        .filter_map(|origin| {
+            origin.parse::<HeaderValue>().ok().or_else(|| {
+                tracing::warn!("Invalid CORS origin: {}", origin);
+                None
+            })
+        })
+        .collect();
+
+    if parsed_origins.is_empty() {
+        tracing::error!("All configured CORS origins are invalid, falling back to localhost");
+        return CorsLayer::new()
+            .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+            .allow_headers(Any);
+    }
+
+    tracing::info!("CORS configured with {} origins", parsed_origins.len());
+    CorsLayer::new()
+        .allow_origin(parsed_origins)
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_headers(Any)
+        .allow_credentials(true)
 }
 
 /// Get session info

@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use parking_lot::RwLock;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -61,10 +62,20 @@ pub struct DetectedIntent {
     pub alternatives: Vec<(String, f32)>,
 }
 
+/// Compiled slot pattern with its regex
+struct CompiledSlotPattern {
+    name: String,
+    regex: Regex,
+    slot_type: SlotType,
+    /// Multiplier for numeric values (e.g., 100000 for "lakh")
+    multiplier: Option<f64>,
+}
+
 /// Intent detector
 pub struct IntentDetector {
     intents: RwLock<Vec<Intent>>,
-    slot_patterns: HashMap<String, Vec<(String, String)>>, // slot_name -> (pattern, regex)
+    /// P0 FIX: Compiled regex patterns for slot extraction
+    compiled_patterns: HashMap<String, Vec<CompiledSlotPattern>>,
 }
 
 impl IntentDetector {
@@ -72,11 +83,11 @@ impl IntentDetector {
     pub fn new() -> Self {
         let mut detector = Self {
             intents: RwLock::new(Vec::new()),
-            slot_patterns: HashMap::new(),
+            compiled_patterns: HashMap::new(),
         };
 
         detector.register_gold_loan_intents();
-        detector.register_slot_patterns();
+        detector.compile_slot_patterns();
 
         detector
     }
@@ -212,32 +223,126 @@ impl IntentDetector {
         *self.intents.write() = intents;
     }
 
-    /// Register slot patterns
-    fn register_slot_patterns(&mut self) {
+    /// P0 FIX: Compile slot patterns into regex at startup
+    ///
+    /// This replaces the old register_slot_patterns() which stored patterns
+    /// as strings but never used them. Now patterns are compiled once and
+    /// reused for all extractions.
+    fn compile_slot_patterns(&mut self) {
         // Loan amount patterns
-        self.slot_patterns.insert("loan_amount".to_string(), vec![
-            ("rs_amount".to_string(), r"(?:Rs\.?|₹|INR)\s*(\d+(?:,\d+)*(?:\.\d+)?)".to_string()),
-            ("lakh".to_string(), r"(\d+(?:\.\d+)?)\s*(?:lakh|lac|L)".to_string()),
-            ("thousand".to_string(), r"(\d+(?:\.\d+)?)\s*(?:thousand|k|K)".to_string()),
-        ]);
+        let loan_patterns = vec![
+            // Crore (10 million) - highest priority
+            CompiledSlotPattern {
+                name: "crore".to_string(),
+                regex: Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:crore|cr)").unwrap(),
+                slot_type: SlotType::Currency,
+                multiplier: Some(10_000_000.0),
+            },
+            // Lakh (100 thousand)
+            CompiledSlotPattern {
+                name: "lakh".to_string(),
+                regex: Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:lakh|lac|lakhs)").unwrap(),
+                slot_type: SlotType::Currency,
+                multiplier: Some(100_000.0),
+            },
+            // Thousand / Hazar
+            CompiledSlotPattern {
+                name: "thousand".to_string(),
+                regex: Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:thousand|hazar|hazaar|k)").unwrap(),
+                slot_type: SlotType::Currency,
+                multiplier: Some(1_000.0),
+            },
+            // Rs/₹ amount (direct value)
+            CompiledSlotPattern {
+                name: "rs_amount".to_string(),
+                regex: Regex::new(r"(?:Rs\.?|₹|INR)\s*(\d+(?:,\d+)*(?:\.\d+)?)").unwrap(),
+                slot_type: SlotType::Currency,
+                multiplier: None, // Parse as-is (remove commas)
+            },
+            // Plain large number (>=1000)
+            CompiledSlotPattern {
+                name: "plain_number".to_string(),
+                regex: Regex::new(r"(\d{4,})").unwrap(), // 4+ digits
+                slot_type: SlotType::Currency,
+                multiplier: None,
+            },
+        ];
+        self.compiled_patterns.insert("loan_amount".to_string(), loan_patterns);
 
         // Gold weight patterns
-        self.slot_patterns.insert("gold_weight".to_string(), vec![
-            ("grams".to_string(), r"(\d+(?:\.\d+)?)\s*(?:grams?|gms?|g)".to_string()),
-            ("tola".to_string(), r"(\d+(?:\.\d+)?)\s*(?:tola|tole)".to_string()),
-        ]);
+        let weight_patterns = vec![
+            CompiledSlotPattern {
+                name: "grams".to_string(),
+                regex: Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:grams?|gms?|g\b)").unwrap(),
+                slot_type: SlotType::Number,
+                multiplier: None,
+            },
+            CompiledSlotPattern {
+                name: "tola".to_string(),
+                regex: Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:tola|tole)").unwrap(),
+                slot_type: SlotType::Number,
+                multiplier: Some(11.66), // 1 tola = 11.66 grams
+            },
+        ];
+        self.compiled_patterns.insert("gold_weight".to_string(), weight_patterns);
 
         // Phone patterns
-        self.slot_patterns.insert("phone".to_string(), vec![
-            ("indian".to_string(), r"(?:\+91)?[6-9]\d{9}".to_string()),
-        ]);
+        let phone_patterns = vec![
+            CompiledSlotPattern {
+                name: "indian".to_string(),
+                regex: Regex::new(r"(?:\+91)?([6-9]\d{9})").unwrap(),
+                slot_type: SlotType::Phone,
+                multiplier: None,
+            },
+        ];
+        self.compiled_patterns.insert("phone".to_string(), phone_patterns);
 
         // Current lender patterns
-        self.slot_patterns.insert("current_lender".to_string(), vec![
-            ("muthoot".to_string(), r"(?i)muthoot".to_string()),
-            ("manappuram".to_string(), r"(?i)manappuram".to_string()),
-            ("iifl".to_string(), r"(?i)iifl|ii\s*fl".to_string()),
-        ]);
+        let lender_patterns = vec![
+            CompiledSlotPattern {
+                name: "muthoot".to_string(),
+                regex: Regex::new(r"(?i)\b(muthoot)\b").unwrap(),
+                slot_type: SlotType::Text,
+                multiplier: None,
+            },
+            CompiledSlotPattern {
+                name: "manappuram".to_string(),
+                regex: Regex::new(r"(?i)\b(manappuram)\b").unwrap(),
+                slot_type: SlotType::Text,
+                multiplier: None,
+            },
+            CompiledSlotPattern {
+                name: "iifl".to_string(),
+                regex: Regex::new(r"(?i)\b(iifl|ii\s*fl)\b").unwrap(),
+                slot_type: SlotType::Text,
+                multiplier: None,
+            },
+        ];
+        self.compiled_patterns.insert("current_lender".to_string(), lender_patterns);
+
+        // Gold purity patterns
+        let purity_patterns = vec![
+            CompiledSlotPattern {
+                name: "karat".to_string(),
+                regex: Regex::new(r"(?i)(22|24|18)\s*(?:k|karat|carat|kt)").unwrap(),
+                slot_type: SlotType::Enum(vec!["18K".into(), "22K".into(), "24K".into()]),
+                multiplier: None,
+            },
+        ];
+        self.compiled_patterns.insert("gold_purity".to_string(), purity_patterns);
+
+        // Location/City patterns
+        let location_patterns = vec![
+            CompiledSlotPattern {
+                name: "city".to_string(),
+                regex: Regex::new(r"(?i)\b(mumbai|delhi|bangalore|chennai|hyderabad|kolkata|pune|ahmedabad|jaipur)\b").unwrap(),
+                slot_type: SlotType::Location,
+                multiplier: None,
+            },
+        ];
+        self.compiled_patterns.insert("location".to_string(), location_patterns);
+
+        tracing::debug!("Compiled {} slot pattern groups", self.compiled_patterns.len());
     }
 
     /// Detect intent from text
@@ -310,18 +415,20 @@ impl IntentDetector {
         score
     }
 
-    /// Extract slots from text
+    /// P0 FIX: Extract slots from text using compiled regex patterns
+    ///
+    /// Iterates through all pattern groups and extracts matching slots
+    /// with proper type inference and confidence scoring.
     pub fn extract_slots(&self, text: &str) -> HashMap<String, Slot> {
         let mut slots = HashMap::new();
 
-        // Simple keyword-based extraction (in production, use regex or NER)
-        for slot_name in self.slot_patterns.keys() {
-            if let Some(value) = self.extract_slot_value(text, slot_name) {
+        for (slot_name, patterns) in &self.compiled_patterns {
+            if let Some((value, slot_type, confidence)) = self.extract_slot_with_patterns(text, patterns) {
                 slots.insert(slot_name.clone(), Slot {
                     name: slot_name.clone(),
-                    slot_type: SlotType::Text,
+                    slot_type,
                     value: Some(value),
-                    confidence: 0.8,
+                    confidence,
                 });
             }
         }
@@ -329,80 +436,85 @@ impl IntentDetector {
         slots
     }
 
-    /// Extract slot value using patterns
+    /// P0 FIX: Extract slot value using compiled regex patterns
     ///
-    /// P2 FIX: Improved amount extraction to handle lakh, crore, commas, and plain numbers.
+    /// Tries each pattern in order (highest priority first) and returns
+    /// the first match with its computed value and confidence.
+    fn extract_slot_with_patterns(
+        &self,
+        text: &str,
+        patterns: &[CompiledSlotPattern],
+    ) -> Option<(String, SlotType, f32)> {
+        for pattern in patterns {
+            if let Some(captures) = pattern.regex.captures(text) {
+                // Get the first capturing group (the value)
+                if let Some(matched) = captures.get(1) {
+                    let raw_value = matched.as_str();
+
+                    // Compute final value based on multiplier
+                    let value = if let Some(multiplier) = pattern.multiplier {
+                        // Parse as number and multiply
+                        let clean_value = raw_value.replace(",", "");
+                        if let Ok(num) = clean_value.parse::<f64>() {
+                            format!("{}", (num * multiplier) as i64)
+                        } else {
+                            raw_value.to_string()
+                        }
+                    } else {
+                        // Remove commas for currency, keep as-is for others
+                        match pattern.slot_type {
+                            SlotType::Currency => raw_value.replace(",", ""),
+                            SlotType::Text => {
+                                // Capitalize lender names
+                                let s = raw_value.to_lowercase();
+                                if s.contains("muthoot") {
+                                    "Muthoot".to_string()
+                                } else if s.contains("manappuram") {
+                                    "Manappuram".to_string()
+                                } else if s.contains("iifl") {
+                                    "IIFL".to_string()
+                                } else {
+                                    raw_value.to_string()
+                                }
+                            }
+                            SlotType::Enum(_) => {
+                                // Normalize karat values
+                                format!("{}K", raw_value)
+                            }
+                            _ => raw_value.to_string(),
+                        }
+                    };
+
+                    // Calculate confidence based on pattern specificity
+                    let confidence = match pattern.name.as_str() {
+                        "crore" | "lakh" | "rs_amount" => 0.95, // Very specific patterns
+                        "thousand" | "grams" | "karat" => 0.90, // Specific patterns
+                        "plain_number" => 0.70, // Less specific
+                        _ => 0.85, // Default
+                    };
+
+                    return Some((value, pattern.slot_type.clone(), confidence));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// P0 FIX: Legacy method for backwards compatibility
+    /// Use extract_slots() with compiled patterns instead.
+    #[deprecated(note = "Use extract_slots() which uses compiled regex patterns")]
     fn extract_slot_value(&self, text: &str, slot_name: &str) -> Option<String> {
-        let text_lower = text.to_lowercase();
-
-        match slot_name {
-            "loan_amount" => {
-                // P2 FIX: Handle multiple amount patterns
-
-                // Pattern 1: "X crore" (10 million)
-                if let Some(idx) = text_lower.find("crore") {
-                    if let Some(num) = Self::extract_number_before(&text_lower[..idx]) {
-                        return Some(format!("{}", (num * 10_000_000.0) as i64));
-                    }
-                }
-
-                // Pattern 2: "X lakh" (100 thousand)
-                if let Some(idx) = text_lower.find("lakh") {
-                    if let Some(num) = Self::extract_number_before(&text_lower[..idx]) {
-                        return Some(format!("{}", (num * 100_000.0) as i64));
-                    }
-                }
-
-                // Pattern 3: "X thousand" or "X hazar"
-                if text_lower.contains("thousand") || text_lower.contains("hazar") || text_lower.contains("hazaar") {
-                    let idx = text_lower.find("thousand")
-                        .or_else(|| text_lower.find("hazar"))
-                        .or_else(|| text_lower.find("hazaar"))?;
-                    if let Some(num) = Self::extract_number_before(&text_lower[..idx]) {
-                        return Some(format!("{}", (num * 1_000.0) as i64));
-                    }
-                }
-
-                // Pattern 4: Numbers with commas (1,00,000 or 100,000)
-                let no_commas = text_lower.replace(",", "");
-                for word in no_commas.split_whitespace() {
-                    if let Ok(num) = word.parse::<i64>() {
-                        if num >= 1000 { // Assume amounts are at least 1000
-                            return Some(format!("{}", num));
-                        }
-                    }
-                }
-
-                None
-            }
-            "gold_weight" => {
-                // Look for weight in grams
-                for word in text_lower.split_whitespace() {
-                    if let Ok(num) = word.parse::<f64>() {
-                        // Check if next word is grams
-                        if text_lower.contains("gram") || text_lower.contains("gm") {
-                            return Some(format!("{}", num));
-                        }
-                    }
-                }
-                None
-            }
-            "current_lender" => {
-                if text_lower.contains("muthoot") {
-                    Some("Muthoot".to_string())
-                } else if text_lower.contains("manappuram") {
-                    Some("Manappuram".to_string())
-                } else if text_lower.contains("iifl") {
-                    Some("IIFL".to_string())
-                } else {
-                    None
-                }
-            }
-            _ => None
+        if let Some(patterns) = self.compiled_patterns.get(slot_name) {
+            self.extract_slot_with_patterns(text, patterns)
+                .map(|(value, _, _)| value)
+        } else {
+            None
         }
     }
 
-    /// P2 FIX: Helper to extract number from text (handles Hindi number words too)
+    /// Helper to extract number from text (handles Hindi number words too)
+    #[allow(dead_code)]
     fn extract_number_before(text: &str) -> Option<f64> {
         // First try to extract a digit-based number
         let number_str: String = text.chars().rev()

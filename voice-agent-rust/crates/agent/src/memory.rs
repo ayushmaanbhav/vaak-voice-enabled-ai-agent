@@ -6,10 +6,12 @@
 //! - Semantic memory: Key facts and entities
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use voice_agent_core::{Turn, TurnRole};
+use voice_agent_llm::{LlmBackend, Message, Role};
 
 /// Memory configuration
 #[derive(Debug, Clone)]
@@ -111,6 +113,10 @@ pub struct ConversationMemory {
     semantic: RwLock<HashMap<String, SemanticFact>>,
     /// Total turns processed
     total_turns: RwLock<usize>,
+    /// P0 FIX: Optional LLM backend for real summarization
+    llm: RwLock<Option<Arc<dyn LlmBackend>>>,
+    /// Entries pending summarization (collected when no LLM available)
+    pending_summarization: RwLock<Vec<MemoryEntry>>,
 }
 
 impl ConversationMemory {
@@ -122,7 +128,17 @@ impl ConversationMemory {
             episodic: RwLock::new(VecDeque::new()),
             semantic: RwLock::new(HashMap::new()),
             total_turns: RwLock::new(0),
+            llm: RwLock::new(None),
+            pending_summarization: RwLock::new(Vec::new()),
         }
+    }
+
+    /// P0 FIX: Set LLM backend for real summarization
+    ///
+    /// When an LLM is set, the memory system will use it to generate
+    /// meaningful summaries instead of just concatenating text.
+    pub fn set_llm(&self, llm: Arc<dyn LlmBackend>) {
+        *self.llm.write() = Some(llm);
     }
 
     /// Add a memory entry
@@ -148,8 +164,27 @@ impl ConversationMemory {
         self.add(entry);
     }
 
-    /// Create episodic summary from turns
+    /// Create episodic summary from turns (sync fallback)
+    ///
+    /// This is used when no LLM is available or when async context is not available.
+    /// For real summarization, use `summarize_pending_async()`.
     fn create_episodic_summary(&self, entries: Vec<MemoryEntry>) {
+        if entries.is_empty() {
+            return;
+        }
+
+        // If we have an LLM, store for async summarization later
+        if self.llm.read().is_some() {
+            self.pending_summarization.write().extend(entries);
+            return;
+        }
+
+        // Fallback: simple concatenation-based summary
+        self.create_simple_summary(entries);
+    }
+
+    /// P0 FIX: Create simple summary without LLM (fallback)
+    fn create_simple_summary(&self, entries: Vec<MemoryEntry>) {
         if entries.is_empty() {
             return;
         }
@@ -157,7 +192,6 @@ impl ConversationMemory {
         let start_ms = entries.first().map(|e| e.timestamp_ms).unwrap_or(0);
         let end_ms = entries.last().map(|e| e.timestamp_ms).unwrap_or(0);
 
-        // Simple summary (in production, use LLM)
         let topics: Vec<String> = entries.iter()
             .flat_map(|e| e.intents.clone())
             .collect();
@@ -184,6 +218,103 @@ impl ConversationMemory {
         if episodic_memory.len() > self.config.max_episodic_summaries {
             episodic_memory.pop_front();
         }
+    }
+
+    /// P0 FIX: Summarize pending entries using LLM
+    ///
+    /// This is the async method that should be called periodically to
+    /// generate meaningful summaries from pending conversation entries.
+    pub async fn summarize_pending_async(&self) -> Result<(), String> {
+        let entries: Vec<MemoryEntry> = {
+            let mut pending = self.pending_summarization.write();
+            std::mem::take(&mut *pending)
+        };
+
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let llm = {
+            let llm_guard = self.llm.read();
+            match llm_guard.as_ref() {
+                Some(llm) => llm.clone(),
+                None => {
+                    // No LLM available, use simple summary
+                    self.create_simple_summary(entries);
+                    return Ok(());
+                }
+            }
+        };
+
+        // Build conversation text for summarization
+        let conversation_text: String = entries.iter()
+            .map(|e| format!("{}: {}", e.role, e.content))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let start_ms = entries.first().map(|e| e.timestamp_ms).unwrap_or(0);
+        let end_ms = entries.last().map(|e| e.timestamp_ms).unwrap_or(0);
+        let topics: Vec<String> = entries.iter()
+            .flat_map(|e| e.intents.clone())
+            .collect();
+
+        // Create summarization prompt
+        let prompt = format!(
+            r#"Summarize this gold loan conversation segment concisely (1-2 sentences).
+Focus on: customer needs, loan details mentioned, any concerns raised.
+
+Conversation:
+{}
+
+Summary:"#,
+            conversation_text
+        );
+
+        let messages = vec![Message {
+            role: Role::User,
+            content: prompt,
+        }];
+
+        // Call LLM for summarization
+        match llm.generate(&messages).await {
+            Ok(response) => {
+                let summary_text = response.text.trim().to_string();
+
+                let episodic = EpisodicSummary {
+                    summary: summary_text,
+                    time_range: (start_ms, end_ms),
+                    topics,
+                    stage_transitions: Vec::new(),
+                    turns_count: entries.len(),
+                };
+
+                let mut episodic_memory = self.episodic.write();
+                episodic_memory.push_back(episodic);
+
+                if episodic_memory.len() > self.config.max_episodic_summaries {
+                    episodic_memory.pop_front();
+                }
+
+                tracing::debug!("Created LLM-based episodic summary for {} turns", entries.len());
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("LLM summarization failed, using fallback: {}", e);
+                // Fallback to simple summary
+                self.create_simple_summary(entries);
+                Err(format!("LLM summarization failed: {}", e))
+            }
+        }
+    }
+
+    /// P0 FIX: Check if there are pending entries to summarize
+    pub fn has_pending_summarization(&self) -> bool {
+        !self.pending_summarization.read().is_empty()
+    }
+
+    /// P0 FIX: Get count of pending summarization entries
+    pub fn pending_count(&self) -> usize {
+        self.pending_summarization.read().len()
     }
 
     /// Add semantic fact

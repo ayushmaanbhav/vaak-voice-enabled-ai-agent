@@ -12,39 +12,41 @@ The RAG crate handles retrieval-augmented generation:
 
 ---
 
-## Current Status Summary
+## Current Status Summary (Updated 2024-12-28)
 
 | Module | Status | Grade |
 |--------|--------|-------|
-| HybridRetriever | RRF fusion works, single-shot only | B |
-| EarlyExitReranker | Logic exists but NEVER CALLED | F |
-| SimpleEmbedder | Placeholder hash-based | D |
-| VectorStore (Qdrant) | Functional, missing auth | B- |
-| SparseSearch (BM25) | Works, no Hindi support | B |
+| HybridRetriever | RRF fusion, parallel search | **B+** |
+| EarlyExitReranker | Integrated (early-exit limited by ONNX) | **B-** |
+| SimpleEmbedder | Placeholder hash-based | **D** |
+| VectorStore (Qdrant) | Functional, missing auth | **B-** |
+| SparseSearch (BM25) | Works, no Hindi support | **B** |
+
+**Overall Grade: B-** (4/10 issues fixed, 5 open, 1 N/A)
 
 ---
 
-## P0 - Critical Issues (Must Fix)
+## P0 - Critical Issues
 
-| Task | File:Line | Description |
-|------|-----------|-------------|
-| **Reranker not integrated** | `retriever.rs:234-255` | Uses SimpleScorer instead of EarlyExitReranker |
-| **should_exit() never called** | `reranker.rs:229-255` | Early-exit logic exists but is dead code |
-| **No per-layer inference** | `reranker.rs:236-254` | PABEE requires layer-by-layer execution |
+| Task | File:Line | Status |
+|------|-----------|--------|
+| ~~Reranker not integrated~~ | `retriever.rs:85-86,269-304` | ✅ **FIXED** - with_reranker() + rerank() |
+| should_exit() never called | `reranker.rs:449` | ❌ **OPEN** - #[allow(dead_code)], ONNX limitation |
+| No per-layer inference | `reranker.rs:359-384` | ❌ **OPEN** - ONNX doesn't expose layers |
 
 ---
 
 ## P1 - Important Issues
 
-| Task | File:Line | Description |
-|------|-----------|-------------|
-| No parallel dense+sparse | `retriever.rs:154-162` | Sequential, should use tokio::join! |
-| No agentic RAG flow | N/A | Missing intent→retrieve→sufficiency→rewrite loop |
-| Prefetch not cached | `retriever.rs:258` | Results computed but not reused |
-| Embedding blocks async | `embeddings.rs:87-97` | ONNX inference is synchronous |
-| API key not used | `vector_store.rs:30, 103` | Config has api_key but never passed to Qdrant |
-| Stemming not enabled | `sparse_search.rs:26, 72-80` | Config flag exists but not implemented |
-| No Hindi analyzer | `sparse_search.rs:28` | Default English only |
+| Task | File:Line | Status |
+|------|-----------|--------|
+| ~~No parallel dense+sparse~~ | `retriever.rs:182-194` | ✅ **FIXED** - tokio::join! |
+| No agentic RAG flow | N/A | ❌ **NOT IMPL** - Requires agent layer |
+| ~~Prefetch not cached~~ | `retriever.rs:334-382` | ✅ **FIXED** - spawn_blocking + config |
+| ~~Embedding blocks async~~ | `retriever.rs:129-131` | ✅ **FIXED** - spawn_blocking |
+| API key not used | `vector_store.rs:102-107` | ❌ **OPEN** - Config field ignored |
+| Stemming not enabled | `sparse_search.rs` | ❌ **OPEN** - Field exists but unused |
+| No Hindi analyzer | `sparse_search.rs` | ❌ **OPEN** - Language field unused |
 
 ---
 
@@ -141,4 +143,5 @@ Fix requires:
 
 ---
 
-*Last Updated: 2024-12-27*
+*Last Updated: 2024-12-28*
+*Status: 4/10 issues FIXED, 5 OPEN, 1 NOT IMPLEMENTED*

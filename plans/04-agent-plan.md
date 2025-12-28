@@ -12,41 +12,43 @@ The agent crate handles conversation logic:
 
 ---
 
-## Current Status Summary
+## Current Status Summary (Updated 2024-12-28)
 
 | Module | Status | Grade |
 |--------|--------|-------|
-| GoldLoanAgent | Event-driven, mock fallback | B |
-| Conversation | Stage FSM works | B |
-| Intent Detection | Keyword-based, regex unused | C |
-| Memory | Summarization is fake | D |
-| Stage Transitions | Missing some valid paths | B- |
+| GoldLoanAgent | Event-driven, mock fallback | **B** |
+| Conversation | Stage FSM works, transitions fixed | **B+** |
+| Intent Detection | Keyword-based, regex still unused | **C** |
+| Memory | Summarization still fake | **D** |
+| Stage Transitions | Fixed missing paths | **B+** |
+
+**Overall Grade: C+** (3/12 issues fixed, 8 open, 1 partial)
 
 ---
 
-## P0 - Critical Issues (Must Fix)
+## P0 - Critical Issues
 
-| Task | File:Line | Description |
-|------|-----------|-------------|
-| **Slot patterns never used** | `intent.rs:217-239` | Regex patterns defined but extract_slot_value uses hardcoded matching |
-| **Memory summarization is fake** | `memory.rs:137-141` | Just trims entries, no LLM summarization |
-| **No Devanagari support** | `intent.rs` | Hindi in Devanagari script will fail intent detection |
-| **Duplicate PersonaTraits** | `agent.rs:45-63` | Defined in agent, config, AND llm crates |
+| Task | File:Line | Status |
+|------|-----------|--------|
+| Slot patterns never used | `intent.rs:216-241,314-330` | ❌ **OPEN** - Patterns defined but not compiled |
+| Memory summarization fake | `memory.rs:160-170` | ❌ **OPEN** - Just concatenates, no LLM |
+| ~~No Devanagari support~~ | `intent.rs:276-300` | ✅ **FIXED** - unicode_segmentation |
+| Duplicate PersonaTraits | `agent.rs`, `llm/prompt.rs`, `config/agent.rs` | ❌ **OPEN** - 3 definitions |
 
 ---
 
 ## P1 - Important Issues
 
-| Task | File:Line | Description |
-|------|-----------|-------------|
-| Missing FSM transitions | `stage.rs:108-112, 123-127` | Discovery→ObjectionHandling, ObjectionHandling→Discovery |
-| required_intents not checked | `stage.rs:267-290` | Collected but never validated in stage_completed() |
-| Incomplete stage mappings | `conversation.rs:263-296` | Many intent→stage transitions missing |
-| Hardcoded tool defaults | `agent.rs:229-249` | City "Mumbai", purity "22K" should come from profile |
-| SlotType always Text | `intent.rs:312-318` | Ignores actual slot type definition |
-| Hardcoded slot confidence | `intent.rs:317` | Always 0.8, should vary |
-| No RAG integration | `agent.rs` | rag_enabled flag exists but unused |
-| Stage guidance mismatch | `agent.rs:312-314` | Uses display_name but expects lowercase |
+| Task | File:Line | Status |
+|------|-----------|--------|
+| ~~Missing FSM transitions~~ | `stage.rs:108-127` | ✅ **FIXED** - Discovery↔ObjectionHandling |
+| required_intents not checked | `stage.rs:269-292` | ❌ **OPEN** - Never validated |
+| Incomplete stage mappings | `conversation.rs:263-296` | ⚠️ **PARTIAL** - Only 4 intents mapped |
+| Hardcoded tool defaults | `agent.rs:232-251` | ❌ **OPEN** - City/purity hardcoded |
+| SlotType always Text | `intent.rs:322` | ❌ **OPEN** - Ignores slot type |
+| Hardcoded slot confidence | `intent.rs:324` | ❌ **OPEN** - Always 0.8 |
+| No RAG integration | `agent.rs` | ❌ **OPEN** - rag_enabled unused |
+| ~~Stage guidance mismatch~~ | `agent.rs:314-317` | ✅ **FIXED** - Works via string match |
 
 ---
 
@@ -160,4 +162,5 @@ async fn summarize_if_needed(&self, llm: &dyn LlmBackend) {
 
 ---
 
-*Last Updated: 2024-12-27*
+*Last Updated: 2024-12-28*
+*Status: 3/12 issues FIXED, 8 OPEN, 1 PARTIAL*

@@ -5,6 +5,9 @@
 use std::fmt;
 use serde::{Deserialize, Serialize};
 
+// P0 FIX: Re-export PersonaConfig from config crate (single source of truth)
+pub use voice_agent_config::PersonaConfig;
+
 /// Message role
 ///
 /// P2 FIX: Added Tool role for function calling support.
@@ -73,27 +76,7 @@ pub struct PromptBuilder {
     persona: PersonaConfig,
 }
 
-/// Persona configuration
-#[derive(Debug, Clone)]
-pub struct PersonaConfig {
-    pub name: String,
-    pub warmth: f32,
-    pub formality: f32,
-    pub urgency: f32,
-    pub empathy: f32,
-}
-
-impl Default for PersonaConfig {
-    fn default() -> Self {
-        Self {
-            name: "Priya".to_string(),
-            warmth: 0.8,
-            formality: 0.6,
-            urgency: 0.4,
-            empathy: 0.9,
-        }
-    }
-}
+// PersonaConfig is now imported from voice_agent_config (see re-export above)
 
 impl PromptBuilder {
     /// Create a new prompt builder

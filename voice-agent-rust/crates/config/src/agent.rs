@@ -67,8 +67,15 @@ impl Default for AgentConfig {
 }
 
 /// Persona traits configuration
+///
+/// P0 FIX: Consolidated from 3 duplicate definitions (config, llm, agent).
+/// This is now the single source of truth for persona configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonaConfig {
+    /// Agent persona name (e.g., "Priya")
+    #[serde(default = "default_persona_name")]
+    pub name: String,
+
     /// Warmth level (0.0 - 1.0)
     #[serde(default = "default_warmth")]
     pub warmth: f32,
@@ -84,6 +91,10 @@ pub struct PersonaConfig {
     /// Empathy level (0.0 - 1.0)
     #[serde(default = "default_empathy")]
     pub empathy: f32,
+}
+
+fn default_persona_name() -> String {
+    "Priya".to_string()
 }
 
 fn default_warmth() -> f32 {
@@ -102,6 +113,7 @@ fn default_empathy() -> f32 {
 impl Default for PersonaConfig {
     fn default() -> Self {
         Self {
+            name: default_persona_name(),
             warmth: default_warmth(),
             formality: default_formality(),
             urgency: default_urgency(),

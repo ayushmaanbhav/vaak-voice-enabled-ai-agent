@@ -117,6 +117,67 @@ struct LayerOutput {
 }
 
 /// Early-exit cross-encoder reranker
+///
+/// # P0 FIX: Early-Exit Limitation with ONNX Runtime
+///
+/// **IMPORTANT**: While this struct is named "EarlyExitReranker", layer-by-layer
+/// early exit is **NOT currently functional** with standard ONNX models.
+///
+/// ## Why Early Exit Doesn't Work
+///
+/// The early-exit optimization requires access to intermediate layer outputs
+/// (hidden states from each transformer layer). However:
+///
+/// 1. **Standard ONNX models don't expose per-layer outputs** - They are compiled
+///    as a monolithic graph that only returns final logits.
+///
+/// 2. **ONNX Runtime executes the full graph** - There's no built-in mechanism
+///    to pause execution mid-inference and check intermediate results.
+///
+/// 3. **The `should_exit()` function is dead code** - It's marked with
+///    `#[allow(dead_code)]` because no caller provides `LayerOutput` data.
+///
+/// ## Current Behavior
+///
+/// The `run_with_early_exit()` method:
+/// - Runs the FULL model (all layers)
+/// - Returns only the final logits
+/// - Always returns `None` for exit_layer
+///
+/// ## Alternative: Cascaded Reranking
+///
+/// Instead of layer-level early exit, this module implements **cascaded reranking**:
+/// 1. **Pre-filter stage**: Fast keyword/BM25 scoring to eliminate obvious non-matches
+/// 2. **Full model stage**: Only promising candidates go through the cross-encoder
+/// 3. **Early termination**: Stop processing remaining docs if top-k is confident
+///
+/// This provides similar latency benefits without requiring custom model modifications.
+///
+/// ## Future: Enabling True Early Exit
+///
+/// To enable actual early-exit, you would need:
+///
+/// 1. **Custom ONNX export**: Modify the model export to include hidden state outputs:
+///    ```python
+///    # In model export script
+///    torch.onnx.export(
+///        model,
+///        dummy_input,
+///        "reranker_with_hidden.onnx",
+///        output_names=["logits", "layer_0", "layer_1", ..., "layer_11"]
+///    )
+///    ```
+///
+/// 2. **Multiple smaller ONNX files**: Export each layer as a separate model,
+///    allowing Rust to run them sequentially with exit checks between.
+///
+/// 3. **Alternative runtime**: Use a framework like Candle that allows
+///    step-by-step layer execution with native Rust control flow.
+///
+/// 4. **ONNX Runtime custom ops**: Implement a custom operator that checks
+///    exit conditions between layers (complex, not recommended).
+///
+/// See `voice-agent-rust/docs/EARLY_EXIT_ONNX.md` for detailed implementation guide.
 pub struct EarlyExitReranker {
     #[cfg(feature = "onnx")]
     session: Session,
@@ -446,6 +507,13 @@ impl EarlyExitReranker {
     }
 
     /// Check if should exit based on strategy
+    ///
+    /// **P0 FIX: DEAD CODE** - This function is never called because ONNX models
+    /// don't provide per-layer outputs. It's kept for future implementation
+    /// if/when we switch to a framework that supports layer-by-layer execution
+    /// (e.g., Candle) or export custom ONNX models with hidden state outputs.
+    ///
+    /// See struct-level documentation for details on the ONNX limitation.
     #[allow(dead_code)]
     fn should_exit(&self, layer_outputs: &[LayerOutput], current_layer: usize) -> bool {
         if current_layer < self.config.min_layer {

@@ -6,6 +6,8 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use voice_agent_llm::{PromptBuilder, Message, Role, OllamaBackend, LlmBackend, LlmConfig};
+// P0 FIX: Import PersonaConfig from the single source of truth
+use voice_agent_config::PersonaConfig;
 use voice_agent_tools::{ToolRegistry, ToolExecutor};
 
 use crate::conversation::{Conversation, ConversationConfig, ConversationEvent, EndReason};
@@ -15,14 +17,12 @@ use crate::AgentError;
 /// Agent configuration
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
-    /// Agent name
-    pub name: String,
     /// Default language
     pub language: String,
     /// Conversation config
     pub conversation: ConversationConfig,
-    /// Persona traits
-    pub persona: PersonaTraits,
+    /// Persona configuration (P0 FIX: now uses consolidated PersonaConfig)
+    pub persona: PersonaConfig,
     /// Enable RAG
     pub rag_enabled: bool,
     /// Enable tools
@@ -32,35 +32,25 @@ pub struct AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            name: "Priya".to_string(),
             language: "hi".to_string(),
             conversation: ConversationConfig::default(),
-            persona: PersonaTraits::default(),
+            persona: PersonaConfig::default(),
             rag_enabled: true,
             tools_enabled: true,
         }
     }
 }
 
-/// Persona traits
-#[derive(Debug, Clone)]
-pub struct PersonaTraits {
-    pub warmth: f32,
-    pub formality: f32,
-    pub urgency: f32,
-    pub empathy: f32,
-}
-
-impl Default for PersonaTraits {
-    fn default() -> Self {
-        Self {
-            warmth: 0.8,
-            formality: 0.6,
-            urgency: 0.4,
-            empathy: 0.9,
-        }
+impl AgentConfig {
+    /// Get agent name from persona
+    pub fn name(&self) -> &str {
+        &self.persona.name
     }
 }
+
+// P0 FIX: PersonaTraits removed - now uses PersonaConfig from voice_agent_config
+// Re-export for backwards compatibility
+pub use voice_agent_config::PersonaConfig as PersonaTraits;
 
 /// Agent events
 #[derive(Debug, Clone)]
@@ -287,14 +277,8 @@ impl GoldLoanAgent {
         user_input: &str,
         tool_result: Option<&str>,
     ) -> Result<String, AgentError> {
-        // Build prompt
-        let persona = voice_agent_llm::prompt::PersonaConfig {
-            name: self.config.name.clone(),
-            warmth: self.config.persona.warmth,
-            formality: self.config.persona.formality,
-            urgency: self.config.persona.urgency,
-            empathy: self.config.persona.empathy,
-        };
+        // Build prompt - P0 FIX: now just clones consolidated PersonaConfig
+        let persona = self.config.persona.clone();
 
         let mut builder = PromptBuilder::new()
             .with_persona(persona)
@@ -384,7 +368,7 @@ impl GoldLoanAgent {
             ConversationStage::Greeting => {
                 format!(
                     "Namaste! Main {} hoon, Kotak Mahindra Bank se. Aapki kya madad kar sakti hoon aaj?",
-                    self.config.name
+                    self.config.persona.name
                 )
             }
             ConversationStage::Discovery => {
@@ -425,7 +409,7 @@ impl GoldLoanAgent {
 
     /// Get agent name
     pub fn name(&self) -> &str {
-        &self.config.name
+        &self.config.persona.name
     }
 }
 
