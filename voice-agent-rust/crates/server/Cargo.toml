@@ -18,6 +18,7 @@ voice-agent-rag.workspace = true
 voice-agent-llm.workspace = true
 voice-agent-tools.workspace = true
 voice-agent-agent.workspace = true
+voice-agent-persistence.workspace = true
 
 # Web framework
 axum = { workspace = true, features = ["ws", "macros"] }
@@ -43,6 +44,7 @@ tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 parking_lot.workspace = true
 uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono.workspace = true
 base64 = "0.21"
 
 # Observability

@@ -10,8 +10,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::RwLock;
 use voice_agent_config::Settings;
+
+/// P1 FIX: Track if we've warned about auth being disabled (warn once only)
+static AUTH_DISABLED_WARNED: AtomicBool = AtomicBool::new(false);
 
 /// Authentication result after checking config
 enum AuthCheck {
@@ -36,8 +40,14 @@ fn check_auth_config(
     let config_guard = config.read();
     let auth_config = &config_guard.server.auth;
 
-    // If auth is disabled, pass through
+    // P1 FIX: Log warning when auth is disabled (only once)
+    // This is a security risk in production environments
     if !auth_config.enabled {
+        if !AUTH_DISABLED_WARNED.swap(true, Ordering::Relaxed) {
+            tracing::warn!(
+                "⚠️  API authentication is DISABLED! Set VOICE_AGENT__SERVER__AUTH__ENABLED=true for production."
+            );
+        }
         return AuthCheck::Disabled;
     }
 

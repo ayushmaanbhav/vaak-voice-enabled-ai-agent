@@ -181,11 +181,33 @@ impl HybridRetriever {
         // P1 FIX: Run dense and sparse search in parallel
         let dense_future = self.search_dense(query, vector_store, filter.clone());
 
-        // Sparse search is sync, so we wrap it in an async block
-        // Note: For CPU-intensive sparse search, consider spawn_blocking
-        let sparse_future = async {
-            if self.sparse_index.is_some() {
-                self.search_sparse(query)
+        // P1 FIX: Sparse search now runs in spawn_blocking to avoid blocking async runtime
+        // Tantivy search is CPU-intensive, so we move it off the async executor
+        let sparse_index_clone = self.sparse_index.clone();
+        let query_owned = query.to_string();
+        let sparse_top_k = self.config.sparse_top_k;
+
+        let sparse_future = async move {
+            if let Some(sparse) = sparse_index_clone {
+                let results = tokio::task::spawn_blocking(move || {
+                    sparse.search(&query_owned, Some(sparse_top_k))
+                })
+                .await
+                .map_err(|e| RagError::Search(format!("Sparse search task failed: {}", e)))??;
+
+                Ok::<Vec<SearchResult>, RagError>(
+                    results
+                        .into_iter()
+                        .map(|r| SearchResult {
+                            id: r.id,
+                            text: r.text,
+                            score: r.score,
+                            metadata: r.metadata,
+                            source: SearchSource::Sparse,
+                            exit_layer: None,
+                        })
+                        .collect()
+                )
             } else {
                 Ok(Vec::new())
             }

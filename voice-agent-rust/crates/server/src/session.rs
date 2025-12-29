@@ -150,23 +150,17 @@ impl Default for RedisSessionConfig {
     }
 }
 
-/// P1 FIX: Redis session store (stub for future implementation)
+/// P1 FIX: Redis session store (stub - deprecated in favor of ScyllaDB)
 ///
 /// This is a placeholder for Redis-based session persistence.
-/// Full implementation requires:
-/// 1. Redis connection pool (deadpool-redis or bb8-redis)
-/// 2. Serialization of session state
-/// 3. Session affinity for agent state
-/// 4. Pub/sub for session events
+/// Use `ScyllaSessionStore` instead for production deployments.
 pub struct RedisSessionStore {
     config: RedisSessionConfig,
-    // TODO: Add Redis connection pool when implementing
-    // pool: Pool<RedisConnectionManager>,
 }
 
 impl RedisSessionStore {
     pub fn new(config: RedisSessionConfig) -> Self {
-        tracing::warn!("RedisSessionStore is a stub - using in-memory fallback");
+        tracing::warn!("RedisSessionStore is deprecated - use ScyllaSessionStore instead");
         Self { config }
     }
 
@@ -178,45 +172,157 @@ impl RedisSessionStore {
 #[async_trait]
 impl SessionStore for RedisSessionStore {
     async fn store_metadata(&self, session: &Session) -> Result<(), ServerError> {
-        // TODO: Implement Redis SET with TTL
         tracing::debug!("Redis store_metadata stub called for session {}", session.id);
         let _key = self._key(&session.id);
-        // In a real implementation:
-        // let value = serde_json::to_string(&metadata)?;
-        // conn.set_ex(key, value, self.config.ttl_seconds).await?;
         Ok(())
     }
 
     async fn get_metadata(&self, id: &str) -> Result<Option<SessionMetadata>, ServerError> {
-        // TODO: Implement Redis GET
         tracing::debug!("Redis get_metadata stub called for session {}", id);
         let _key = self._key(id);
-        // In a real implementation:
-        // let value: Option<String> = conn.get(key).await?;
-        // Ok(value.map(|v| serde_json::from_str(&v)).transpose()?)
         Ok(None)
     }
 
     async fn delete_metadata(&self, id: &str) -> Result<(), ServerError> {
-        // TODO: Implement Redis DEL
         tracing::debug!("Redis delete_metadata stub called for session {}", id);
         let _key = self._key(id);
         Ok(())
     }
 
     async fn list_ids(&self) -> Result<Vec<String>, ServerError> {
-        // TODO: Implement Redis SCAN with pattern
         tracing::debug!("Redis list_ids stub called");
-        // In a real implementation:
-        // let pattern = format!("{}*", self.config.key_prefix);
-        // let keys: Vec<String> = conn.scan_match(pattern).collect().await?;
         Ok(vec![])
     }
 
     async fn touch(&self, id: &str) -> Result<(), ServerError> {
-        // TODO: Implement Redis EXPIRE refresh
         tracing::debug!("Redis touch stub called for session {}", id);
         let _key = self._key(id);
+        Ok(())
+    }
+
+    fn is_distributed(&self) -> bool {
+        true
+    }
+}
+
+/// P1 FIX: ScyllaDB session store for production persistence
+///
+/// Uses the voice-agent-persistence crate for durable session storage.
+/// Sessions are persisted to ScyllaDB and survive server restarts.
+pub struct ScyllaSessionStore {
+    store: voice_agent_persistence::ScyllaSessionStore,
+    instance_id: String,
+}
+
+impl ScyllaSessionStore {
+    /// Create a new ScyllaDB session store
+    pub fn new(store: voice_agent_persistence::ScyllaSessionStore) -> Self {
+        Self {
+            store,
+            instance_id: uuid::Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Create with a specific instance ID (for session affinity)
+    pub fn with_instance_id(store: voice_agent_persistence::ScyllaSessionStore, instance_id: String) -> Self {
+        Self { store, instance_id }
+    }
+
+    /// Get the instance ID
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
+    }
+}
+
+#[async_trait]
+impl SessionStore for ScyllaSessionStore {
+    async fn store_metadata(&self, session: &Session) -> Result<(), ServerError> {
+        use voice_agent_persistence::sessions::{SessionData, SessionStore as PersistenceSessionStore};
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let expires_at = now + chrono::Duration::hours(1);
+
+        // Get memory context from agent if available
+        let memory_json = serde_json::to_string(
+            &session.agent.conversation().get_context()
+        ).ok();
+
+        let data = SessionData {
+            session_id: session.id.clone(),
+            created_at: now,
+            updated_at: now,
+            expires_at,
+            customer_phone: None, // Will be set when customer provides phone
+            customer_name: None,
+            customer_segment: None,
+            language: session.agent.config().language.clone(),
+            conversation_stage: session.agent.stage().display_name().to_string(),
+            turn_count: session.agent.conversation().turn_count() as i32,
+            memory_json,
+            metadata_json: Some(serde_json::json!({
+                "instance_id": self.instance_id
+            }).to_string()),
+        };
+
+        self.store.create(&data).await
+            .map_err(|e| ServerError::Session(format!("ScyllaDB error: {}", e)))?;
+
+        tracing::debug!(
+            session_id = %session.id,
+            stage = %data.conversation_stage,
+            "Session persisted to ScyllaDB"
+        );
+
+        Ok(())
+    }
+
+    async fn get_metadata(&self, id: &str) -> Result<Option<SessionMetadata>, ServerError> {
+        use voice_agent_persistence::sessions::SessionStore as PersistenceSessionStore;
+
+        match self.store.get(id).await {
+            Ok(Some(data)) => {
+                // Extract instance_id from metadata_json if present
+                let instance_id = data.metadata_json.as_ref()
+                    .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+                    .and_then(|v| v.get("instance_id").and_then(|i| i.as_str()).map(String::from));
+
+                Ok(Some(SessionMetadata {
+                    id: data.session_id,
+                    created_at_ms: data.created_at.timestamp_millis() as u64,
+                    last_activity_ms: data.updated_at.timestamp_millis() as u64,
+                    active: data.expires_at > chrono::Utc::now(),
+                    stage: data.conversation_stage,
+                    turn_count: data.turn_count as usize,
+                    instance_id,
+                }))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(ServerError::Session(format!("ScyllaDB error: {}", e))),
+        }
+    }
+
+    async fn delete_metadata(&self, id: &str) -> Result<(), ServerError> {
+        use voice_agent_persistence::sessions::SessionStore as PersistenceSessionStore;
+
+        self.store.delete(id).await
+            .map_err(|e| ServerError::Session(format!("ScyllaDB error: {}", e)))?;
+        tracing::debug!(session_id = %id, "Session deleted from ScyllaDB");
+        Ok(())
+    }
+
+    async fn list_ids(&self) -> Result<Vec<String>, ServerError> {
+        // Note: ScyllaDB doesn't have a direct "list all" - would need secondary index
+        // For now, return empty - active sessions are tracked in memory
+        tracing::debug!("ScyllaDB list_ids: returning in-memory sessions only");
+        Ok(vec![])
+    }
+
+    async fn touch(&self, id: &str) -> Result<(), ServerError> {
+        use voice_agent_persistence::sessions::SessionStore as PersistenceSessionStore;
+
+        self.store.touch(id).await
+            .map_err(|e| ServerError::Session(format!("ScyllaDB error: {}", e)))?;
         Ok(())
     }
 

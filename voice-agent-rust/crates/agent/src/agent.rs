@@ -567,6 +567,11 @@ impl GoldLoanAgent {
         &self.conversation
     }
 
+    /// P1 FIX: Get agent configuration
+    pub fn config(&self) -> &AgentConfig {
+        &self.config
+    }
+
     /// End conversation
     pub fn end(&self, reason: EndReason) {
         self.conversation.end(reason);

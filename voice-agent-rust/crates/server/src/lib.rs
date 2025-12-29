@@ -13,7 +13,7 @@ pub mod auth;  // P1 FIX: Auth middleware
 pub use websocket::WebSocketHandler;
 pub use http::create_router;
 pub use auth::auth_middleware;
-pub use session::{Session, SessionManager};
+pub use session::{Session, SessionManager, SessionStore, SessionMetadata, InMemorySessionStore, ScyllaSessionStore};
 pub use state::AppState;
 pub use rate_limit::{RateLimiter, RateLimitError};
 pub use metrics::{init_metrics, record_request, record_stt_latency, record_llm_latency, record_tts_latency, record_total_latency, record_error};
