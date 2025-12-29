@@ -312,10 +312,13 @@ impl SessionStore for ScyllaSessionStore {
     }
 
     async fn list_ids(&self) -> Result<Vec<String>, ServerError> {
-        // Note: ScyllaDB doesn't have a direct "list all" - would need secondary index
-        // For now, return empty - active sessions are tracked in memory
-        tracing::debug!("ScyllaDB list_ids: returning in-memory sessions only");
-        Ok(vec![])
+        use voice_agent_persistence::sessions::SessionStore as PersistenceSessionStore;
+
+        // P2-3 FIX: Actually list sessions from ScyllaDB
+        let sessions = self.store.list_active(100).await
+            .map_err(|e| ServerError::Session(format!("ScyllaDB list error: {}", e)))?;
+
+        Ok(sessions.into_iter().map(|s| s.session_id).collect())
     }
 
     async fn touch(&self, id: &str) -> Result<(), ServerError> {

@@ -227,7 +227,11 @@ impl Retriever for EnhancedRetriever {
             .hybrid
             .search(&processed_query, &self.vector_store, None)
             .await
-            .map_err(|e| voice_agent_core::Error::Rag(e.to_string()))?;
+            .map_err(|e| voice_agent_core::Error::Rag(format!(
+                "hybrid search failed (query='{}'): {}",
+                query.chars().take(50).collect::<String>(),
+                e
+            )))?;
 
         // Apply domain boosting
         self.apply_boosting(&mut results, query);
@@ -257,7 +261,11 @@ impl Retriever for EnhancedRetriever {
                 let result = agentic
                     .search(query, &self.vector_store, Some(&rag_context))
                     .await
-                    .map_err(|e| voice_agent_core::Error::Rag(e.to_string()))?;
+                    .map_err(|e| voice_agent_core::Error::Rag(format!(
+                        "agentic retrieval failed (query='{}'): {}",
+                        query.chars().take(50).collect::<String>(),
+                        e
+                    )))?;
 
                 tracing::debug!(
                     "Agentic retrieval: {} iterations, rewritten={}",

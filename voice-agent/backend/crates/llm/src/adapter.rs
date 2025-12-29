@@ -82,18 +82,18 @@ impl LanguageModelAdapter {
 impl LanguageModel for LanguageModelAdapter {
     async fn generate(&self, request: GenerateRequest) -> Result<GenerateResponse> {
         let messages = Self::convert_messages(&request);
+        let model = self.model_name.clone();
 
-        match self.backend.generate(&messages).await {
-            Ok(result) => {
-                Ok(GenerateResponse {
-                    text: result.text,
-                    finish_reason: Self::convert_finish_reason(result.finish_reason),
-                    usage: Some(TokenUsage::new(0, result.tokens as u32)),
-                    tool_calls: Vec::new(),
-                })
-            }
-            Err(e) => Err(Error::Llm(format!("LLM generation failed: {}", e))),
-        }
+        self.backend.generate(&messages).await
+            .map(|result| GenerateResponse {
+                text: result.text,
+                finish_reason: Self::convert_finish_reason(result.finish_reason),
+                usage: Some(TokenUsage::new(0, result.tokens as u32)),
+                tool_calls: Vec::new(),
+            })
+            .map_err(|e| Error::Llm(format!(
+                "generate failed (model={}): {}", model, e
+            )))
     }
 
     fn generate_stream<'a>(
@@ -102,11 +102,13 @@ impl LanguageModel for LanguageModelAdapter {
     ) -> Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send + 'a>> {
         let messages = Self::convert_messages(&request);
         let backend = self.backend.clone();
+        let model = self.model_name.clone();
 
         Box::pin(async_stream::stream! {
             let (tx, mut rx) = mpsc::channel::<String>(100);
 
             // Spawn the streaming task
+            let model_for_task = model.clone();
             let stream_task = tokio::spawn(async move {
                 backend.generate_stream(&messages, tx).await
             });
@@ -126,10 +128,14 @@ impl LanguageModel for LanguageModelAdapter {
                     });
                 }
                 Ok(Err(e)) => {
-                    yield Err(Error::Llm(format!("Stream error: {}", e)));
+                    yield Err(Error::Llm(format!(
+                        "stream generation failed (model={}): {}", model, e
+                    )));
                 }
                 Err(e) => {
-                    yield Err(Error::Llm(format!("Task join error: {}", e)));
+                    yield Err(Error::Llm(format!(
+                        "stream task panicked (model={}): {}", model, e
+                    )));
                 }
             }
         })
@@ -164,8 +170,11 @@ impl LanguageModel for LanguageModelAdapter {
             });
         }
 
-        match self.backend.generate(&messages).await {
-            Ok(result) => {
+        let model = self.model_name.clone();
+        let tool_count = tools.len();
+
+        self.backend.generate(&messages).await
+            .map(|result| {
                 // Parse tool calls from response text
                 let tool_calls: Vec<voice_agent_core::llm_types::ToolCall> = crate::prompt::parse_tool_call(&result.text)
                     .map(|tc| voice_agent_core::llm_types::ToolCall {
@@ -184,15 +193,16 @@ impl LanguageModel for LanguageModelAdapter {
                     Self::convert_finish_reason(result.finish_reason)
                 };
 
-                Ok(GenerateResponse {
+                GenerateResponse {
                     text: result.text,
                     finish_reason,
                     usage: Some(TokenUsage::new(0, result.tokens as u32)),
                     tool_calls,
-                })
-            }
-            Err(e) => Err(Error::Llm(format!("LLM generation failed: {}", e))),
-        }
+                }
+            })
+            .map_err(|e| Error::Llm(format!(
+                "generate_with_tools failed (model={}, tools={}): {}", model, tool_count, e
+            )))
     }
 
     async fn is_available(&self) -> bool {

@@ -398,6 +398,18 @@ pub async fn create_session(
 
     match state.sessions.create(config) {
         Ok(session) => {
+            // P2-3 FIX: Persist session metadata to configured store
+            if let Err(e) = state.persist_session(&session).await {
+                tracing::warn!(session_id = %session.id, error = %e, "Failed to persist session metadata");
+                // Continue anyway - session is functional even if persistence fails
+            } else {
+                tracing::debug!(
+                    session_id = %session.id,
+                    distributed = state.is_distributed_sessions(),
+                    "Session persisted"
+                );
+            }
+
             Ok(axum::Json(serde_json::json!({
                 "session_id": session.id,
                 "websocket_url": format!("/ws/{}", session.id),

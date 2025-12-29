@@ -124,18 +124,6 @@ pub struct RerankResult {
     pub original_rank: usize,
 }
 
-/// Layer output for tracking
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-struct LayerOutput {
-    /// Predicted class (0 = irrelevant, 1 = relevant)
-    prediction: usize,
-    /// Confidence (softmax probability of predicted class)
-    confidence: f32,
-    /// Raw logits
-    logits: Vec<f32>,
-}
-
 /// Early-exit cross-encoder reranker
 ///
 /// # P0 FIX: Early-Exit Limitation with ONNX Runtime
@@ -567,73 +555,6 @@ impl EarlyExitReranker {
         }
     }
 
-    /// Check if should exit based on strategy
-    ///
-    /// **P0 FIX: DEAD CODE** - This function is never called because ONNX models
-    /// don't provide per-layer outputs. It's kept for future implementation
-    /// if/when we switch to a framework that supports layer-by-layer execution
-    /// (e.g., Candle) or export custom ONNX models with hidden state outputs.
-    ///
-    /// See struct-level documentation for details on the ONNX limitation.
-    #[allow(dead_code)]
-    fn should_exit(&self, layer_outputs: &[LayerOutput], current_layer: usize) -> bool {
-        if current_layer < self.config.min_layer {
-            return false;
-        }
-
-        match self.config.strategy {
-            ExitStrategy::Confidence => {
-                if let Some(last) = layer_outputs.last() {
-                    last.confidence >= self.config.confidence_threshold
-                } else {
-                    false
-                }
-            }
-
-            ExitStrategy::Patience => {
-                if layer_outputs.len() < self.config.patience {
-                    return false;
-                }
-
-                let recent = &layer_outputs[layer_outputs.len() - self.config.patience..];
-                let first_pred = recent[0].prediction;
-                recent.iter().all(|o| o.prediction == first_pred)
-            }
-
-            ExitStrategy::Hybrid => {
-                if let Some(last) = layer_outputs.last() {
-                    if last.confidence >= self.config.confidence_threshold {
-                        return true;
-                    }
-                }
-
-                if layer_outputs.len() >= self.config.patience {
-                    let recent = &layer_outputs[layer_outputs.len() - self.config.patience..];
-                    let first_pred = recent[0].prediction;
-                    if recent.iter().all(|o| o.prediction == first_pred) {
-                        let avg_conf: f32 = recent.iter().map(|o| o.confidence).sum::<f32>()
-                            / self.config.patience as f32;
-                        return avg_conf >= 0.7;
-                    }
-                }
-
-                false
-            }
-
-            ExitStrategy::Similarity => {
-                if layer_outputs.len() < 2 {
-                    return false;
-                }
-
-                let prev = &layer_outputs[layer_outputs.len() - 2].logits;
-                let curr = &layer_outputs[layer_outputs.len() - 1].logits;
-
-                let similarity = cosine_similarity(prev, curr);
-                similarity >= self.config.similarity_threshold
-            }
-        }
-    }
-
     /// Get reranker statistics
     pub fn stats(&self) -> RerankerStats {
         self.stats.lock().clone()
@@ -642,24 +563,6 @@ impl EarlyExitReranker {
     /// Reset statistics
     pub fn reset_stats(&self) {
         *self.stats.lock() = RerankerStats::default();
-    }
-}
-
-/// Compute cosine similarity between two vectors
-#[allow(dead_code)]
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a > 0.0 && norm_b > 0.0 {
-        dot / (norm_a * norm_b)
-    } else {
-        0.0
     }
 }
 
@@ -759,29 +662,6 @@ impl SimpleScorer {
         let raw_score = total_score + coverage_bonus;
         (raw_score / (raw_score + 1.0)).min(1.0)
     }
-
-    /// Legacy Jaccard similarity (kept for compatibility)
-    pub fn jaccard_score(query: &str, document: &str) -> f32 {
-        let query_lower = query.to_lowercase();
-        let doc_lower = document.to_lowercase();
-
-        let query_words: std::collections::HashSet<&str> = query_lower
-            .split_whitespace()
-            .collect();
-
-        let doc_words: std::collections::HashSet<&str> = doc_lower
-            .split_whitespace()
-            .collect();
-
-        let overlap = query_words.intersection(&doc_words).count();
-        let union = query_words.union(&doc_words).count();
-
-        if union > 0 {
-            overlap as f32 / union as f32
-        } else {
-            0.0
-        }
-    }
 }
 
 #[cfg(test)]
@@ -850,25 +730,6 @@ mod tests {
         assert!(score_without_stopwords > 0.0, "Without stopwords should score > 0: {}", score_without_stopwords);
         // With stopwords, the query terms that remain should still match
         // Note: If all query terms are stopwords, score will be 0 - which is expected
-    }
-
-    #[test]
-    fn test_jaccard_score() {
-        let score = SimpleScorer::jaccard_score(
-            "gold loan rate",
-            "loan rate for gold",
-        );
-        assert!(score > 0.5, "Jaccard should show high overlap: {}", score);
-    }
-
-    #[test]
-    fn test_cosine_similarity() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
-
-        let c = vec![0.0, 1.0, 0.0];
-        assert!((cosine_similarity(&a, &c) - 0.0).abs() < 0.001);
     }
 
     #[cfg(not(feature = "onnx"))]
@@ -959,72 +820,5 @@ mod tests {
         // All docs should have been scored
         let stats = reranker.stats();
         assert_eq!(stats.full_model_runs, 2);
-    }
-
-    #[test]
-    fn test_should_exit_confidence() {
-        let mut config = RerankerConfig::default();
-        config.strategy = ExitStrategy::Confidence;
-        config.confidence_threshold = 0.9;
-        config.min_layer = 2;
-
-        // Create a mock reranker just to test should_exit logic
-        #[cfg(not(feature = "onnx"))]
-        {
-            let reranker = EarlyExitReranker::simple(config);
-
-            // Below min_layer - should not exit
-            let outputs = vec![LayerOutput {
-                prediction: 1,
-                confidence: 0.95,
-                logits: vec![0.1, 2.0],
-            }];
-            assert!(!reranker.should_exit(&outputs, 1));
-
-            // Above min_layer with high confidence - should exit
-            let outputs = vec![
-                LayerOutput { prediction: 1, confidence: 0.8, logits: vec![0.1, 1.5] },
-                LayerOutput { prediction: 1, confidence: 0.85, logits: vec![0.1, 1.8] },
-                LayerOutput { prediction: 1, confidence: 0.95, logits: vec![0.1, 2.5] },
-            ];
-            assert!(reranker.should_exit(&outputs, 3));
-
-            // Above min_layer with low confidence - should not exit
-            let outputs = vec![
-                LayerOutput { prediction: 1, confidence: 0.6, logits: vec![0.5, 0.8] },
-                LayerOutput { prediction: 1, confidence: 0.65, logits: vec![0.5, 0.9] },
-                LayerOutput { prediction: 1, confidence: 0.7, logits: vec![0.5, 1.0] },
-            ];
-            assert!(!reranker.should_exit(&outputs, 3));
-        }
-    }
-
-    #[test]
-    fn test_should_exit_patience() {
-        let mut config = RerankerConfig::default();
-        config.strategy = ExitStrategy::Patience;
-        config.patience = 2;
-        config.min_layer = 2;
-
-        #[cfg(not(feature = "onnx"))]
-        {
-            let reranker = EarlyExitReranker::simple(config);
-
-            // Two consecutive agreeing predictions - should exit
-            let outputs = vec![
-                LayerOutput { prediction: 0, confidence: 0.6, logits: vec![0.8, 0.2] },
-                LayerOutput { prediction: 1, confidence: 0.7, logits: vec![0.3, 0.7] },
-                LayerOutput { prediction: 1, confidence: 0.75, logits: vec![0.25, 0.75] },
-            ];
-            assert!(reranker.should_exit(&outputs, 3));
-
-            // Disagreeing predictions - should not exit
-            let outputs = vec![
-                LayerOutput { prediction: 1, confidence: 0.6, logits: vec![0.4, 0.6] },
-                LayerOutput { prediction: 0, confidence: 0.7, logits: vec![0.7, 0.3] },
-                LayerOutput { prediction: 1, confidence: 0.65, logits: vec![0.35, 0.65] },
-            ];
-            assert!(!reranker.should_exit(&outputs, 3));
-        }
     }
 }

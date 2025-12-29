@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 use voice_agent_config::{Settings, load_settings, DomainConfigManager};
 use voice_agent_tools::ToolRegistry;
 
-use crate::session::SessionManager;
+use crate::session::{SessionManager, SessionStore, InMemorySessionStore};
 
 /// Application state
 #[derive(Clone)]
@@ -21,18 +21,21 @@ pub struct AppState {
     pub sessions: Arc<SessionManager>,
     /// Tool registry
     pub tools: Arc<ToolRegistry>,
+    /// P2-3 FIX: Session store for persistence (ScyllaDB or in-memory)
+    pub session_store: Arc<dyn SessionStore>,
     /// Environment name for config reload
     env: Option<String>,
 }
 
 impl AppState {
-    /// Create new application state
+    /// Create new application state with in-memory session store
     pub fn new(config: Settings) -> Self {
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
+            session_store: Arc::new(InMemorySessionStore::new()),
             env: None,
         }
     }
@@ -44,6 +47,7 @@ impl AppState {
             domain_config: Arc::new(domain_config),
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
+            session_store: Arc::new(InMemorySessionStore::new()),
             env: None,
         }
     }
@@ -55,7 +59,20 @@ impl AppState {
             domain_config: Arc::new(DomainConfigManager::new()),
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
+            session_store: Arc::new(InMemorySessionStore::new()),
             env,
+        }
+    }
+
+    /// P2-3 FIX: Create application state with custom session store (e.g., ScyllaDB)
+    pub fn with_session_store(config: Settings, store: Arc<dyn SessionStore>) -> Self {
+        Self {
+            config: Arc::new(RwLock::new(config)),
+            domain_config: Arc::new(DomainConfigManager::new()),
+            sessions: Arc::new(SessionManager::new(100)),
+            tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
+            session_store: store,
+            env: None,
         }
     }
 
@@ -93,5 +110,18 @@ impl AppState {
     /// P4 FIX: Get domain configuration manager
     pub fn get_domain_config(&self) -> &DomainConfigManager {
         &self.domain_config
+    }
+
+    /// P2-3 FIX: Persist session metadata to the configured store
+    ///
+    /// Call this after creating a session or when session state changes
+    /// that should be persisted (e.g., stage transitions, turn completion).
+    pub async fn persist_session(&self, session: &crate::session::Session) -> Result<(), crate::ServerError> {
+        self.session_store.store_metadata(session).await
+    }
+
+    /// P2-3 FIX: Check if session persistence is distributed (ScyllaDB/Redis)
+    pub fn is_distributed_sessions(&self) -> bool {
+        self.session_store.is_distributed()
     }
 }

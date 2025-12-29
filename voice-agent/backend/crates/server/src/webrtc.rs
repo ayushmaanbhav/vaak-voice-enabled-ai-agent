@@ -28,7 +28,7 @@ use tokio::sync::{mpsc, RwLock, Mutex};
 
 use voice_agent_transport::{
     WebRtcTransport, WebRtcConfig, IceServer, IceCandidate,
-    TransportEvent, Transport, AudioSource,
+    TransportEvent, Transport,
 };
 use voice_agent_pipeline::{VoicePipeline, PipelineConfig, PipelineEvent};
 use voice_agent_core::{AudioFrame, SampleRate, Channels};
