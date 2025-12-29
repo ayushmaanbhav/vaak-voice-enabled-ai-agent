@@ -70,7 +70,7 @@ impl Default for VoiceSessionConfig {
             agent: AgentConfig::default(),
             stt: SttConfig {
                 engine: SttEngine::IndicConformer,
-                language: Some("hi".to_string()),
+                language: Some("en".to_string()),
                 ..Default::default()
             },
             indicconformer: Some(IndicConformerConfig::default()),

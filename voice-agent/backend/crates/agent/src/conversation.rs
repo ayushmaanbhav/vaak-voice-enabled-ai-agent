@@ -37,7 +37,7 @@ impl Default for ConversationConfig {
             session_timeout_seconds: 60,
             memory: MemoryConfig::default(),
             intent_detection: true,
-            language: "hi".to_string(),
+            language: "en".to_string(),
         }
     }
 }

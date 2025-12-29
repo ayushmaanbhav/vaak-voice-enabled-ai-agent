@@ -54,7 +54,7 @@ pub struct LlmConfig {
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            model: "qwen2.5:7b-instruct-q4_K_M".to_string(),
+            model: "qwen3:4b-instruct-2507-q4_K_M".to_string(),
             endpoint: "http://localhost:11434".to_string(),
             api_key: None,
             max_tokens: 256,
@@ -226,6 +226,7 @@ impl OllamaBackend {
             }),
             keep_alive: Some(self.config.keep_alive.clone()),
             context: context.map(|c| c.to_vec()),
+            think: Some(false), // Disable extended thinking for faster responses
         };
 
         // Retry loop with exponential backoff
@@ -351,6 +352,7 @@ impl LlmBackend for OllamaBackend {
             }),
             keep_alive: Some(self.config.keep_alive.clone()),
             context: cached_context,
+            think: Some(false), // Disable extended thinking for faster responses
         };
 
         let response = self.client
@@ -463,6 +465,9 @@ struct OllamaChatRequest {
     /// P0 FIX: Context from previous response for KV cache reuse
     #[serde(skip_serializing_if = "Option::is_none")]
     context: Option<Vec<i64>>,
+    /// Disable extended thinking for models like qwen3/deepseek-r1
+    #[serde(skip_serializing_if = "Option::is_none")]
+    think: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -976,6 +981,7 @@ mod tests {
             options: None,
             keep_alive: Some("5m".to_string()),
             context: Some(vec![1, 2, 3]),
+            think: Some(false),
         };
 
         let json = serde_json::to_string(&request).unwrap();

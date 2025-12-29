@@ -99,26 +99,33 @@ impl SimulatedGoldPriceService {
 
     /// Generate a simulated price with realistic fluctuation
     fn generate_price(&self) -> GoldPrice {
-        let mut rng = rand::thread_rng();
-
-        // Generate fluctuation: -fluctuation_percent% to +fluctuation_percent%
-        let fluctuation = (rng.gen::<f64>() - 0.5) * 2.0 * (self.fluctuation_percent / 100.0);
-        let price_24k = self.base_price_24k * (1.0 + fluctuation);
-
-        // Calculate other purities based on 24k
-        let price_22k = price_24k * 0.916; // 22k = 91.6% pure
-        let price_18k = price_24k * 0.75;  // 18k = 75% pure
-
-        GoldPrice {
-            price_per_gram: price_22k, // Default to 22k (most common for jewelry)
-            price_24k,
-            price_22k,
-            price_18k,
-            source: "simulated".to_string(),
-            updated_at: Utc::now(),
-        }
+        generate_price_with_params(self.base_price_24k, self.fluctuation_percent)
     }
+}
 
+/// Generate a simulated gold price (used by tests)
+fn generate_price_with_params(base_price_24k: f64, fluctuation_percent: f64) -> GoldPrice {
+    let mut rng = rand::thread_rng();
+
+    // Generate fluctuation: -fluctuation_percent% to +fluctuation_percent%
+    let fluctuation = (rng.gen::<f64>() - 0.5) * 2.0 * (fluctuation_percent / 100.0);
+    let price_24k = base_price_24k * (1.0 + fluctuation);
+
+    // Calculate other purities based on 24k
+    let price_22k = price_24k * 0.916; // 22k = 91.6% pure
+    let price_18k = price_24k * 0.75;  // 18k = 75% pure
+
+    GoldPrice {
+        price_per_gram: price_22k, // Default to 22k (most common for jewelry)
+        price_24k,
+        price_22k,
+        price_18k,
+        source: "simulated".to_string(),
+        updated_at: Utc::now(),
+    }
+}
+
+impl SimulatedGoldPriceService {
     /// Get cached price from ScyllaDB
     async fn get_cached_price(&self) -> Result<Option<GoldPrice>, PersistenceError> {
         let query = format!(
@@ -310,16 +317,9 @@ mod tests {
 
     #[test]
     fn test_price_generation_bounds() {
-        let service = SimulatedGoldPriceService {
-            client: unsafe { std::mem::zeroed() }, // Won't be used in this test
-            base_price_24k: 7500.0,
-            fluctuation_percent: 2.0,
-            cache_ttl_seconds: 300,
-        };
-
         // Generate 100 prices and check they're within bounds
         for _ in 0..100 {
-            let price = service.generate_price();
+            let price = generate_price_with_params(7500.0, 2.0);
             assert!(price.price_24k >= 7350.0 && price.price_24k <= 7650.0); // ±2%
             assert!(price.price_22k < price.price_24k);
             assert!(price.price_18k < price.price_22k);

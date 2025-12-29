@@ -42,7 +42,7 @@ fn default_agent_name() -> String {
     "Priya".to_string()
 }
 fn default_agent_language() -> String {
-    "hi".to_string()
+    "en".to_string()
 }
 fn default_max_duration() -> u32 {
     600 // 10 minutes
@@ -166,7 +166,7 @@ fn default_llm_provider() -> LlmProvider {
     LlmProvider::Ollama
 }
 fn default_llm_model() -> String {
-    "qwen2.5:7b-instruct-q4_K_M".to_string()
+    "qwen3:4b-instruct-2507-q4_K_M".to_string()
 }
 fn default_slm_model() -> String {
     "qwen2.5:1.5b-instruct-q4_K_M".to_string()

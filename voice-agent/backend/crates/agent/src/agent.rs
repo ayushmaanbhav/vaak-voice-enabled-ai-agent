@@ -79,7 +79,7 @@ impl Default for ToolDefaults {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            language: "hi".to_string(),
+            language: "en".to_string(),
             conversation: ConversationConfig::default(),
             persona: PersonaConfig::default(),
             rag_enabled: true,
@@ -172,7 +172,7 @@ impl GoldLoanAgent {
 
         let tools = Arc::new(voice_agent_tools::registry::create_default_registry());
 
-        // Try to create LLM backend (defaults to Ollama on localhost)
+        // Try to create LLM backend (Ollama on localhost)
         // P1 FIX: Use LanguageModelAdapter to wrap LlmBackend for proper abstraction
         // This allows the agent to use the core::LanguageModel trait which supports
         // tool calling and streaming in a provider-agnostic way.

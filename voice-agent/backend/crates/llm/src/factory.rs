@@ -503,11 +503,11 @@ mod tests {
 
     #[test]
     fn test_ollama_config() {
-        let config = LlmProviderConfig::ollama("qwen2.5:7b")
+        let config = LlmProviderConfig::ollama("qwen3:4b-instruct-2507-q4_K_M")
             .with_endpoint("http://custom:11434");
 
         assert_eq!(config.provider, LlmProvider::Ollama);
-        assert_eq!(config.model, "qwen2.5:7b");
+        assert_eq!(config.model, "qwen3:4b-instruct-2507-q4_K_M");
         assert_eq!(config.endpoint, Some("http://custom:11434".to_string()));
     }
 
