@@ -4,16 +4,52 @@
 //! - YAML/TOML files
 //! - Environment variables (VOICE_AGENT_ prefix)
 //! - Runtime overrides
+//!
+//! # Phase 6: Domain Configuration
+//!
+//! Comprehensive domain-specific configuration:
+//! - Branch/location information
+//! - Product features and eligibility
+//! - Competitor details and comparison
+//! - Prompt templates and scripts
+//! - Unified domain config loader
 
 pub mod settings;
 pub mod pipeline;
 pub mod agent;
 pub mod gold_loan;
+pub mod branch;
+pub mod product;
+pub mod competitor;
+pub mod prompts;
+pub mod domain;
 
 pub use settings::{Settings, ServerConfig, RateLimitConfig, AuthConfig, load_settings};
 pub use pipeline::PipelineConfig;
-pub use agent::{AgentConfig, PersonaConfig};  // P0 FIX: Export PersonaConfig for consolidation
-pub use gold_loan::{GoldLoanConfig, PurityFactors, CompetitorRates};
+pub use agent::{AgentConfig, PersonaConfig};
+pub use gold_loan::{GoldLoanConfig, PurityFactors, CompetitorRates, TieredRates};
+
+// Phase 6 exports
+pub use branch::{
+    BranchConfig, Branch, Coordinates, OperatingHours, BranchFeatures,
+    DoorstepServiceConfig,
+};
+pub use product::{
+    ProductConfig, ProductVariant, EligibilityConfig, DocumentationConfig,
+    ProductFeatures, TenureConfig, FeesConfig, FeeStructure, FeeType,
+    GoldPurityRequirements, ExistingCustomerBenefits, SellingPoint, DigitalFeatures,
+};
+pub use competitor::{
+    CompetitorConfig, Competitor, CompetitorType, ComparisonPoint,
+    SwitchingBenefits, BalanceTransferBenefits, ObjectionHandler, MonthlySavings,
+};
+pub use prompts::{
+    PromptTemplates, SystemPrompt, StagePrompt, ResponseTemplates,
+    GreetingTemplates, ClosingTemplates, FallbackTemplates,
+};
+pub use domain::{
+    DomainConfig, DomainConfigManager, domain_config, init_domain_config,
+};
 
 use thiserror::Error;
 

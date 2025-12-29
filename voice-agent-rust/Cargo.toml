@@ -9,6 +9,7 @@ members = [
     "crates/agent",
     "crates/server",
     "crates/transport",
+    "crates/text_processing",
 ]
 resolver = "2"
 
@@ -103,6 +104,7 @@ voice-agent-llm = { path = "crates/llm" }
 voice-agent-tools = { path = "crates/tools" }
 voice-agent-agent = { path = "crates/agent" }
 voice-agent-transport = { path = "crates/transport" }
+voice-agent-text-processing = { path = "crates/text_processing" }
 
 [profile.release]
 lto = "thin"

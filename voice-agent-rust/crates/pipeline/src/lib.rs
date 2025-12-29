@@ -6,12 +6,15 @@
 //! - Streaming Speech-to-Text
 //! - Streaming Text-to-Speech with word-level chunking
 //! - Barge-in handling
+//! - Frame processors (SentenceDetector, InterruptHandler)
+//! - Channel-based processor chains
 
 pub mod vad;
 pub mod turn_detection;
 pub mod stt;
 pub mod tts;
 pub mod orchestrator;
+pub mod processors;
 
 // VAD exports
 pub use vad::{VoiceActivityDetector, VadConfig, VadState, VadResult};
@@ -30,6 +33,13 @@ pub use tts::{StreamingTts, TtsConfig, TtsEngine, TtsEvent, WordChunker, ChunkSt
 
 // Orchestrator exports
 pub use orchestrator::{VoicePipeline, PipelineConfig, PipelineEvent, PipelineState, BargeInConfig, BargeInAction};
+
+// Processor exports
+pub use processors::{
+    SentenceDetector, SentenceDetectorConfig,
+    InterruptHandler, InterruptMode, InterruptHandlerConfig,
+    ProcessorChain, ProcessorChainBuilder,
+};
 
 use thiserror::Error;
 

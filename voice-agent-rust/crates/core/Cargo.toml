@@ -8,6 +8,7 @@ description = "Core traits and types for the voice agent"
 
 [dependencies]
 async-trait.workspace = true
+futures.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

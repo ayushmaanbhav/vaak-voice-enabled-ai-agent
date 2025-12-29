@@ -8,7 +8,11 @@
 //! - Candle BERT embeddings (native Rust inference)
 //! - FP16/BF16 quantization for reduced memory and faster inference
 //! - LRU embedding cache for repeated queries
-//! - P1 FIX: Agentic RAG multi-step retrieval flow
+//! - Agentic RAG multi-step retrieval flow
+//! - Query expansion with domain synonyms
+//! - Domain-specific term boosting
+//! - Cross-lingual query normalization (Hindi/Hinglish/English)
+//! - Core Retriever trait implementation
 
 pub mod embeddings;
 pub mod vector_store;
@@ -18,6 +22,10 @@ pub mod retriever;
 pub mod candle_embeddings;
 pub mod cache;
 pub mod agentic;
+pub mod query_expansion;
+pub mod domain_boost;
+pub mod cross_lingual;
+pub mod adapter;
 
 pub use embeddings::{Embedder, EmbeddingConfig, SimpleEmbedder};
 pub use candle_embeddings::{
@@ -33,6 +41,18 @@ pub use agentic::{
     AgenticRetriever, AgenticRagConfig, AgenticSearchResult,
     ConversationContext, SufficiencyChecker, QueryRewriter,
 };
+pub use query_expansion::{
+    QueryExpander, QueryExpansionConfig, ExpandedQuery,
+    WeightedTerm, TermSource, ExpansionStats,
+};
+pub use domain_boost::{
+    DomainBooster, DomainBoostConfig, DomainTerm, TermCategory,
+    BoostResult, MatchedTerm, QueryIntent,
+};
+pub use cross_lingual::{
+    CrossLingualNormalizer, DetectedScript, LanguageDetection, NormalizedQuery,
+};
+pub use adapter::{EnhancedRetriever, EnhancedRetrieverConfig};
 
 use thiserror::Error;
 
