@@ -14,3 +14,9 @@
 [submodule "voice-agent/backend/models/tts/IndicF5"]
 	path = voice-agent/backend/models/tts/IndicF5
 	url = git@hf.co:ai4bharat/IndicF5
+[submodule "voice-agent/backend/models/translation/indictrans2-en-indic"]
+	path = voice-agent/backend/models/translation/indictrans2-en-indic
+	url = git@hf.co:ai4bharat/indictrans2-en-indic-dist-200M
+[submodule "voice-agent/backend/models/translation/indictrans2-indic-en"]
+	path = voice-agent/backend/models/translation/indictrans2-indic-en
+	url = git@hf.co:ai4bharat/indictrans2-indic-en-dist-200M

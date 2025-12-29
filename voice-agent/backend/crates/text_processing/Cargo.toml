@@ -7,9 +7,11 @@ license.workspace = true
 description = "Text processing pipeline for voice agent (grammar, translation, PII, compliance)"
 
 [features]
-# P0 FIX: Enable ONNX by default for translation to work
-default = ["onnx"]
-# P3: ONNX-based IndicTrans2 translation
+# Enable Candle by default for translation to work
+default = ["candle"]
+# Candle-based IndicTrans2 translation (native Rust, recommended)
+candle = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:safetensors", "dep:sentencepiece"]
+# Legacy ONNX-based IndicTrans2 translation
 onnx = ["dep:ort", "dep:ndarray", "dep:tokenizers"]
 
 [dependencies]
@@ -25,7 +27,14 @@ futures.workspace = true
 regex.workspace = true
 unicode-segmentation.workspace = true
 
-# ML - ONNX Runtime (optional, for IndicTrans2)
+# ML - Candle (for native IndicTrans2)
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+safetensors = { workspace = true, optional = true }
+sentencepiece = { version = "0.12", optional = true }
+
+# ML - ONNX Runtime (legacy, for IndicTrans2)
 ort = { version = "2.0.0-rc.9", optional = true }
 ndarray = { workspace = true, optional = true }
 tokenizers = { workspace = true, optional = true }

@@ -2,17 +2,21 @@
 //!
 //! Supports the Translate-Think-Translate pattern for LLM reasoning.
 //!
-//! P3 FIX: Added IndicTrans2 ONNX-based translation for native Indic language support.
+//! Uses IndicTrans2 models for translation between English and 22 Indian languages:
+//! - indictrans2-en-indic-dist-200M: English → Indic languages
+//! - indictrans2-indic-en-dist-200M: Indic languages → English
 
 mod detect;
 mod noop;
 mod grpc;
 mod indictrans2;
+mod candle_indictrans2;
 
 pub use detect::ScriptDetector;
 pub use noop::NoopTranslator;
 pub use grpc::{GrpcTranslator, GrpcTranslatorConfig, FallbackTranslator};
 pub use indictrans2::{IndicTrans2Translator, IndicTrans2Config};
+pub use candle_indictrans2::{CandleIndicTrans2Translator, CandleIndicTrans2Config};
 
 use voice_agent_core::{Translator, Language};
 use std::sync::Arc;
@@ -27,12 +31,26 @@ pub struct TranslationConfig {
     /// gRPC endpoint for fallback
     #[serde(default = "default_grpc_endpoint")]
     pub grpc_endpoint: String,
-    /// Whether to fall back to gRPC if ONNX fails
+    /// Whether to fall back to gRPC if native model fails
     #[serde(default = "default_true")]
     pub fallback_to_grpc: bool,
-    /// P3 FIX: IndicTrans2 model path (for ONNX provider)
+    /// Path to English→Indic model (for Candle provider)
+    #[serde(default = "default_en_indic_path")]
+    pub en_indic_model_path: PathBuf,
+    /// Path to Indic→English model (for Candle provider)
+    #[serde(default = "default_indic_en_path")]
+    pub indic_en_model_path: PathBuf,
+    /// Legacy: IndicTrans2 model path (for ONNX provider)
     #[serde(default)]
     pub indictrans2_model_path: Option<PathBuf>,
+}
+
+fn default_en_indic_path() -> PathBuf {
+    PathBuf::from("models/translation/indictrans2-en-indic")
+}
+
+fn default_indic_en_path() -> PathBuf {
+    PathBuf::from("models/translation/indictrans2-indic-en")
 }
 
 fn default_grpc_endpoint() -> String {
@@ -47,22 +65,27 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TranslationProvider {
-    /// P3 FIX: ONNX-based IndicTrans2 translation (native, fastest)
+    /// Candle-based IndicTrans2 translation (native Rust, recommended)
+    #[default]
+    #[serde(alias = "native")]
+    Candle,
+    /// Legacy ONNX-based IndicTrans2 translation
     #[serde(alias = "onnx")]
     IndicTrans2,
     /// gRPC-based translation (Python sidecar)
     Grpc,
     /// Disabled (pass-through)
-    #[default]
     Disabled,
 }
 
 impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
-            provider: TranslationProvider::Disabled,
+            provider: TranslationProvider::Candle,
             grpc_endpoint: default_grpc_endpoint(),
             fallback_to_grpc: true,
+            en_indic_model_path: default_en_indic_path(),
+            indic_en_model_path: default_indic_en_path(),
             indictrans2_model_path: None,
         }
     }
@@ -71,8 +94,47 @@ impl Default for TranslationConfig {
 /// Create translator based on config
 pub fn create_translator(config: &TranslationConfig) -> Arc<dyn Translator> {
     match config.provider {
+        TranslationProvider::Candle => {
+            // Create Candle-based IndicTrans2 translator with both models
+            let candle_config = CandleIndicTrans2Config {
+                en_indic_path: config.en_indic_model_path.clone(),
+                indic_en_path: config.indic_en_model_path.clone(),
+                ..Default::default()
+            };
+
+            match CandleIndicTrans2Translator::new(candle_config) {
+                Ok(translator) => {
+                    let primary = Arc::new(translator);
+
+                    // Wrap with fallback if enabled
+                    if config.fallback_to_grpc {
+                        tracing::info!("Using Candle IndicTrans2 with gRPC fallback");
+                        let grpc_config = GrpcTranslatorConfig {
+                            endpoint: config.grpc_endpoint.clone(),
+                            ..Default::default()
+                        };
+                        let fallback = Arc::new(GrpcTranslator::new(grpc_config));
+                        Arc::new(FallbackTranslator::new(primary, fallback))
+                    } else {
+                        tracing::info!("Using Candle IndicTrans2 (no fallback)");
+                        primary
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to load Candle IndicTrans2, falling back to gRPC"
+                    );
+                    let grpc_config = GrpcTranslatorConfig {
+                        endpoint: config.grpc_endpoint.clone(),
+                        ..Default::default()
+                    };
+                    Arc::new(GrpcTranslator::new(grpc_config))
+                }
+            }
+        }
         TranslationProvider::IndicTrans2 => {
-            // P3 FIX: Create IndicTrans2 ONNX translator
+            // Legacy ONNX-based IndicTrans2 translator
             let indictrans2_config = if let Some(ref model_path) = config.indictrans2_model_path {
                 IndicTrans2Config {
                     encoder_path: model_path.join("encoder.onnx"),
@@ -88,9 +150,8 @@ pub fn create_translator(config: &TranslationConfig) -> Arc<dyn Translator> {
                 Ok(translator) => {
                     let primary = Arc::new(translator);
 
-                    // Wrap with fallback if enabled
                     if config.fallback_to_grpc {
-                        tracing::info!("Using IndicTrans2 with gRPC fallback");
+                        tracing::info!("Using ONNX IndicTrans2 with gRPC fallback");
                         let grpc_config = GrpcTranslatorConfig {
                             endpoint: config.grpc_endpoint.clone(),
                             ..Default::default()
@@ -98,16 +159,15 @@ pub fn create_translator(config: &TranslationConfig) -> Arc<dyn Translator> {
                         let fallback = Arc::new(GrpcTranslator::new(grpc_config));
                         Arc::new(FallbackTranslator::new(primary, fallback))
                     } else {
-                        tracing::info!("Using IndicTrans2 (no fallback)");
+                        tracing::info!("Using ONNX IndicTrans2 (no fallback)");
                         primary
                     }
                 }
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
-                        "Failed to load IndicTrans2, falling back to gRPC"
+                        "Failed to load ONNX IndicTrans2, falling back to gRPC"
                     );
-                    // Fall back to gRPC if ONNX fails to load
                     let grpc_config = GrpcTranslatorConfig {
                         endpoint: config.grpc_endpoint.clone(),
                         ..Default::default()
@@ -264,7 +324,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = TranslationConfig::default();
-        assert!(matches!(config.provider, TranslationProvider::Disabled));
+        assert!(matches!(config.provider, TranslationProvider::Candle));
     }
 
     #[test]
