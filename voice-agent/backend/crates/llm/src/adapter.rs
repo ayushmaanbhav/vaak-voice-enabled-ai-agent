@@ -138,11 +138,61 @@ impl LanguageModel for LanguageModelAdapter {
     async fn generate_with_tools(
         &self,
         request: GenerateRequest,
-        _tools: &[ToolDefinition],
+        tools: &[ToolDefinition],
     ) -> Result<GenerateResponse> {
-        // Current backends don't support tool calling, fall back to regular generate
-        // Tool calls would need to be parsed from the response
-        self.generate(request).await
+        // P0-3: Implement tool calling for Ollama via text injection
+        // For Ollama, we inject tool definitions into the prompt and parse [TOOL_CALL: ...]
+        // Claude backend has native tool support via ClaudeBackend::generate_with_tools
+
+        if tools.is_empty() {
+            return self.generate(request).await;
+        }
+
+        // Build prompt with tool definitions injected
+        let mut messages = Self::convert_messages(&request);
+
+        // Add tool definitions to system prompt
+        let tool_prompt = crate::prompt::PromptBuilder::new()
+            .with_tools(tools)
+            .build();
+
+        // Prepend tool definitions to messages
+        if let Some(tool_msg) = tool_prompt.first() {
+            messages.insert(0, crate::prompt::Message {
+                role: crate::prompt::Role::System,
+                content: tool_msg.content.clone(),
+            });
+        }
+
+        match self.backend.generate(&messages).await {
+            Ok(result) => {
+                // Parse tool calls from response text
+                let tool_calls: Vec<voice_agent_core::llm_types::ToolCall> = crate::prompt::parse_tool_call(&result.text)
+                    .map(|tc| voice_agent_core::llm_types::ToolCall {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        name: tc.name,
+                        arguments: tc.arguments.as_object()
+                            .map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                            .unwrap_or_default(),
+                    })
+                    .into_iter()
+                    .collect();
+
+                let finish_reason = if !tool_calls.is_empty() {
+                    CoreFinishReason::ToolCalls
+                } else {
+                    Self::convert_finish_reason(result.finish_reason)
+                };
+
+                Ok(GenerateResponse {
+                    text: result.text,
+                    finish_reason,
+                    usage: Some(TokenUsage::new(0, result.tokens as u32)),
+                    tool_calls,
+                })
+            }
+            Err(e) => Err(Error::Llm(format!("LLM generation failed: {}", e))),
+        }
     }
 
     async fn is_available(&self) -> bool {

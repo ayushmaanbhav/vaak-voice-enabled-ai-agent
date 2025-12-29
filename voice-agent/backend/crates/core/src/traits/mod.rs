@@ -24,6 +24,9 @@
 //!   - PIIRedactor: Detect and redact PII
 //!   - ComplianceChecker: Check for regulatory compliance
 //!
+//! Conversation:
+//!   - ConversationFSM: Finite state machine for conversation flow
+//!
 //! Pipeline:
 //!   - FrameProcessor: Process frames in the pipeline
 //! ```
@@ -33,6 +36,7 @@ mod llm;
 mod retriever;
 mod text_processing;
 mod pipeline;
+mod fsm;
 
 pub use speech::{SpeechToText, TextToSpeech};
 // P1 FIX: Export VoiceActivityDetector trait and types
@@ -44,3 +48,9 @@ pub use retriever::{
 };
 pub use text_processing::{GrammarCorrector, Translator, PIIRedactor, ComplianceChecker};
 pub use pipeline::{FrameProcessor, Frame, ProcessorContext, ControlFrame, MetricsEvent};
+// P0 FIX: Export ConversationFSM trait and types
+pub use fsm::{
+    ConversationFSM, ConversationEvent, FSMAction, FSMError,
+    FSMCheckpoint, FSMMetrics, ConversationOutcome, ObjectionType,
+    TransitionRecord,
+};

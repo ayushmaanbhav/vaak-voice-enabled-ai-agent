@@ -39,69 +39,147 @@ pub struct Message {
     pub content: String,
 }
 
-/// P4 FIX: Tool definition for LLM-based tool calling
+// P0-2 FIX: Use canonical ToolDefinition from core crate (JSON Schema format)
+// This ensures compatibility with Claude API native tool_use and other providers
+pub use voice_agent_core::llm_types::ToolDefinition;
+
+/// P0-2 FIX: Builder for creating ToolDefinition with JSON Schema parameters
 ///
-/// Describes a tool that the LLM can request to call.
-#[derive(Debug, Clone)]
-pub struct ToolDefinition {
-    /// Tool name (must match the tool registry name)
-    pub name: String,
-    /// Human-readable description of what the tool does
-    pub description: String,
-    /// Tool parameters
-    pub parameters: Vec<ToolParameter>,
+/// Makes it ergonomic to build tool definitions with proper JSON Schema format
+/// that is compatible with both Claude API (native tool_use) and Ollama (text injection).
+///
+/// # Example
+/// ```ignore
+/// let tool = ToolBuilder::new("check_eligibility", "Check loan eligibility")
+///     .param("gold_weight", "number", "Weight of gold in grams", true)
+///     .param("gold_purity", "string", "Purity (22K, 18K)", false)
+///     .string_enum("gold_purity", &["24K", "22K", "18K", "14K"])
+///     .build();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct ToolBuilder {
+    name: String,
+    description: String,
+    properties: serde_json::Map<String, serde_json::Value>,
+    required: Vec<String>,
 }
 
-/// P4 FIX: Tool parameter definition
-#[derive(Debug, Clone)]
-pub struct ToolParameter {
-    /// Parameter name
-    pub name: String,
-    /// Parameter description
-    pub description: String,
-    /// Whether this parameter is required
-    pub required: bool,
-}
-
-impl ToolDefinition {
-    /// Create a new tool definition
+impl ToolBuilder {
+    /// Create a new tool builder
     pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             description: description.into(),
-            parameters: Vec::new(),
+            properties: serde_json::Map::new(),
+            required: Vec::new(),
         }
     }
 
-    /// Add a parameter
-    pub fn param(mut self, name: impl Into<String>, description: impl Into<String>, required: bool) -> Self {
-        self.parameters.push(ToolParameter {
-            name: name.into(),
-            description: description.into(),
-            required,
-        });
+    /// Add a parameter with type and description
+    pub fn param(
+        mut self,
+        name: impl Into<String>,
+        param_type: &str,
+        description: impl Into<String>,
+        required: bool,
+    ) -> Self {
+        let name = name.into();
+        let mut prop = serde_json::Map::new();
+        prop.insert("type".to_string(), serde_json::Value::String(param_type.to_string()));
+        prop.insert("description".to_string(), serde_json::Value::String(description.into()));
+
+        self.properties.insert(name.clone(), serde_json::Value::Object(prop));
+
+        if required {
+            self.required.push(name);
+        }
         self
     }
 
-    /// Create definitions for gold loan tools
-    pub fn gold_loan_tools() -> Vec<ToolDefinition> {
-        vec![
-            ToolDefinition::new("check_eligibility", "Check if customer is eligible for a gold loan based on their gold weight and purity")
-                .param("gold_weight", "Weight of gold in grams", true)
-                .param("gold_purity", "Purity of gold (e.g., '22K', '18K')", false),
-            ToolDefinition::new("calculate_savings", "Calculate monthly savings when switching from competitor")
-                .param("current_lender", "Name of current lender (e.g., 'Muthoot', 'Manappuram')", true)
-                .param("current_interest_rate", "Current interest rate in percentage", false)
-                .param("current_loan_amount", "Current loan amount in INR", false)
-                .param("remaining_tenure_months", "Remaining tenure in months", false),
-            ToolDefinition::new("find_branches", "Find nearby Kotak branches")
-                .param("city", "City name to search branches in", true)
-                .param("area", "Specific area or locality (optional)", false),
-            ToolDefinition::new("schedule_callback", "Schedule a callback from branch team")
-                .param("phone", "Customer phone number", true)
-                .param("preferred_time", "Preferred callback time (e.g., 'morning', 'afternoon')", false),
-        ]
+    /// Add enum constraint to an existing string parameter
+    pub fn string_enum(mut self, name: &str, values: &[&str]) -> Self {
+        if let Some(prop) = self.properties.get_mut(name) {
+            if let Some(obj) = prop.as_object_mut() {
+                let enum_values: Vec<serde_json::Value> = values
+                    .iter()
+                    .map(|v| serde_json::Value::String(v.to_string()))
+                    .collect();
+                obj.insert("enum".to_string(), serde_json::Value::Array(enum_values));
+            }
+        }
+        self
     }
+
+    /// Add number range constraint
+    pub fn number_range(mut self, name: &str, min: Option<f64>, max: Option<f64>) -> Self {
+        if let Some(prop) = self.properties.get_mut(name) {
+            if let Some(obj) = prop.as_object_mut() {
+                if let Some(min_val) = min {
+                    obj.insert("minimum".to_string(), serde_json::json!(min_val));
+                }
+                if let Some(max_val) = max {
+                    obj.insert("maximum".to_string(), serde_json::json!(max_val));
+                }
+            }
+        }
+        self
+    }
+
+    /// Build the ToolDefinition
+    pub fn build(self) -> ToolDefinition {
+        let parameters = serde_json::json!({
+            "type": "object",
+            "properties": self.properties,
+            "required": self.required,
+        });
+
+        ToolDefinition::new(self.name, self.description, parameters)
+    }
+}
+
+/// Create standard gold loan tool definitions using JSON Schema format
+pub fn gold_loan_tools() -> Vec<ToolDefinition> {
+    vec![
+        ToolBuilder::new(
+            "check_eligibility",
+            "Check if customer is eligible for a gold loan based on their gold weight and purity"
+        )
+            .param("gold_weight", "number", "Weight of gold in grams", true)
+            .param("gold_purity", "string", "Purity of gold (e.g., '22K', '18K')", false)
+            .string_enum("gold_purity", &["24K", "22K", "18K", "14K"])
+            .number_range("gold_weight", Some(1.0), Some(10000.0))
+            .build(),
+
+        ToolBuilder::new(
+            "calculate_savings",
+            "Calculate monthly savings when switching from competitor to Kotak"
+        )
+            .param("current_lender", "string", "Name of current lender (e.g., 'Muthoot', 'Manappuram')", true)
+            .param("current_interest_rate", "number", "Current interest rate in percentage", false)
+            .param("current_loan_amount", "number", "Current loan amount in INR", false)
+            .param("remaining_tenure_months", "integer", "Remaining tenure in months", false)
+            .number_range("current_interest_rate", Some(0.0), Some(50.0))
+            .number_range("current_loan_amount", Some(1000.0), Some(100000000.0))
+            .number_range("remaining_tenure_months", Some(1.0), Some(360.0))
+            .build(),
+
+        ToolBuilder::new(
+            "find_branches",
+            "Find nearby Kotak Mahindra Bank branches that offer gold loans"
+        )
+            .param("city", "string", "City name to search branches in", true)
+            .param("area", "string", "Specific area or locality (optional)", false)
+            .build(),
+
+        ToolBuilder::new(
+            "schedule_callback",
+            "Schedule a callback from Kotak branch team"
+        )
+            .param("phone", "string", "Customer phone number (10 digits)", true)
+            .param("preferred_time", "string", "Preferred callback time", false)
+            .string_enum("preferred_time", &["morning", "afternoon", "evening"])
+            .build(),
+    ]
 }
 
 /// P4 FIX: Parse tool call from LLM response
@@ -335,13 +413,15 @@ Respond naturally as if speaking on a phone call. Do not use bullet points, head
         self
     }
 
-    /// P4 FIX: Add available tools for LLM-based tool calling
+    /// P0-2 FIX: Add available tools for LLM-based tool calling
     ///
-    /// For Ollama (non-OpenAI models), we inject tool definitions into the system prompt
+    /// For Ollama (non-native tool support), we inject tool definitions into the system prompt
     /// and instruct the LLM to output tool calls in a specific JSON format.
     ///
+    /// For Claude API, tools are passed natively via the API (handled by Claude backend).
+    /// This method is primarily used for Ollama text-based tool injection.
+    ///
     /// The LLM should output: `[TOOL_CALL: {"name": "tool_name", "arguments": {...}}]`
-    /// when it determines a tool should be called.
     pub fn with_tools(mut self, tools: &[ToolDefinition]) -> Self {
         if tools.is_empty() {
             return self;
@@ -362,15 +442,49 @@ Available tools:
 
         for tool in tools {
             tool_prompt.push_str(&format!(
-                "\n### {}\n{}\nParameters:\n",
+                "\n### {}\n{}\n",
                 tool.name, tool.description
             ));
-            for param in &tool.parameters {
-                let required = if param.required { " (required)" } else { "" };
-                tool_prompt.push_str(&format!(
-                    "- {}: {}{}\n",
-                    param.name, param.description, required
-                ));
+
+            // Extract parameters from JSON schema
+            if let Some(props) = tool.parameters.get("properties").and_then(|p| p.as_object()) {
+                let required_params: Vec<&str> = tool.parameters
+                    .get("required")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                    .unwrap_or_default();
+
+                tool_prompt.push_str("Parameters:\n");
+                for (param_name, param_schema) in props {
+                    let description = param_schema
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let param_type = param_schema
+                        .get("type")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("any");
+                    let required = if required_params.contains(&param_name.as_str()) {
+                        " (required)"
+                    } else {
+                        ""
+                    };
+
+                    // Include enum values if present
+                    let enum_hint = param_schema
+                        .get("enum")
+                        .and_then(|e| e.as_array())
+                        .map(|arr| {
+                            let values: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                            format!(" [{}]", values.join(", "))
+                        })
+                        .unwrap_or_default();
+
+                    tool_prompt.push_str(&format!(
+                        "- {} ({}): {}{}{}\n",
+                        param_name, param_type, description, required, enum_hint
+                    ));
+                }
             }
         }
 
@@ -584,28 +698,72 @@ mod tests {
         assert!(greeting_en.contains("Hello"));
     }
 
-    // P4 FIX: Tool calling tests
+    // P0-2 FIX: Tool calling tests updated for JSON Schema format
 
     #[test]
-    fn test_tool_definition_builder() {
-        let tool = ToolDefinition::new("test_tool", "A test tool")
-            .param("param1", "First parameter", true)
-            .param("param2", "Second parameter", false);
+    fn test_tool_builder() {
+        let tool = ToolBuilder::new("test_tool", "A test tool")
+            .param("param1", "string", "First parameter", true)
+            .param("param2", "number", "Second parameter", false)
+            .build();
 
         assert_eq!(tool.name, "test_tool");
-        assert_eq!(tool.parameters.len(), 2);
-        assert!(tool.parameters[0].required);
-        assert!(!tool.parameters[1].required);
+        assert_eq!(tool.description, "A test tool");
+
+        // Verify JSON schema structure
+        let props = tool.parameters.get("properties").unwrap().as_object().unwrap();
+        assert!(props.contains_key("param1"));
+        assert!(props.contains_key("param2"));
+
+        let required = tool.parameters.get("required").unwrap().as_array().unwrap();
+        assert_eq!(required.len(), 1);
+        assert_eq!(required[0].as_str().unwrap(), "param1");
+    }
+
+    #[test]
+    fn test_tool_builder_with_enum() {
+        let tool = ToolBuilder::new("test_tool", "A test tool")
+            .param("status", "string", "Status field", true)
+            .string_enum("status", &["active", "inactive", "pending"])
+            .build();
+
+        let props = tool.parameters.get("properties").unwrap().as_object().unwrap();
+        let status_schema = props.get("status").unwrap();
+        let enum_values = status_schema.get("enum").unwrap().as_array().unwrap();
+
+        assert_eq!(enum_values.len(), 3);
+        assert!(enum_values.contains(&serde_json::json!("active")));
+    }
+
+    #[test]
+    fn test_tool_builder_with_number_range() {
+        let tool = ToolBuilder::new("test_tool", "A test tool")
+            .param("amount", "number", "Amount field", true)
+            .number_range("amount", Some(0.0), Some(1000000.0))
+            .build();
+
+        let props = tool.parameters.get("properties").unwrap().as_object().unwrap();
+        let amount_schema = props.get("amount").unwrap();
+
+        assert_eq!(amount_schema.get("minimum").unwrap().as_f64().unwrap(), 0.0);
+        assert_eq!(amount_schema.get("maximum").unwrap().as_f64().unwrap(), 1000000.0);
     }
 
     #[test]
     fn test_gold_loan_tools() {
-        let tools = ToolDefinition::gold_loan_tools();
+        let tools = gold_loan_tools();
 
-        assert!(tools.len() >= 3);
+        assert_eq!(tools.len(), 4);
         assert!(tools.iter().any(|t| t.name == "check_eligibility"));
         assert!(tools.iter().any(|t| t.name == "calculate_savings"));
         assert!(tools.iter().any(|t| t.name == "find_branches"));
+        assert!(tools.iter().any(|t| t.name == "schedule_callback"));
+
+        // Verify check_eligibility has proper schema
+        let eligibility_tool = tools.iter().find(|t| t.name == "check_eligibility").unwrap();
+        let props = eligibility_tool.parameters.get("properties").unwrap().as_object().unwrap();
+        assert!(props.contains_key("gold_weight"));
+        assert!(props.contains_key("gold_purity"));
     }
 
     #[test]
@@ -637,7 +795,7 @@ mod tests {
 
     #[test]
     fn test_with_tools() {
-        let tools = ToolDefinition::gold_loan_tools();
+        let tools = gold_loan_tools();
         let messages = PromptBuilder::new()
             .system_prompt("en")
             .with_tools(&tools)
@@ -653,5 +811,7 @@ mod tests {
             .expect("Should have tool definitions");
         assert!(tool_msg.content.contains("check_eligibility"));
         assert!(tool_msg.content.contains("calculate_savings"));
+        // Should include type info from JSON schema
+        assert!(tool_msg.content.contains("(number)") || tool_msg.content.contains("(string)"));
     }
 }

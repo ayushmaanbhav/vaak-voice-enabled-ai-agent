@@ -11,7 +11,10 @@ pub mod integrations;
 pub use mcp::{Tool, ToolInput, ToolOutput, ToolSchema, ToolError};
 pub use registry::{
     ToolRegistry, ToolExecutor, IntegrationConfig, FullIntegrationConfig,
-    create_registry_with_integrations, create_registry_with_persistence
+    create_registry_with_integrations, create_registry_with_persistence,
+    // P0-4 FIX: Domain config wiring with hot-reload
+    create_registry_with_config, create_registry_with_domain_config,
+    ConfigurableToolRegistry,
 };
 pub use gold_loan::{
     EligibilityCheckTool,

@@ -29,6 +29,7 @@ thiserror.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 unicode-segmentation.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

@@ -214,6 +214,158 @@ pub fn create_default_registry() -> ToolRegistry {
     registry
 }
 
+// =============================================================================
+// P0-4 FIX: Domain Config Wiring with Hot-Reload Support
+// =============================================================================
+
+/// P0-4 FIX: Create registry with domain configuration injected
+///
+/// Uses the provided GoldLoanConfig instead of defaults, allowing
+/// for configurable interest rates, LTV, competitor rates, etc.
+pub fn create_registry_with_config(gold_loan_config: &voice_agent_config::GoldLoanConfig) -> ToolRegistry {
+    let mut registry = ToolRegistry::new();
+
+    // P0-4: Register gold loan tools with injected config
+    registry.register(crate::gold_loan::EligibilityCheckTool::with_config(gold_loan_config.clone()));
+    registry.register(crate::gold_loan::SavingsCalculatorTool::with_config(gold_loan_config.clone()));
+    registry.register(crate::gold_loan::LeadCaptureTool::new());
+    registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
+    registry.register(crate::gold_loan::BranchLocatorTool::new());
+
+    // Tools that don't need config
+    registry.register(crate::gold_loan::GetGoldPriceTool::new());
+    registry.register(crate::gold_loan::EscalateToHumanTool::new());
+    registry.register(crate::gold_loan::SendSmsTool::new());
+
+    tracing::info!(
+        kotak_rate = gold_loan_config.kotak_interest_rate,
+        ltv = gold_loan_config.ltv_percent,
+        "Created tool registry with domain config"
+    );
+
+    registry
+}
+
+/// P0-4 FIX: Create registry with full domain configuration
+///
+/// Takes the complete DomainConfig and extracts relevant parts for each tool.
+pub fn create_registry_with_domain_config(domain_config: &voice_agent_config::DomainConfig) -> ToolRegistry {
+    create_registry_with_config(&domain_config.gold_loan)
+}
+
+/// P0-4 FIX: Configurable tool registry with hot-reload support
+///
+/// Wraps a ToolRegistry with config management, allowing tools to be
+/// recreated when configuration changes.
+pub struct ConfigurableToolRegistry {
+    inner: parking_lot::RwLock<ToolRegistry>,
+    config: parking_lot::RwLock<voice_agent_config::GoldLoanConfig>,
+}
+
+impl ConfigurableToolRegistry {
+    /// Create with initial config
+    pub fn new(config: voice_agent_config::GoldLoanConfig) -> Self {
+        let registry = create_registry_with_config(&config);
+        Self {
+            inner: parking_lot::RwLock::new(registry),
+            config: parking_lot::RwLock::new(config),
+        }
+    }
+
+    /// Create with default config
+    pub fn with_defaults() -> Self {
+        Self::new(voice_agent_config::GoldLoanConfig::default())
+    }
+
+    /// Reload configuration and recreate tools
+    ///
+    /// This is the hot-reload entry point. Call this when config file changes.
+    pub fn reload(&self, new_config: voice_agent_config::GoldLoanConfig) {
+        tracing::info!(
+            old_rate = %self.config.read().kotak_interest_rate,
+            new_rate = %new_config.kotak_interest_rate,
+            "Hot-reloading tool configuration"
+        );
+
+        // Update config
+        *self.config.write() = new_config.clone();
+
+        // Recreate registry with new config
+        let new_registry = create_registry_with_config(&new_config);
+        *self.inner.write() = new_registry;
+
+        tracing::info!("Tool registry reloaded with new configuration");
+    }
+
+    /// Get current config
+    pub fn config(&self) -> voice_agent_config::GoldLoanConfig {
+        self.config.read().clone()
+    }
+
+    /// Execute a tool
+    pub async fn execute(&self, name: &str, arguments: Value) -> Result<ToolOutput, ToolError> {
+        // Get the tool without holding the lock across await
+        let tool = {
+            let registry = self.inner.read();
+            registry.get(name).cloned()
+        };
+
+        let tool = tool.ok_or_else(|| ToolError::not_found(format!("Tool not found: {}", name)))?;
+
+        // Validate input
+        tool.validate(&arguments)?;
+
+        // Execute with timeout (from the Tool trait default)
+        let timeout_secs = tool.timeout_secs();
+        let timeout_duration = Duration::from_secs(timeout_secs);
+
+        match tokio::time::timeout(timeout_duration, tool.execute(arguments)).await {
+            Ok(result) => result,
+            Err(_elapsed) => Err(ToolError::timeout(name, timeout_secs)),
+        }
+    }
+
+    /// List available tools
+    pub fn list_tools(&self) -> Vec<ToolSchema> {
+        self.inner.read().list_tools()
+    }
+
+    /// Get tool schema
+    pub fn get_tool(&self, name: &str) -> Option<ToolSchema> {
+        self.inner.read().get_tool(name)
+    }
+
+    /// Check if tool exists
+    pub fn has(&self, name: &str) -> bool {
+        self.inner.read().has(name)
+    }
+
+    /// Get tool count
+    pub fn len(&self) -> usize {
+        self.inner.read().len()
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().is_empty()
+    }
+}
+
+#[async_trait]
+impl ToolExecutor for ConfigurableToolRegistry {
+    async fn execute(&self, name: &str, arguments: Value) -> Result<ToolOutput, ToolError> {
+        self.execute(name, arguments).await
+    }
+
+    fn list_tools(&self) -> Vec<ToolSchema> {
+        self.list_tools()
+    }
+
+    fn get_tool(&self, name: &str) -> Option<ToolSchema> {
+        self.get_tool(name)
+    }
+}
+
 /// P4 FIX: Integration configuration for tool registry
 pub struct IntegrationConfig {
     /// CRM integration for lead management

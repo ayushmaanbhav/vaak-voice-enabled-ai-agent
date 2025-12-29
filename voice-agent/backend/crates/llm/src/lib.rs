@@ -2,6 +2,7 @@
 //!
 //! Features:
 //! - Multiple backend support (Ollama, Claude, OpenAI)
+//! - Native tool calling (Claude tool_use, text-based for Ollama)
 //! - Speculative execution (SLM-first, race parallel, hybrid streaming)
 //! - Streaming token generation
 //! - Context management
@@ -12,13 +13,21 @@ pub mod streaming;
 pub mod prompt;
 // P0 FIX: Adapter bridging LlmBackend to core::LanguageModel
 pub mod adapter;
+// P0-3a: Claude backend with native tool_use support
+pub mod claude;
+// P0-3c: LLM factory with provider abstraction
+pub mod factory;
 
-pub use backend::{LlmBackend, OllamaBackend, LlmConfig, OpenAIBackend, OpenAIConfig};
+pub use backend::{LlmBackend, OllamaBackend, LlmConfig, OpenAIBackend, OpenAIConfig, GenerationResult, FinishReason};
 // P0 FIX: Export adapter for clean dependency injection
 pub use adapter::LanguageModelAdapter;
+// P0-3a: Export Claude backend
+pub use claude::{ClaudeBackend, ClaudeConfig, ClaudeModel, ClaudeResponse, ClaudeStopReason};
+// P0-3c: Export factory
+pub use factory::{LlmFactory, LlmProviderConfig, LlmProvider, ClaudeLanguageModel};
 pub use speculative::{SpeculativeExecutor, SpeculativeMode, SpeculativeResult};
 pub use streaming::{StreamingGenerator, TokenStream, GenerationEvent};
-pub use prompt::{PromptBuilder, Message, Role, PersonaConfig, ToolDefinition, ToolParameter, ParsedToolCall, parse_tool_call};
+pub use prompt::{PromptBuilder, Message, Role, PersonaConfig, ToolDefinition, ToolBuilder, gold_loan_tools, ParsedToolCall, parse_tool_call};
 
 use thiserror::Error;
 

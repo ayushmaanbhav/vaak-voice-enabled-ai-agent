@@ -1,225 +1,186 @@
-# Voice Agent Rust - Comprehensive Code Analysis Report
+# Voice Agent Code Review - Executive Summary
 
-**Date:** December 29, 2025
-**Analysis Scope:** 11 crates, ~25,000+ lines of Rust code
-**Status:** Deep implementation review with 8 parallel analysis agents
-
----
-
-## Executive Summary
-
-The voice-agent-rust project is a sophisticated voice AI system for Kotak Mahindra Bank's gold loan sales. The codebase demonstrates **strong architectural foundations** but has **critical integration gaps** that prevent end-to-end functionality.
-
-### Overall Assessment
-
-| Aspect | Score | Status |
-|--------|-------|--------|
-| Architecture Alignment | 75% | Good design, incomplete integration |
-| Code Quality | 85% | Clean, well-documented, comprehensive tests |
-| Implementation Completeness | 70% | Core components done, integration missing |
-| Production Readiness | 55% | **Blockers must be resolved** |
-
-### Key Statistics
-- **Total Crates:** 11 (core, config, pipeline, rag, llm, tools, agent, server, transport, text_processing, persistence)
-- **Total Lines of Code:** ~25,000+ (Rust only)
-- **Test Coverage:** ~60% functional coverage
-- **Critical Issues:** 8 P0 blockers identified
-- **Dead/Unused Code:** ~1,800 lines (primarily WebRTC transport)
+> **Review Date:** December 29, 2025
+> **Codebase:** `/home/vscode/goldloan-study/voice-agent/backend`
+> **Architecture Version:** 2.0
+> **Documented Production Readiness:** 52%
+> **Actual Production Readiness:** ~65% (Pipeline improved significantly)
 
 ---
 
-## Critical Issues Summary (P0 - Must Fix Before Production)
+## Overall Assessment
 
-| # | Issue | Location | Impact | Effort |
-|---|-------|----------|--------|--------|
-| 1 | **Transport crate NOT integrated with Server** | server/, transport/ | WebRTC unusable, 1500 LOC dead | High |
-| 2 | **3 P0 Tools NOT registered** | tools/registry.rs | GetGoldPrice, EscalateToHuman, SendSms unavailable | Low |
-| 3 | **Audit log table NOT created** | persistence/schema.rs | RBI compliance broken | Low |
-| 4 | **PersuasionEngine NOT actively used** | agent/agent.rs | Objection handling ineffective | Medium |
+The voice agent codebase demonstrates **solid architecture** with proper separation of concerns across 12 Rust crates. The implementation is **more complete than documented** in some areas (pipeline is frame-based, not monolithic), but has **critical integration gaps** that prevent end-to-end functionality.
+
+### Verdict: **GOOD FOUNDATION, CRITICAL WIRING ISSUES**
+
+---
+
+## Component Status Matrix
+
+| # | Component | Documented Status | Actual Status | Gap Assessment |
+|---|-----------|-------------------|---------------|----------------|
+| 1 | **Core Traits (9)** | 9 traits | 8 traits + 1 misplaced | ConversationFSM MISSING |
+| 2 | **22 Languages** | Full | Full | None |
+| 3 | **Frame Pipeline** | Monolithic | Frame-based | BETTER than spec |
+| 4 | **Sentence Streaming** | Detector only | Full streaming | BETTER than spec |
+| 5 | **Text Processing** | 72% | 90%+ | Translation IMPLEMENTED |
+| 6 | **RAG Hybrid** | 85% | 90% | Query expansion NOT wired |
+| 7 | **Personalization** | Complete | Scaffold only | NOT auto-detected |
+| 8 | **Session Persistence** | Stubbed | Partially stubbed | Redis stub, ScyllaDB impl |
+
+---
+
+## Critical Findings (P0)
+
+| # | Issue | Location | Impact | Severity |
+|---|-------|----------|--------|----------|
+| 1 | **ConversationFSM trait NOT DEFINED** | core/src/traits/ | Cannot implement proper state machine | CRITICAL |
+| 2 | **Tool trait in wrong crate** | tools/src/mcp.rs | Architecture inconsistency | HIGH |
+| 3 | **LLM ToolDefinition type mismatch** | llm/prompt.rs vs core/llm_types.rs | Tool calling broken | CRITICAL |
+| 4 | **Tools use hardcoded config** | tools/gold_loan.rs | Config changes ignored | HIGH |
 | 5 | **LLM crate doesn't implement core::LanguageModel trait** | llm/backend.rs | Type mismatch, needs adapter | Medium |
-| 6 | **Pipeline Orchestrator NOT frame-based** | pipeline/orchestrator.rs | Processors disconnected | High |
-| 7 | **Early-exit reranker is cascaded only** | rag/reranker.rs | Latency target missed | Documented limitation |
-| 8 | **EMI calculation uses simple interest** | tools/gold_loan.rs | Financial calculations incorrect | Low |
+| 6 | **WebRTC audio NOT connected** | server/webrtc.rs | Signaling only, no audio flow | HIGH |
+| 7 | **Query expansion NOT wired** | rag/retriever.rs | Lower recall for Hindi queries | Medium |
+| 8 | **Personalization signals detected but NOT used** | agent/agent.rs | No behavioral adaptation | Medium |
+
+---
+
+## Dead Code Inventory
+
+| Component | Dead Code | Reason |
+|-----------|-----------|--------|
+| **Reranker** | `should_exit()`, `LayerOutput` | ONNX can't do layer-by-layer exit |
+| **RAG** | Query expansion in HybridRetriever | Only in EnhancedRetriever adapter |
+| **LLM** | `generate_with_tools()` | Accepts tools but ignores them |
+| **Personalization** | Signal detection flow | Signals logged but not applied |
+| **Transport** | Full WebRTC implementation | Server uses WebSocket only |
+| **Tools** | CRM/Calendar integrations | Default registry uses stubs |
+
+---
+
+## Integration Gaps (Missing Connections)
+
+### What's Connected (Working)
+- Server HTTP API + Authentication + Metrics
+- WebSocket audio stream pipeline
+- Session management with GoldLoanAgent
+- Agent tool execution (intent-based)
+- LLM generation (Ollama/OpenAI)
+- RAG retrieval with reranking
+- TTS sentence streaming
+- Hindi/Indic sentence terminators
+
+### What's Disconnected (Not Wired)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      DISCONNECTED COMPONENTS                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. ConversationFSM Trait ──────────────────── NOT DEFINED          │
+│     └── Only ConversationStage enum exists                          │
+│                                                                     │
+│  2. LLM Tool Calling ───────────────────────── STUBBED              │
+│     └── generate_with_tools() ignores tools parameter               │
+│                                                                     │
+│  3. Domain Config → Tools ──────────────────── NOT WIRED            │
+│     └── Tools use hardcoded GoldLoanConfig::default()               │
+│                                                                     │
+│  4. Query Expansion → Retriever ────────────── NOT WIRED            │
+│     └── Only in EnhancedRetriever adapter (not used)                │
+│                                                                     │
+│  5. Personalization Signals → Behavior ─────── NOT WIRED            │
+│     └── Signals detected but not used in responses                  │
+│                                                                     │
+│  6. WebRTC Transport → Audio Pipeline ──────── NOT WIRED            │
+│     └── Signaling works, audio stays in transport crate             │
+│                                                                     │
+│  7. LanguageModelAdapter → Agent ───────────── NOT USED             │
+│     └── Agent uses LlmBackend directly, bypassing adapter           │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Crate-by-Crate Summary
 
-### 1. Pipeline Crate (70/100)
-**Status:** Audio components excellent, orchestrator simplified
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| VAD (Silero/MagicNet) | ✅ Working | P0 fix applied (4→1 mutex) |
-| STT (IndicConformer) | ✅ Working | Streaming, 12+ languages |
-| TTS (Piper/IndicF5) | ✅ Working | Word-level chunking |
-| Turn Detection | ⚠️ Partial | Heuristics only (ONNX model optional) |
-| Orchestrator | ❌ Simplified | Not frame-based per spec |
-| Sentence Detector | ⚠️ Disconnected | Exists but not wired |
-
-### 2. Agent Crate (93/100)
-**Status:** Most mature crate, minor gap in persuasion
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| VoiceSession | ✅ Excellent | Full STT→Agent→TTS pipeline |
-| Intent Detection | ✅ Exceptional | 11 Indic scripts, 40+ patterns |
-| Memory (Hierarchical) | ✅ Complete | Working/Episodic/Semantic |
-| Stage FSM | ✅ Working | 7 stages, correct transitions |
-| PersuasionEngine | ⚠️ Exists but unused | Not invoked in process() |
-
-### 3. RAG Crate (75/100)
-**Status:** Hybrid retrieval working, early-exit limitation
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Hybrid Retrieval | ✅ Working | Dense (Qdrant) + Sparse (Tantivy) |
-| RRF Fusion | ✅ Working | Parallel execution |
-| Query Expansion | ✅ Integrated | Synonyms + transliteration |
-| Reranker | ⚠️ Cascaded only | Layer-wise early-exit NOT functional |
-| Embeddings | ✅ Dual backend | ONNX + Candle |
-
-### 4. Text Processing (95/100)
-**Status:** Near-complete, minor gaps
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Translation | ✅ Excellent | Candle IndicTrans2, 22 languages |
-| Grammar Correction | ✅ Working | LLM-based with domain context |
-| PII Detection | ✅ Excellent | Aadhaar Verhoeff, 12 patterns |
-| Compliance | ✅ Complete | Forbidden phrases + disclaimers |
-| TextSimplifier | ❌ Missing | No number-to-word for TTS |
-
-### 5. LLM Crate (A-)
-**Status:** Production-ready, trait mismatch
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Ollama Backend | ✅ Complete | KV cache, retry logic |
-| OpenAI Backend | ✅ Complete | Azure + vLLM support |
-| Speculative Execution | ✅ 4 modes | SlmFirst, RaceParallel, Hybrid, DraftVerify |
-| Tool Calling | ⚠️ String-based | Not native function calling |
-| LanguageModel Trait | ❌ Not implemented | Uses LlmBackend instead |
-
-### 6. Core/Config (80/100)
-**Status:** Well-designed traits, some missing implementations
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Language Enum | ✅ Complete | 22+1 languages, 13 scripts |
-| Speech Traits | ✅ Defined | Implementations exist |
-| Retriever Trait | ✅ Defined | HybridRetriever implements |
-| Personalization | ✅ Complete | Engine + Personas + Signals |
-| Config Loading | ⚠️ Missing YAMLs | Settings defined but no files |
-| A/B Testing | ❌ Not found | No experiments.rs |
-
-### 7. Server/Transport (40/100)
-**Status:** CRITICAL - Transport not integrated
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| HTTP Endpoints | ✅ Complete | Sessions, chat, tools, admin |
-| WebSocket | ✅ Working | Real-time audio streaming |
-| Metrics | ✅ Complete | Prometheus + OpenTelemetry |
-| Rate Limiting | ⚠️ WebSocket only | HTTP not rate-limited |
-| WebRTC | ❌ UNUSED | Full implementation, no endpoints |
-| Transport Integration | ❌ CRITICAL | Not in server's Cargo.toml |
-
-### 8. Tools/Persistence (75/100)
-**Status:** Good foundation, registry gaps
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| MCP Tools | ⚠️ 5/8 registered | 3 P0 tools missing from registry |
-| Tool Schemas | ✅ All 8 complete | MCP-compatible |
-| Session Persistence | ✅ ScyllaDB | Working with TTL |
-| Audit Logging | ❌ Table missing | Code exists, schema doesn't |
-| SMS Service | ⚠️ Simulated | Not actually sent |
+| Crate | LOC | Status | Key Issues |
+|-------|-----|--------|------------|
+| **core** | ~3,000 | 90% | Missing ConversationFSM trait |
+| **config** | ~1,200 | 95% | Working, hot-reload enabled |
+| **pipeline** | ~2,500 | 90% | Frame-based, streaming works |
+| **llm** | ~3,400 | 75% | Type mismatches, tools stubbed |
+| **rag** | ~2,800 | 85% | Early-exit dead, query expansion not wired |
+| **text_processing** | ~2,200 | 90% | Translation works (Candle IndicTrans2) |
+| **tools** | ~2,500 | 70% | Uses hardcoded config, stubs default |
+| **agent** | ~4,000 | 80% | FSM works, personalization scaffold |
+| **server** | ~2,000 | 85% | WebSocket works, WebRTC partial |
+| **transport** | ~1,500 | 40% | Implemented but not integrated |
+| **persistence** | ~800 | 60% | ScyllaDB impl, Redis stub |
 
 ---
 
-## Dead Code Analysis
+## Recommendations Priority
 
-| Location | Type | Lines | Reason | Action |
-|----------|------|-------|--------|--------|
-| transport/ crate | Unused module | ~1,500 | Not integrated with server | Integrate or remove |
-| rag/reranker.rs | Dead functions | ~55 | should_exit() for layer exit | Document limitation |
-| intent.rs | Deprecated | ~30 | Old extract methods | Remove |
-| pipeline/processors | Disconnected | ~500 | Not wired to orchestrator | Wire or document |
+### Immediate (P0) - Blocks Production
+1. Define `ConversationFSM` trait in core crate
+2. Fix `ToolDefinition` type mismatch between core and llm crates
+3. Wire domain config to tools (inject `DomainConfigManager`)
+4. Implement LLM tool calling (parse tool responses)
 
----
+### Short Term (P1) - Required for Full Feature
+1. Wire query expansion in HybridRetriever
+2. Use LanguageModelAdapter in Agent (not raw LlmBackend)
+3. Connect WebRTC audio to pipeline
+4. Wire personalization signals to prompt generation
 
-## Architectural Concerns
-
-### 1. Pipeline Integration Gap
-The documented architecture specifies a frame-based pipeline:
-```
-AudioInput → VAD → STT → TurnDetector → LLM → Sentence → TTS → AudioOutput
-```
-
-**Reality:** The orchestrator uses a traditional state machine. Frame processors exist but aren't connected.
-
-### 2. Transport Layer Disconnect
-Transport crate has production-ready WebRTC with:
-- Full ICE/DTLS/Opus support
-- Session failover logic
-- High-quality resampling
-
-**But:** Server doesn't depend on it, no signaling endpoints exist.
-
-### 3. Trait Implementation Mismatch
-Core defines traits (LanguageModel, Retriever, etc.) that aren't implemented by respective crates. Instead:
-- LLM uses `LlmBackend` (different signatures)
-- RAG uses `HybridRetriever` (not trait-based)
-
-This prevents clean dependency injection.
+### Medium Term (P2) - Production Hardening
+1. Remove dead code (reranker should_exit, etc.)
+2. Add proper error propagation in adapter layers
+3. Implement session persistence with Redis/ScyllaDB
+4. Add integration tests for full audio flow
 
 ---
 
-## Recommended Fix Priority
+## Architecture Compliance
 
-### Phase 1: Critical Blockers (Week 1)
-1. Register 3 P0 tools in registry
-2. Add audit_log table to schema
-3. Integrate PersuasionEngine in agent.process()
-4. Fix EMI calculation (use proper formula)
+| Principle | Documented | Implemented | Status |
+|-----------|------------|-------------|--------|
+| Configurability over code | TOML/YAML configs | Configs loaded | Partial (tools hardcoded) |
+| Streaming by default | Every stage streams | Pipeline streams | YES |
+| Experiment everything | A/B testable | Timing strategies exist | Partial |
+| Fail gracefully | Fallbacks everywhere | Translation has fallback | YES |
+| Privacy by design | On-premise, PII redact | PII implemented | YES |
 
-### Phase 2: Integration (Week 2-3)
-5. Wire Transport crate to Server (add WebRTC endpoints)
-6. Create LanguageModel adapter for LlmBackend
-7. Connect Frame Processors to Orchestrator (or document limitation)
+---
 
-### Phase 3: Completeness (Week 4+)
-8. Add missing configuration YAML files
-9. Implement TextSimplifier for TTS
-10. Add HTTP rate limiting
-11. Create experiments.rs for A/B testing
-12. Real SMS gateway integration
+## Test Coverage Summary
+
+| Crate | Unit Tests | Integration Tests | Coverage |
+|-------|------------|-------------------|----------|
+| core | YES | - | Good |
+| pipeline | YES | YES | Good |
+| llm | YES | - | Moderate |
+| rag | YES | - | Good |
+| text_processing | YES | - | Good |
+| agent | YES | YES (40+) | Excellent |
+| tools | YES | - | Good |
+| server | YES | - | Moderate |
 
 ---
 
 ## Files for Detailed Analysis
 
-For detailed crate-by-crate findings, see:
-- `report/01-PIPELINE-ANALYSIS.md`
-- `report/02-AGENT-ANALYSIS.md`
-- `report/03-RAG-ANALYSIS.md`
-- `report/04-TEXT-PROCESSING-ANALYSIS.md`
-- `report/05-LLM-ANALYSIS.md`
-- `report/06-CORE-CONFIG-ANALYSIS.md`
-- `report/07-SERVER-TRANSPORT-ANALYSIS.md`
-- `report/08-TOOLS-PERSISTENCE-ANALYSIS.md`
-- `report/09-FIX-PLAN.md`
+- [COMPONENT-ANALYSIS.md](./COMPONENT-ANALYSIS.md) - Deep dive per crate
+- [DEAD-CODE-ANALYSIS.md](./DEAD-CODE-ANALYSIS.md) - All dead code with locations
+- [FIX-PLAN.md](./FIX-PLAN.md) - Prioritized implementation plan
+- [INTEGRATION-GAPS.md](./INTEGRATION-GAPS.md) - Missing connections with fixes
 
 ---
 
-## Conclusion
-
-The voice-agent-rust codebase represents **significant engineering effort** with well-designed components. However, **integration gaps prevent production deployment**. The 8 P0 issues must be resolved, with particular attention to:
-
-1. **Transport integration** (largest code waste)
-2. **Tool registration** (quick fix, high impact)
-3. **Audit compliance** (regulatory requirement)
-4. **Financial calculations** (customer trust)
-
-With focused effort on the P0 items, the system can reach production readiness within 2-4 weeks.
+**Report Generated:** December 29, 2025
+**Analysis Method:** Multi-agent parallel codebase exploration
+**Crates Analyzed:** 12 workspace crates
+**Total Lines of Code:** ~25,000+ LOC

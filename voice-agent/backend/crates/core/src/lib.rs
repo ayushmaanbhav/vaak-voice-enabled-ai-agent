@@ -65,6 +65,10 @@ pub use traits::{
     GrammarCorrector, Translator, PIIRedactor, ComplianceChecker,
     // Pipeline
     FrameProcessor, Frame, ProcessorContext, ControlFrame, MetricsEvent,
+    // P0 FIX: ConversationFSM trait and types
+    ConversationFSM, ConversationEvent, FSMAction, FSMError,
+    FSMCheckpoint, FSMMetrics, ConversationOutcome, ObjectionType,
+    TransitionRecord,
 };
 
 // Personalization re-exports
