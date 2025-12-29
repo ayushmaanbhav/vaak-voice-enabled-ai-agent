@@ -206,6 +206,11 @@ pub fn create_default_registry() -> ToolRegistry {
     registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
     registry.register(crate::gold_loan::BranchLocatorTool::new());
 
+    // P0 FIX: Register missing tools that were implemented but not registered
+    registry.register(crate::gold_loan::GetGoldPriceTool::new());
+    registry.register(crate::gold_loan::EscalateToHumanTool::new());
+    registry.register(crate::gold_loan::SendSmsTool::new());
+
     registry
 }
 
@@ -274,6 +279,11 @@ pub fn create_registry_with_integrations(config: IntegrationConfig) -> ToolRegis
         registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
     }
 
+    // P0 FIX: Register missing tools that were implemented but not registered
+    registry.register(crate::gold_loan::GetGoldPriceTool::new());
+    registry.register(crate::gold_loan::EscalateToHumanTool::new());
+    registry.register(crate::gold_loan::SendSmsTool::new());
+
     registry
 }
 
@@ -337,13 +347,17 @@ mod tests {
         let config = IntegrationConfig::with_stubs();
         let registry = create_registry_with_integrations(config);
 
-        // Should have all 5 tools
-        assert_eq!(registry.len(), 5);
+        // P0 FIX: Should have all 8 tools (5 original + 3 P0 tools)
+        assert_eq!(registry.len(), 8);
         assert!(registry.has("check_eligibility"));
         assert!(registry.has("calculate_savings"));
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
         assert!(registry.has("find_branches"));
+        // P0 FIX: Verify new tools are registered
+        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("escalate_to_human"));
+        assert!(registry.has("send_sms"));
     }
 
     #[test]
@@ -351,9 +365,29 @@ mod tests {
         let config = IntegrationConfig::default();
         let registry = create_registry_with_integrations(config);
 
-        // Should still have all 5 tools (just without integrations)
-        assert_eq!(registry.len(), 5);
+        // P0 FIX: Should still have all 8 tools (just without integrations)
+        assert_eq!(registry.len(), 8);
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
+        // P0 FIX: Verify new tools are registered
+        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("escalate_to_human"));
+        assert!(registry.has("send_sms"));
+    }
+
+    #[test]
+    fn test_default_registry_has_all_tools() {
+        let registry = create_default_registry();
+
+        // P0 FIX: Default registry should have all 8 tools
+        assert_eq!(registry.len(), 8);
+        assert!(registry.has("check_eligibility"));
+        assert!(registry.has("calculate_savings"));
+        assert!(registry.has("capture_lead"));
+        assert!(registry.has("schedule_appointment"));
+        assert!(registry.has("find_branches"));
+        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("escalate_to_human"));
+        assert!(registry.has("send_sms"));
     }
 }

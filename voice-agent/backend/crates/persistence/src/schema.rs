@@ -118,6 +118,33 @@ pub async fn create_tables(session: &Session, keyspace: &str) -> Result<(), Pers
     session.query_unpaged(appointments_table, &[]).await
         .map_err(|e| PersistenceError::SchemaError(format!("Failed to create appointments table: {}", e)))?;
 
+    // P0 FIX: Audit log table for RBI compliance
+    // Required for regulatory auditing of all financial conversations
+    // 7 year retention as per RBI guidelines (220752000 seconds)
+    let audit_log_table = format!(r#"
+        CREATE TABLE IF NOT EXISTS {}.audit_log (
+            partition_date TEXT,
+            session_id TEXT,
+            timestamp BIGINT,
+            id UUID,
+            event_type TEXT,
+            actor_type TEXT,
+            actor_id TEXT,
+            resource_type TEXT,
+            resource_id TEXT,
+            action TEXT,
+            outcome TEXT,
+            details TEXT,
+            previous_hash TEXT,
+            hash TEXT,
+            PRIMARY KEY ((partition_date, session_id), timestamp, id)
+        ) WITH CLUSTERING ORDER BY (timestamp DESC, id DESC)
+        AND default_time_to_live = 220752000
+    "#, keyspace);
+
+    session.query_unpaged(audit_log_table, &[]).await
+        .map_err(|e| PersistenceError::SchemaError(format!("Failed to create audit_log table: {}", e)))?;
+
     tracing::info!("All tables created successfully");
     Ok(())
 }

@@ -23,6 +23,8 @@ use voice_agent_text_processing::translation::{
 use crate::conversation::{Conversation, ConversationConfig, ConversationEvent, EndReason};
 use crate::stage::{ConversationStage, RagTimingStrategy};
 use crate::AgentError;
+// P0 FIX: Import PersuasionEngine for objection handling
+use crate::persuasion::PersuasionEngine;
 
 /// Agent configuration
 #[derive(Debug, Clone)]
@@ -151,6 +153,8 @@ pub struct GoldLoanAgent {
     translator: Option<Arc<dyn Translator>>,
     /// P5 FIX: User's language for translation
     user_language: Language,
+    /// P0 FIX: Persuasion engine for objection handling
+    persuasion: PersuasionEngine,
 }
 
 impl GoldLoanAgent {
@@ -218,6 +222,9 @@ impl GoldLoanAgent {
             None
         };
 
+        // P0 FIX: Initialize persuasion engine for objection handling
+        let persuasion = PersuasionEngine::new();
+
         Self {
             config,
             conversation,
@@ -231,6 +238,7 @@ impl GoldLoanAgent {
             personalization_ctx: RwLock::new(personalization_ctx),
             translator,
             user_language,
+            persuasion,
         }
     }
 
@@ -278,6 +286,9 @@ impl GoldLoanAgent {
             None
         };
 
+        // P0 FIX: Initialize persuasion engine for objection handling
+        let persuasion = PersuasionEngine::new();
+
         Self {
             config,
             conversation,
@@ -291,6 +302,7 @@ impl GoldLoanAgent {
             personalization_ctx: RwLock::new(personalization_ctx),
             translator,
             user_language,
+            persuasion,
         }
     }
 
@@ -331,6 +343,9 @@ impl GoldLoanAgent {
             None
         };
 
+        // P0 FIX: Initialize persuasion engine for objection handling
+        let persuasion = PersuasionEngine::new();
+
         Self {
             config,
             conversation,
@@ -344,6 +359,7 @@ impl GoldLoanAgent {
             personalization_ctx: RwLock::new(personalization_ctx),
             translator,
             user_language,
+            persuasion,
         }
     }
 
@@ -926,6 +942,29 @@ impl GoldLoanAgent {
         builder = builder.with_stage_guidance(
             self.conversation.stage().display_name()
         );
+
+        // P0 FIX: Detect objections and add persuasion guidance to prompt
+        // Uses acknowledge-reframe-evidence pattern from PersuasionEngine
+        if let Some(objection_response) = self.persuasion.handle_objection(user_input, self.user_language) {
+            let persuasion_guidance = format!(
+                "## Objection Handling Guidance\n\
+                The customer appears to have a concern. Use this framework:\n\
+                1. **Acknowledge**: {}\n\
+                2. **Reframe**: {}\n\
+                3. **Evidence**: {}\n\
+                4. **Call to Action**: {}",
+                objection_response.acknowledge,
+                objection_response.reframe,
+                objection_response.evidence,
+                objection_response.call_to_action
+            );
+            builder = builder.with_context(&persuasion_guidance);
+
+            tracing::debug!(
+                objection_type = ?crate::persuasion::ObjectionType::detect(user_input),
+                "Detected objection, adding persuasion guidance to prompt"
+            );
+        }
 
         // Add conversation history
         let history: Vec<Message> = self.conversation.get_messages()

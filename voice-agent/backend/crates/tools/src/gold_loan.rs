@@ -14,6 +14,43 @@ use crate::integrations::{CrmIntegration, CalendarIntegration, CrmLead, LeadSour
 
 use crate::mcp::{Tool, ToolSchema, ToolOutput, ToolError, InputSchema, PropertySchema};
 
+/// P0 FIX: Calculate EMI using the standard amortization formula
+///
+/// EMI = P × r × (1 + r)^n / [(1 + r)^n - 1]
+///
+/// Where:
+/// - P = Principal loan amount
+/// - r = Monthly interest rate (annual_rate / 12 / 100)
+/// - n = Number of months (tenure)
+///
+/// Note: Gold loans often use simple interest schemes where only interest
+/// is paid monthly, but this function provides true EMI for accurate comparison.
+pub fn calculate_emi(principal: f64, annual_rate_percent: f64, tenure_months: i64) -> f64 {
+    if tenure_months <= 0 || principal <= 0.0 {
+        return 0.0;
+    }
+
+    let monthly_rate = annual_rate_percent / 100.0 / 12.0;
+
+    // Handle edge case of 0% interest
+    if monthly_rate <= 0.0 {
+        return principal / tenure_months as f64;
+    }
+
+    let n = tenure_months as f64;
+    let one_plus_r_n = (1.0 + monthly_rate).powf(n);
+
+    // EMI formula: P * r * (1+r)^n / [(1+r)^n - 1]
+    principal * monthly_rate * one_plus_r_n / (one_plus_r_n - 1.0)
+}
+
+/// Calculate total interest paid over the loan tenure
+pub fn calculate_total_interest(principal: f64, annual_rate_percent: f64, tenure_months: i64) -> f64 {
+    let emi = calculate_emi(principal, annual_rate_percent, tenure_months);
+    let total_paid = emi * tenure_months as f64;
+    total_paid - principal
+}
+
 /// P0 FIX: Branch data structure for JSON loading
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BranchData {
@@ -300,15 +337,22 @@ impl Tool for SavingsCalculatorTool {
         // Higher loan amounts qualify for better rates
         let kotak_rate = self.config.get_tiered_rate(loan_amount);
 
-        // Calculate monthly savings using tiered rates
-        let monthly_savings = self.config.calculate_monthly_savings_tiered(loan_amount, current_rate);
+        // P0 FIX: Calculate proper EMI using amortization formula
+        // This provides accurate monthly payment comparison (principal + interest)
+        let current_emi = calculate_emi(loan_amount, current_rate, tenure_months);
+        let kotak_emi = calculate_emi(loan_amount, kotak_rate, tenure_months);
+        let emi_savings = current_emi - kotak_emi;
 
-        // Calculate monthly payments
-        let current_monthly = loan_amount * (current_rate / 100.0 / 12.0);
-        let kotak_monthly = loan_amount * (kotak_rate / 100.0 / 12.0);
+        // Also provide simple interest for gold loan comparison
+        // (Many gold loans only charge interest monthly, principal at end)
+        let current_monthly_interest = loan_amount * (current_rate / 100.0 / 12.0);
+        let kotak_monthly_interest = loan_amount * (kotak_rate / 100.0 / 12.0);
+        let monthly_interest_savings = current_monthly_interest - kotak_monthly_interest;
 
-        // Total interest over remaining tenure
-        let total_savings = monthly_savings * tenure_months as f64;
+        // Total savings over tenure
+        let total_emi_savings = emi_savings * tenure_months as f64;
+        let total_interest_savings = calculate_total_interest(loan_amount, current_rate, tenure_months)
+            - calculate_total_interest(loan_amount, kotak_rate, tenure_months);
 
         // P2 FIX: Determine rate tier for customer communication
         let rate_tier = if loan_amount <= 100000.0 {
@@ -324,16 +368,22 @@ impl Tool for SavingsCalculatorTool {
             "current_interest_rate_percent": current_rate,
             "kotak_interest_rate_percent": kotak_rate,
             "rate_reduction_percent": current_rate - kotak_rate,
-            "current_monthly_interest_inr": current_monthly.round(),
-            "kotak_monthly_interest_inr": kotak_monthly.round(),
-            "monthly_savings_inr": monthly_savings.round(),
-            "total_savings_inr": total_savings.round(),
+            // P0 FIX: EMI-based calculations (principal + interest)
+            "current_emi_inr": current_emi.round(),
+            "kotak_emi_inr": kotak_emi.round(),
+            "monthly_emi_savings_inr": emi_savings.round(),
+            "total_emi_savings_inr": total_emi_savings.round(),
+            // Interest-only calculations (for bullet repayment schemes)
+            "current_monthly_interest_inr": current_monthly_interest.round(),
+            "kotak_monthly_interest_inr": kotak_monthly_interest.round(),
+            "monthly_interest_savings_inr": monthly_interest_savings.round(),
+            "total_interest_savings_inr": total_interest_savings.round(),
             "tenure_months": tenure_months,
             // P2 FIX: Include tier info for transparency
             "rate_tier": rate_tier,
             "message": format!(
-                "By switching to Kotak at our {} rate of {}%, you can save ₹{:.0} per month and ₹{:.0} over the remaining {} months!",
-                rate_tier, kotak_rate, monthly_savings, total_savings, tenure_months
+                "By switching to Kotak at our {} rate of {}%, you can save ₹{:.0} per month on EMI (or ₹{:.0} on interest-only) and ₹{:.0} total over the remaining {} months!",
+                rate_tier, kotak_rate, emi_savings, monthly_interest_savings, total_emi_savings, tenure_months
             )
         });
 
@@ -1273,6 +1323,54 @@ fn get_mock_branches(city: &str, area: Option<&str>, pincode: Option<&str>, max:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // P0 FIX: Tests for EMI calculation
+    #[test]
+    fn test_emi_calculation_basic() {
+        // 1 lakh loan at 12% for 12 months
+        // Expected EMI ≈ 8,884.88
+        let emi = calculate_emi(100000.0, 12.0, 12);
+        assert!((emi - 8884.88).abs() < 1.0, "EMI was {}", emi);
+    }
+
+    #[test]
+    fn test_emi_calculation_zero_rate() {
+        // 0% interest = simple division
+        let emi = calculate_emi(120000.0, 0.0, 12);
+        assert!((emi - 10000.0).abs() < 0.01, "EMI was {}", emi);
+    }
+
+    #[test]
+    fn test_emi_calculation_edge_cases() {
+        // Zero principal
+        assert_eq!(calculate_emi(0.0, 12.0, 12), 0.0);
+        // Zero tenure
+        assert_eq!(calculate_emi(100000.0, 12.0, 0), 0.0);
+    }
+
+    #[test]
+    fn test_total_interest_calculation() {
+        // 1 lakh at 12% for 12 months
+        let total_interest = calculate_total_interest(100000.0, 12.0, 12);
+        // Total paid = EMI * 12 = 8884.88 * 12 = 106618.61
+        // Total interest = 106618.61 - 100000 = 6618.61
+        assert!((total_interest - 6618.61).abs() < 1.0, "Interest was {}", total_interest);
+    }
+
+    #[test]
+    fn test_emi_vs_simple_interest() {
+        // Compare EMI with simple interest calculation
+        // For same loan: EMI is higher because it includes principal amortization
+        let loan = 100000.0;
+        let rate = 12.0;
+        let months = 12i64;
+
+        let emi = calculate_emi(loan, rate, months);
+        let simple_monthly = loan * (rate / 100.0 / 12.0); // Just interest
+
+        // EMI should be higher (includes principal repayment)
+        assert!(emi > simple_monthly, "EMI {} should be > simple interest {}", emi, simple_monthly);
+    }
 
     #[tokio::test]
     async fn test_eligibility_check() {

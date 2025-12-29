@@ -10,8 +10,12 @@ pub mod backend;
 pub mod speculative;
 pub mod streaming;
 pub mod prompt;
+// P0 FIX: Adapter bridging LlmBackend to core::LanguageModel
+pub mod adapter;
 
 pub use backend::{LlmBackend, OllamaBackend, LlmConfig, OpenAIBackend, OpenAIConfig};
+// P0 FIX: Export adapter for clean dependency injection
+pub use adapter::LanguageModelAdapter;
 pub use speculative::{SpeculativeExecutor, SpeculativeMode, SpeculativeResult};
 pub use streaming::{StreamingGenerator, TokenStream, GenerationEvent};
 pub use prompt::{PromptBuilder, Message, Role, PersonaConfig, ToolDefinition, ToolParameter, ParsedToolCall, parse_tool_call};
