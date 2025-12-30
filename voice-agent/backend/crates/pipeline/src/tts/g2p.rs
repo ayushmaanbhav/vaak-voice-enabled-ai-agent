@@ -66,11 +66,24 @@ impl Default for G2pConfig {
     }
 }
 
-/// Language for G2P
+/// P3-2 FIX: G2P-specific Language enum
+///
+/// This is a limited subset of languages supported by the Grapheme-to-Phoneme system.
+/// It is intentionally separate from `voice_agent_core::Language` which supports
+/// 23+ Indian languages. The G2P system currently only supports:
+///
+/// - **Hindi**: Native Devanagari script processing
+/// - **English**: Latin script with English phoneme rules
+/// - **Hinglish**: Mixed Hindi-English (code-mixed) text handling
+///
+/// For the full language support enum, see `voice_agent_core::Language`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
+    /// Hindi - Devanagari script
     Hindi,
+    /// English - Latin script
     English,
+    /// Hinglish - Code-mixed Hindi/English
     Hinglish,
 }
 

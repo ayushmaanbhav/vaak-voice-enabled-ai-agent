@@ -63,12 +63,16 @@ impl From<VectorDistance> for Distance {
 }
 
 /// Document with metadata
+///
+/// P2-2 FIX: Renamed `text` to `content` to match core::Document.
+/// Serde alias "text" kept for backwards compatibility with existing Qdrant data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     /// Unique ID
     pub id: String,
-    /// Document text
-    pub text: String,
+    /// Document content (P2-2 FIX: renamed from `text`)
+    #[serde(alias = "text")]
+    pub content: String,
     /// Document title/source
     pub title: Option<String>,
     /// Category/type
@@ -87,8 +91,8 @@ pub struct VectorSearchResult {
     pub id: String,
     /// Similarity score
     pub score: f32,
-    /// Document text
-    pub text: String,
+    /// Document content (P2-2 FIX: renamed from `text`)
+    pub content: String,
     /// Metadata
     pub metadata: HashMap<String, String>,
 }
@@ -161,7 +165,8 @@ impl VectorStore {
             .zip(embeddings.iter())
             .map(|(doc, emb)| {
                 let mut payload: HashMap<String, qdrant_client::qdrant::Value> = HashMap::new();
-                payload.insert("text".to_string(), doc.text.clone().into());
+                // P2-2 FIX: Store as "text" in Qdrant for backwards compatibility
+                payload.insert("text".to_string(), doc.content.clone().into());
 
                 if let Some(ref title) = doc.title {
                     payload.insert("title".to_string(), title.clone().into());
@@ -220,12 +225,13 @@ impl VectorStore {
             .into_iter()
             .map(|point| {
                 let mut metadata = HashMap::new();
-                let mut text = String::new();
+                let mut content = String::new();
 
                 for (k, v) in point.payload {
+                    // P2-2 FIX: "text" key in Qdrant maps to `content` field
                     if k == "text" {
                         if let Some(Kind::StringValue(s)) = v.kind {
-                            text = s;
+                            content = s;
                         }
                     } else if let Some(Kind::StringValue(s)) = v.kind {
                         metadata.insert(k, s);
@@ -246,7 +252,7 @@ impl VectorStore {
                 VectorSearchResult {
                     id,
                     score: point.score,
-                    text,
+                    content,
                     metadata,
                 }
             })

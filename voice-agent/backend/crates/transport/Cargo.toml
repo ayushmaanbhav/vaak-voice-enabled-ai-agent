@@ -8,6 +8,7 @@ description = "WebRTC and WebSocket transport for voice agent"
 
 [dependencies]
 voice-agent-core.workspace = true
+voice-agent-config.workspace = true
 
 # WebRTC
 webrtc = "0.11"

@@ -12,7 +12,8 @@ use voice_agent_core::{
 };
 
 use crate::{
-    agentic::ConversationContext as RagContext, AgenticRetriever, DomainBooster, HybridRetriever,
+    // P2-1 FIX: Use QueryContext (renamed from ConversationContext)
+    agentic::QueryContext as RagContext, AgenticRetriever, DomainBooster, HybridRetriever,
     QueryExpander, SearchResult, VectorStore,
 };
 
@@ -131,7 +132,7 @@ impl EnhancedRetriever {
         let boost_result = self.booster.boost(query);
 
         for result in results.iter_mut() {
-            let doc_lower = result.text.to_lowercase();
+            let doc_lower = result.content.to_lowercase();
             let mut doc_boost = 1.0f32;
 
             for matched in &boost_result.matched_terms {
@@ -149,7 +150,7 @@ impl EnhancedRetriever {
 
     /// Convert SearchResult to Document
     fn to_document(result: SearchResult) -> Document {
-        let mut doc = Document::new(result.id, result.text, result.score);
+        let mut doc = Document::new(result.id, result.content, result.score);
 
         for (key, value) in result.metadata {
             doc = doc.with_metadata(key, value);
@@ -320,7 +321,7 @@ impl Retriever for EnhancedRetriever {
                     let documents: Vec<Document> = results
                         .into_iter()
                         .map(|r| {
-                            Document::new(r.id, r.text, r.score).with_metadata("prefetch", true)
+                            Document::new(r.id, r.content, r.score).with_metadata("prefetch", true)
                         })
                         .collect();
 

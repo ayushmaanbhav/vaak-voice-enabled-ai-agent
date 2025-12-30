@@ -64,14 +64,19 @@ pub struct TurnDetectionConfig {
 
 impl Default for TurnDetectionConfig {
     fn default() -> Self {
+        // P1-4 FIX: Use centralized turn detection constants
+        use voice_agent_config::constants::turn_detection::{
+            BASE_SILENCE_MS, MAX_SILENCE_MS, MIN_SILENCE_MS, MIN_SPEECH_MS, SEMANTIC_WEIGHT,
+        };
+
         Self {
-            base_silence_ms: 500,
-            min_silence_ms: 200,
-            max_silence_ms: 1000,
-            min_speech_ms: 200,
+            base_silence_ms: BASE_SILENCE_MS,
+            min_silence_ms: MIN_SILENCE_MS,
+            max_silence_ms: MAX_SILENCE_MS,
+            min_speech_ms: MIN_SPEECH_MS,
             semantic_enabled: true,
             semantic_config: SemanticConfig::default(),
-            semantic_weight: 0.6,
+            semantic_weight: SEMANTIC_WEIGHT,
         }
     }
 }

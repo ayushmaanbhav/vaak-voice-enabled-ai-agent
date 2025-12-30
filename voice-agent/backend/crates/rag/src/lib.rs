@@ -38,7 +38,8 @@ pub use agentic::{
     AgenticRagConfig,
     AgenticRetriever,
     AgenticSearchResult,
-    ConversationContext,
+    // P2-1 FIX: QueryContext is the new name, ConversationContext kept for backwards compat
+    QueryContext,
     // P1 FIX: LLM-based sufficiency checking
     LlmSufficiencyChecker,
     LlmSufficiencyConfig,
@@ -46,6 +47,9 @@ pub use agentic::{
     SufficiencyChecker,
     SufficiencyEvaluation,
 };
+// P2-1 FIX: Re-export deprecated alias separately to avoid warnings at use sites
+#[allow(deprecated)]
+pub use agentic::ConversationContext;
 pub use cache::{CacheStats, CachedEmbedder, EmbeddingCache};
 pub use candle_embeddings::{
     CandleBertEmbedder, CandleEmbeddingConfig, PoolingStrategy, QuantizationMode, UnifiedEmbedder,

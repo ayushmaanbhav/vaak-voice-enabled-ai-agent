@@ -50,5 +50,13 @@ features:
 # RAG - tuned for production performance
 rag:
   enabled: true
+  # qdrant_endpoint: Set via VOICE_AGENT__RAG__QDRANT_ENDPOINT env var
+  # qdrant_api_key: Set via VOICE_AGENT__RAG__QDRANT_API_KEY env var
   max_full_model_docs: 8  # Limit for latency
   prefetch_top_k: 2       # Smaller prefetch set
+
+# Persistence - enable in production
+persistence:
+  enabled: true
+  # scylla_hosts: Set via VOICE_AGENT__PERSISTENCE__SCYLLA_HOSTS env var
+  replication_factor: 3  # Higher replication in production

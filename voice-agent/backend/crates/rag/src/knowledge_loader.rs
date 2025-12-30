@@ -155,7 +155,7 @@ impl KnowledgeLoader {
             // Create document for vector store
             let vs_doc = Document {
                 id: doc.id.clone(),
-                text: doc.content.clone(),
+                content: doc.content.clone(),
                 title: Some(doc.title.clone()),
                 category: doc.category.clone(),
                 language: Some(doc.language.clone()),

@@ -477,6 +477,8 @@ fn convert_to_prompt_messages(request: &GenerateRequest) -> Vec<crate::prompt::M
                 voice_agent_core::llm_types::Role::Tool => crate::prompt::Role::Tool,
             },
             content: m.content.clone(),
+            name: m.name.clone(),
+            tool_call_id: m.tool_call_id.clone(),
         })
         .collect()
 }

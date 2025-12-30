@@ -53,15 +53,21 @@ pub struct VadConfig {
 
 impl Default for VadConfig {
     fn default() -> Self {
+        // P2-5 FIX: Use centralized audio constants
+        use voice_agent_config::constants::audio::{
+            FRAME_MS, SAMPLE_RATE, VAD_ENERGY_FLOOR_DB, VAD_MIN_SILENCE_FRAMES,
+            VAD_MIN_SPEECH_FRAMES, VAD_THRESHOLD,
+        };
+
         Self {
-            threshold: 0.5,
-            frame_ms: 10,
-            min_speech_frames: 25,  // 250ms
-            min_silence_frames: 30, // 300ms
+            threshold: VAD_THRESHOLD,
+            frame_ms: FRAME_MS,
+            min_speech_frames: VAD_MIN_SPEECH_FRAMES,
+            min_silence_frames: VAD_MIN_SILENCE_FRAMES,
             n_mels: 40,
-            sample_rate: 16000,
+            sample_rate: SAMPLE_RATE,
             gru_hidden_size: 64,
-            energy_floor_db: -50.0,
+            energy_floor_db: VAD_ENERGY_FLOOR_DB,
         }
     }
 }

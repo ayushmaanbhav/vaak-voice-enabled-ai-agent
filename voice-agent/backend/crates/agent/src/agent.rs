@@ -1104,7 +1104,7 @@ impl GoldLoanAgent {
                         let rag_context = results
                             .iter()
                             .take(max_results)
-                            .map(|r| format!("- {}", r.text))
+                            .map(|r| format!("- {}", r.content))
                             .collect::<Vec<_>>()
                             .join("\n");
                         builder = builder
@@ -1152,7 +1152,12 @@ impl GoldLoanAgent {
                     "assistant" => Role::Assistant,
                     _ => Role::System,
                 };
-                Message { role: r, content }
+                Message {
+                    role: r,
+                    content,
+                    name: None,
+                    tool_call_id: None,
+                }
             })
             .collect();
         builder = builder.with_history(&history);
@@ -1444,7 +1449,7 @@ impl GoldLoanAgent {
                         let rag_context = results
                             .iter()
                             .take(max_results)
-                            .map(|r| format!("- {}", r.text))
+                            .map(|r| format!("- {}", r.content))
                             .collect::<Vec<_>>()
                             .join("\n");
                         builder = builder
@@ -1511,7 +1516,12 @@ impl GoldLoanAgent {
                     "assistant" => Role::Assistant,
                     _ => Role::System,
                 };
-                Message { role: r, content }
+                Message {
+                    role: r,
+                    content,
+                    name: None,
+                    tool_call_id: None,
+                }
             })
             .collect();
 

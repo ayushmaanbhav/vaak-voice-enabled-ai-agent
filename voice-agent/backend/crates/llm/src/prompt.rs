@@ -2,42 +2,13 @@
 //!
 //! Constructs prompts for the gold loan voice agent.
 
-use serde::{Deserialize, Serialize};
-use std::fmt;
 
 // P0 FIX: Re-export PersonaConfig from config crate (single source of truth)
 pub use voice_agent_config::PersonaConfig;
 
-/// Message role
-///
-/// P2 FIX: Added Tool role for function calling support.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    System,
-    User,
-    Assistant,
-    /// Tool/function response role
-    Tool,
-}
-
-impl fmt::Display for Role {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Role::System => write!(f, "system"),
-            Role::User => write!(f, "user"),
-            Role::Assistant => write!(f, "assistant"),
-            Role::Tool => write!(f, "tool"),
-        }
-    }
-}
-
-/// Chat message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    pub role: Role,
-    pub content: String,
-}
+// P1-1 FIX: Re-export Message and Role from core crate (single source of truth)
+// This eliminates duplicate type definitions and ensures consistency
+pub use voice_agent_core::llm_types::{Message, Role};
 
 // P0-2 FIX: Use canonical ToolDefinition from core crate (JSON Schema format)
 // This ensures compatibility with Claude API native tool_use and other providers
@@ -265,36 +236,9 @@ pub struct ParsedToolCall {
     pub text_after: String,
 }
 
-impl Message {
-    pub fn system(content: impl Into<String>) -> Self {
-        Self {
-            role: Role::System,
-            content: content.into(),
-        }
-    }
-
-    pub fn user(content: impl Into<String>) -> Self {
-        Self {
-            role: Role::User,
-            content: content.into(),
-        }
-    }
-
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self {
-            role: Role::Assistant,
-            content: content.into(),
-        }
-    }
-
-    /// P2 FIX: Added tool() constructor for function calling responses.
-    pub fn tool(content: impl Into<String>) -> Self {
-        Self {
-            role: Role::Tool,
-            content: content.into(),
-        }
-    }
-}
+// P1-1 FIX: Message constructors are inherited from core crate
+// Use Message::system(), Message::user(), Message::assistant(), Message::tool()
+// directly from voice_agent_core::llm_types (re-exported above)
 
 /// Prompt builder for gold loan agent
 pub struct PromptBuilder {

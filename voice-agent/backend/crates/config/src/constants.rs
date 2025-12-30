@@ -58,11 +58,17 @@ pub mod gold_prices {
     /// Updated for 2024 prices - should be fetched from live API in production
     pub const DEFAULT_24K_PER_GRAM: f64 = 7500.0;
 
+    /// 24K gold purity factor (pure gold)
+    pub const PURITY_24K: f64 = 1.0;
+
     /// 22K gold purity factor (916/1000)
     pub const PURITY_22K: f64 = 0.916;
 
     /// 18K gold purity factor
     pub const PURITY_18K: f64 = 0.750;
+
+    /// 14K gold purity factor (P1-5 FIX: was missing)
+    pub const PURITY_14K: f64 = 0.585;
 }
 
 /// Service endpoints (defaults for local development)
@@ -113,8 +119,12 @@ pub mod rag {
     /// Default number of results to retrieve
     pub const DEFAULT_TOP_K: usize = 5;
 
-    /// Maximum context tokens for RAG
-    pub const MAX_CONTEXT_TOKENS: usize = 2048;
+    /// Default context tokens for small models (4K context window)
+    /// P0-2 FIX: Updated from 2048 to match context.rs default
+    pub const DEFAULT_CONTEXT_TOKENS: usize = 4096;
+
+    /// Maximum context tokens for large models (32K+ context window)
+    pub const MAX_CONTEXT_TOKENS_LARGE: usize = 32768;
 }
 
 /// Audio processing defaults
@@ -130,6 +140,52 @@ pub mod audio {
 
     /// Speech probability threshold for VAD
     pub const VAD_THRESHOLD: f32 = 0.5;
+
+    // P1-2 FIX: PCM conversion constants (centralized)
+    /// PCM16 normalization divisor (for converting PCM16 to f32)
+    /// Use: sample as f32 / PCM16_NORMALIZE
+    pub const PCM16_NORMALIZE: f32 = 32768.0;
+
+    /// PCM16 scaling multiplier (for converting f32 to PCM16)
+    /// Use: (sample * PCM16_SCALE) as i16
+    pub const PCM16_SCALE: f32 = 32767.0;
+
+    // P2-5 FIX: VAD frame count constants
+    /// Minimum consecutive speech frames to confirm speech start (250ms at 10ms frames)
+    pub const VAD_MIN_SPEECH_FRAMES: usize = 25;
+
+    /// Minimum consecutive silence frames to confirm speech end (300ms at 10ms frames)
+    pub const VAD_MIN_SILENCE_FRAMES: usize = 30;
+}
+
+/// P1-4 FIX: Turn detection timing constants
+pub mod turn_detection {
+    /// Base silence threshold before semantic adjustment (ms)
+    pub const BASE_SILENCE_MS: u32 = 500;
+
+    /// Minimum silence threshold (ms)
+    pub const MIN_SILENCE_MS: u32 = 200;
+
+    /// Maximum silence threshold (ms)
+    pub const MAX_SILENCE_MS: u32 = 1000;
+
+    /// Minimum speech duration to consider a valid utterance (ms)
+    pub const MIN_SPEECH_MS: u32 = 200;
+
+    /// Default semantic weight for hybrid turn detection
+    pub const SEMANTIC_WEIGHT: f32 = 0.6;
+}
+
+/// P1-3 FIX: WebRTC configuration constants
+pub mod webrtc {
+    /// ICE disconnected timeout (seconds) - time before considering peer disconnected
+    pub const ICE_DISCONNECTED_TIMEOUT_SECS: u64 = 5;
+
+    /// ICE failed timeout (seconds) - time before declaring connection failed
+    pub const ICE_FAILED_TIMEOUT_SECS: u64 = 25;
+
+    /// ICE keep-alive interval (seconds)
+    pub const ICE_KEEPALIVE_INTERVAL_SECS: u64 = 2;
 }
 
 #[cfg(test)]

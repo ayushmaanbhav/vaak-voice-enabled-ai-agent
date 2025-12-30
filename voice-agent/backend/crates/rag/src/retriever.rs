@@ -78,12 +78,14 @@ impl From<&voice_agent_config::RagConfig> for RetrieverConfig {
 }
 
 /// Final search result
+///
+/// P2-2 FIX: Renamed `text` to `content` for consistency with core::Document
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     /// Document ID
     pub id: String,
-    /// Document text
-    pub text: String,
+    /// Document content (P2-2 FIX: renamed from `text`)
+    pub content: String,
     /// Final score
     pub score: f32,
     /// Metadata
@@ -205,7 +207,7 @@ impl HybridRetriever {
             .into_iter()
             .map(|r| SearchResult {
                 id: r.id,
-                text: r.text,
+                content: r.content,
                 score: r.score,
                 metadata: r.metadata,
                 source: SearchSource::Dense,
@@ -227,7 +229,7 @@ impl HybridRetriever {
             .into_iter()
             .map(|r| SearchResult {
                 id: r.id,
-                text: r.text,
+                content: r.content,
                 score: r.score,
                 metadata: r.metadata,
                 source: SearchSource::Sparse,
@@ -271,7 +273,7 @@ impl HybridRetriever {
                         .into_iter()
                         .map(|r| SearchResult {
                             id: r.id,
-                            text: r.text,
+                            content: r.content,
                             score: r.score,
                             metadata: r.metadata,
                             source: SearchSource::Sparse,
@@ -369,7 +371,7 @@ impl HybridRetriever {
             // Prepare documents for reranker
             let docs: Vec<(String, String)> = results
                 .iter()
-                .map(|r| (r.id.clone(), r.text.clone()))
+                .map(|r| (r.id.clone(), r.content.clone()))
                 .collect();
 
             // Run reranking with early exit
@@ -402,7 +404,7 @@ impl HybridRetriever {
         let mut scored: Vec<(SearchResult, f32)> = results
             .into_iter()
             .map(|r| {
-                let score = SimpleScorer::score(query, &r.text);
+                let score = SimpleScorer::score(query, &r.content);
                 (r, score)
             })
             .collect();
@@ -465,7 +467,7 @@ impl HybridRetriever {
             .into_iter()
             .map(|r| SearchResult {
                 id: r.id,
-                text: r.text,
+                content: r.content,
                 score: r.score * confidence, // Weight by transcript confidence
                 metadata: r.metadata,
                 source: SearchSource::Dense,

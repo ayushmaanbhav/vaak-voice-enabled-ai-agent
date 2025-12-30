@@ -50,8 +50,8 @@ pub struct SparseResult {
     pub id: String,
     /// BM25 score
     pub score: f32,
-    /// Document text
-    pub text: String,
+    /// Document content (P2-2 FIX: renamed from `text` for consistency)
+    pub content: String,
     /// Metadata
     pub metadata: HashMap<String, String>,
 }
@@ -173,7 +173,7 @@ impl SparseIndex {
             let mut tantivy_doc = TantivyDocument::default();
 
             tantivy_doc.add_text(self.id_field, &doc.id);
-            tantivy_doc.add_text(self.text_field, &doc.text);
+            tantivy_doc.add_text(self.text_field, &doc.content);
 
             if let Some(ref title) = doc.title {
                 tantivy_doc.add_text(self.title_field, title);
@@ -231,7 +231,7 @@ impl SparseIndex {
                 .unwrap_or("")
                 .to_string();
 
-            let text = doc
+            let content = doc
                 .get_first(self.text_field)
                 .and_then(|v| match v {
                     OwnedValue::Str(s) => Some(s.as_str()),
@@ -252,7 +252,7 @@ impl SparseIndex {
             results.push(SparseResult {
                 id,
                 score,
-                text,
+                content,
                 metadata,
             });
         }

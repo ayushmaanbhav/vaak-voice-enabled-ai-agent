@@ -427,11 +427,16 @@ impl WebRtcTransport {
         // Create setting engine
         let mut setting_engine = SettingEngine::default();
 
+        // P1-3 FIX: Use centralized WebRTC timeout constants
+        use voice_agent_config::constants::webrtc::{
+            ICE_DISCONNECTED_TIMEOUT_SECS, ICE_FAILED_TIMEOUT_SECS, ICE_KEEPALIVE_INTERVAL_SECS,
+        };
+
         // Configure ICE timeouts for better NAT traversal
         setting_engine.set_ice_timeouts(
-            Some(std::time::Duration::from_secs(5)), // disconnected_timeout
-            Some(std::time::Duration::from_secs(25)), // failed_timeout
-            Some(std::time::Duration::from_secs(2)), // keep_alive_interval
+            Some(std::time::Duration::from_secs(ICE_DISCONNECTED_TIMEOUT_SECS)),
+            Some(std::time::Duration::from_secs(ICE_FAILED_TIMEOUT_SECS)),
+            Some(std::time::Duration::from_secs(ICE_KEEPALIVE_INTERVAL_SECS)),
         );
 
         // Build API

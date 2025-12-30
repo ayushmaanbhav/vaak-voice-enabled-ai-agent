@@ -131,6 +131,12 @@ features:
 # RAG configuration
 rag:
   enabled: true
+  # Vector store connection (Qdrant)
+  qdrant_endpoint: "http://localhost:6333"
+  qdrant_collection: "gold_loan_knowledge"
+  # qdrant_api_key: set via VOICE_AGENT__RAG__QDRANT_API_KEY env var
+  vector_dim: 384
+  # Retrieval settings
   dense_top_k: 20
   sparse_top_k: 20
   final_top_k: 5
@@ -144,6 +150,14 @@ rag:
   early_termination_min_results: 3
   prefetch_confidence_threshold: 0.6
   prefetch_top_k: 3
+
+# Persistence configuration (ScyllaDB)
+persistence:
+  enabled: false  # Set to true in production
+  scylla_hosts:
+    - "127.0.0.1:9042"
+  keyspace: "voice_agent"
+  replication_factor: 1
 
 # Path to domain-specific configuration
 domain_config_path: "config/domain.yaml"

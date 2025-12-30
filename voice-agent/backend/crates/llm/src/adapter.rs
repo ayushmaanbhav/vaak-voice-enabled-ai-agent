@@ -69,6 +69,8 @@ impl LanguageModelAdapter {
                         voice_agent_core::llm_types::Role::Tool => crate::prompt::Role::User, // Map tool to user
                     },
                     content: m.content.clone(),
+                    name: m.name.clone(),
+                    tool_call_id: m.tool_call_id.clone(),
                 }
             })
             .collect()
@@ -175,6 +177,8 @@ impl LanguageModel for LanguageModelAdapter {
                 crate::prompt::Message {
                     role: crate::prompt::Role::System,
                     content: tool_msg.content.clone(),
+                    name: None,
+                    tool_call_id: None,
                 },
             );
         }

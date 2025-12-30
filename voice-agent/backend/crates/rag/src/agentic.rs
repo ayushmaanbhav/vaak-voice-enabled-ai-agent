@@ -50,9 +50,11 @@ impl Default for AgenticRagConfig {
     }
 }
 
-/// Conversation context for query rewriting
+/// P2-1 FIX: Renamed from ConversationContext to QueryContext to avoid
+/// confusion with voice_agent_core::ConversationContext which has a different structure.
+/// This type is specifically for RAG query rewriting and context.
 #[derive(Debug, Clone, Default)]
-pub struct ConversationContext {
+pub struct QueryContext {
     /// Summary of the conversation so far
     pub summary: String,
     /// Current conversation stage
@@ -60,6 +62,10 @@ pub struct ConversationContext {
     /// Extracted entities from conversation
     pub entities: Vec<(String, String)>,
 }
+
+/// Type alias for backwards compatibility
+#[deprecated(since = "0.2.0", note = "Use QueryContext instead")]
+pub type ConversationContext = QueryContext;
 
 /// Result from agentic retrieval
 #[derive(Debug, Clone)]
@@ -133,7 +139,7 @@ impl AgenticRetriever {
         &self,
         query: &str,
         vector_store: &VectorStore,
-        context: Option<&ConversationContext>,
+        context: Option<&QueryContext>,
     ) -> Result<AgenticSearchResult, RagError> {
         // Fast path: single-shot if agentic disabled
         if !self.config.enabled {
@@ -175,7 +181,7 @@ impl AgenticRetriever {
 
             // Rewrite query if we have a rewriter
             if let Some(ref rewriter) = self.query_rewriter {
-                let default_ctx = ConversationContext::default();
+                let default_ctx = QueryContext::default();
                 let ctx = context.unwrap_or(&default_ctx);
 
                 match rewriter.rewrite(&current_query, &results, ctx).await {
@@ -462,7 +468,7 @@ impl LlmSufficiencyChecker {
             .iter()
             .take(self.config.top_k_for_eval)
             .enumerate()
-            .map(|(i, r)| format!("[Doc {}] {}", i + 1, Self::truncate_text(&r.text, 300)))
+            .map(|(i, r)| format!("[Doc {}] {}", i + 1, Self::truncate_text(&r.content, 300)))
             .collect::<Vec<_>>()
             .join("\n\n");
 
@@ -498,6 +504,8 @@ JSON response:"#,
         let messages = vec![Message {
             role: Role::User,
             content: prompt,
+            name: None,
+            tool_call_id: None,
         }];
 
         // Call LLM for evaluation
@@ -624,13 +632,13 @@ impl QueryRewriter {
         &self,
         query: &str,
         results: &[SearchResult],
-        context: &ConversationContext,
+        context: &QueryContext,
     ) -> Result<String, RagError> {
         // Build context from results
         let results_text = results
             .iter()
             .take(3)
-            .map(|r| format!("- {}", Self::truncate(&r.text, 100)))
+            .map(|r| format!("- {}", Self::truncate(&r.content, 100)))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -673,6 +681,8 @@ If the query is already good, output it unchanged."#,
         let messages = vec![Message {
             role: Role::User,
             content: prompt,
+            name: None,
+            tool_call_id: None,
         }];
 
         // Call LLM for rewriting

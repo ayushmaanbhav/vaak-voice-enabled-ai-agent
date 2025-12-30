@@ -547,6 +547,8 @@ impl SpeculativeExecutor {
                 continuation_messages.push(Message {
                     role: Role::Assistant,
                     content: format!("{} ", slm_partial), // Partial response to continue from
+                    name: None,
+                    tool_call_id: None,
                 });
             }
 
@@ -627,6 +629,8 @@ impl SpeculativeExecutor {
                 draft_messages.push(Message {
                     role: Role::Assistant,
                     content: accepted_text.clone(),
+                    name: None,
+                    tool_call_id: None,
                 });
             }
 
@@ -687,6 +691,8 @@ impl SpeculativeExecutor {
                     llm_messages.push(Message {
                         role: Role::Assistant,
                         content: accepted_text.clone(),
+                        name: None,
+                        tool_call_id: None,
                     });
                 }
 
@@ -706,6 +712,8 @@ impl SpeculativeExecutor {
                 llm_messages.push(Message {
                     role: Role::Assistant,
                     content: accepted_text.clone(),
+                    name: None,
+                    tool_call_id: None,
                 });
             }
 

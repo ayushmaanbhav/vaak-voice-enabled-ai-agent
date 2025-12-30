@@ -183,11 +183,16 @@ impl AudioFrame {
         channels: Channels,
         sequence: u64,
     ) -> Self {
+        // P1-2 FIX: PCM16 normalization constant
+        // Defined here to avoid circular dependency (core can't depend on config)
+        // Mirror value in voice_agent_config::constants::audio::PCM16_NORMALIZE
+        const PCM16_NORMALIZE: f32 = 32768.0;
+
         let samples: Vec<f32> = bytes
             .chunks_exact(2)
             .map(|chunk| {
                 let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-                sample as f32 / 32768.0
+                sample as f32 / PCM16_NORMALIZE
             })
             .collect();
 
@@ -196,11 +201,16 @@ impl AudioFrame {
 
     /// Convert to PCM16 bytes (little-endian)
     pub fn to_pcm16(&self) -> Vec<u8> {
+        // P1-2 FIX: PCM16 scaling constant
+        // Defined here to avoid circular dependency (core can't depend on config)
+        // Mirror value in voice_agent_config::constants::audio::PCM16_SCALE
+        const PCM16_SCALE: f32 = 32767.0;
+
         self.samples
             .iter()
             .flat_map(|&sample| {
                 let clamped = sample.clamp(-1.0, 1.0);
-                let pcm16 = (clamped * 32767.0) as i16;
+                let pcm16 = (clamped * PCM16_SCALE) as i16;
                 pcm16.to_le_bytes()
             })
             .collect()

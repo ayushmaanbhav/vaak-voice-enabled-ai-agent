@@ -5,19 +5,41 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use voice_agent_config::{DomainConfigManager, Settings};
+use voice_agent_config::{load_settings, DomainConfigManager, Settings};
 use voice_agent_server::{create_router, init_metrics, session::ScyllaSessionStore, AppState};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load configuration first (need observability settings for tracing init)
-    let config = Settings::default();
+    // P0 FIX: Load configuration from files and environment
+    // Priority: env vars > config/{env}.yaml > config/default.yaml > defaults
+    let env = std::env::var("VOICE_AGENT_ENV").ok();
+    let config = match load_settings(env.as_deref()) {
+        Ok(settings) => {
+            // Tracing not yet initialized, use eprintln for early logging
+            eprintln!(
+                "Loaded configuration from files (env: {})",
+                env.as_deref().unwrap_or("default")
+            );
+            settings
+        }
+        Err(e) => {
+            eprintln!(
+                "Warning: Failed to load config: {}. Using defaults.",
+                e
+            );
+            Settings::default()
+        }
+    };
 
     // P5 FIX: Initialize tracing with optional OpenTelemetry
     init_tracing(&config);
 
     tracing::info!("Starting Voice Agent Server v{}", env!("CARGO_PKG_VERSION"));
-    tracing::info!("Loaded configuration");
+    tracing::info!(
+        environment = ?config.environment,
+        config_path = env.as_deref().unwrap_or("default"),
+        "Configuration loaded"
+    );
 
     // P4 FIX: Load domain configuration
     let domain_config = load_domain_config(&config.domain_config_path);
