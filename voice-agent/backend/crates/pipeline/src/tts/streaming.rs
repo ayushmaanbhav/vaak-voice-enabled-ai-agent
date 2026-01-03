@@ -16,7 +16,9 @@ use tokio::sync::mpsc;
 #[cfg(feature = "onnx")]
 use ndarray::Array2;
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::session::{builder::GraphOptimizationLevel, Session};
+#[cfg(feature = "onnx")]
+use ort::value::Tensor;
 
 use super::chunker::{ChunkStrategy, ChunkerConfig, TextChunk, WordChunker};
 use super::{create_tts_backend, TtsBackend};
@@ -129,7 +131,7 @@ pub enum TtsEvent {
 pub struct StreamingTts {
     /// ONNX session (None for simple/testing mode) - legacy, prefer backend
     #[cfg(feature = "onnx")]
-    session: Option<Session>,
+    session: Option<Mutex<Session>>,
     /// P0-1 FIX: TTS backend for actual synthesis
     backend: Option<Arc<dyn TtsBackend>>,
     config: TtsConfig,
@@ -161,7 +163,7 @@ impl StreamingTts {
         };
 
         Ok(Self {
-            session: Some(session),
+            session: Some(Mutex::new(session)),
             backend: None,
             config,
             chunker: Mutex::new(WordChunker::new(chunker_config)),
@@ -302,24 +304,20 @@ impl StreamingTts {
         // P0-1 FIX: Use backend if available (preferred path)
         if let Some(ref backend) = self.backend {
             // Backend synthesis is async, but we're in a sync context
-            // Use block_in_place to run async code
+            // Use block_in_place to safely run async code from within tokio runtime
             let text = chunk.text.clone();
             let backend = backend.clone();
 
-            let audio = std::thread::scope(|_| {
-                tokio::runtime::Handle::try_current()
-                    .map(|handle| handle.block_on(backend.synthesize(&text)))
-                    .unwrap_or_else(|_| {
-                        // No runtime, use blocking
-                        Err(PipelineError::Tts("No tokio runtime available".to_string()))
-                    })
+            // block_in_place allows blocking in async context by moving thread to blocking pool
+            let audio = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(backend.synthesize(&text))
             })?;
 
             return Ok(audio);
         }
 
         // Legacy ONNX path: If no backend but ONNX session exists, use it
-        let session = match &self.session {
+        let session_mutex = match &self.session {
             Some(s) => s,
             None => {
                 // Return silence of appropriate length (sample_rate samples per second)
@@ -339,24 +337,20 @@ impl StreamingTts {
         let scales = Array2::from_shape_vec((1, 3), vec![0.667, self.config.speaking_rate, 0.8])
             .map_err(|e| PipelineError::Tts(e.to_string()))?;
 
+        let mut session = session_mutex.lock();
         let outputs = session
-            .run(
-                ort::inputs![
-                    "input" => input.view(),
-                    "input_lengths" => input_lengths.view(),
-                    "scales" => scales.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+            .run(ort::inputs![
+                "input" => Tensor::from_array(input).map_err(|e| PipelineError::Model(e.to_string()))?,
+                "input_lengths" => Tensor::from_array(input_lengths).map_err(|e| PipelineError::Model(e.to_string()))?,
+                "scales" => Tensor::from_array(scales).map_err(|e| PipelineError::Model(e.to_string()))?,
+            ])
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
-        let audio = outputs
-            .get("output")
-            .ok_or_else(|| PipelineError::Model("Missing output".to_string()))?
-            .try_extract_tensor::<f32>()
+        let audio = outputs["output"]
+            .try_extract_array::<f32>()
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
-        Ok(audio.view().iter().copied().collect())
+        Ok(audio.iter().copied().collect())
     }
 
     /// Synthesize a single chunk (stub when ONNX disabled)
@@ -369,12 +363,9 @@ impl StreamingTts {
             let text = chunk.text.clone();
             let backend = backend.clone();
 
-            let audio = std::thread::scope(|_| {
-                tokio::runtime::Handle::try_current()
-                    .map(|handle| handle.block_on(backend.synthesize(&text)))
-                    .unwrap_or_else(|_| {
-                        Err(PipelineError::Tts("No tokio runtime available".to_string()))
-                    })
+            // block_in_place allows blocking in async context by moving thread to blocking pool
+            let audio = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(backend.synthesize(&text))
             })?;
 
             return Ok(audio);

@@ -15,10 +15,12 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::stt::{StreamingStt, SttConfig};
+use crate::stt::{IndicConformerConfig, IndicConformerStt, StreamingStt, SttBackend, SttConfig};
 use crate::tts::{StreamingTts, TtsConfig, TtsEvent};
 use crate::turn_detection::{HybridTurnDetector, TurnDetectionConfig, TurnDetectionResult};
-use crate::vad::{VadConfig, VadState, VoiceActivityDetector};
+use crate::vad::{
+    ProcessableVad, SileroConfig, SileroVad, VadConfig, VadResult, VadState, VoiceActivityDetector,
+};
 use crate::PipelineError;
 use voice_agent_core::{
     AudioFrame, AudioProcessor, ControlFrame, Frame, GenerateRequest, Language, LanguageModel,
@@ -42,6 +44,11 @@ pub enum PipelineEvent {
     PartialTranscript(TranscriptResult),
     /// Final transcript available
     FinalTranscript(TranscriptResult),
+    /// P0 FIX: Agent text response (sent before TTS audio)
+    Response {
+        text: String,
+        is_final: bool,
+    },
     /// TTS audio chunk ready
     TtsAudio {
         samples: Arc<[f32]>,
@@ -200,9 +207,10 @@ pub enum PipelineState {
 /// Voice Pipeline orchestrator
 pub struct VoicePipeline {
     config: PipelineConfig,
-    vad: Arc<VoiceActivityDetector>,
+    vad: Arc<dyn ProcessableVad>,
     turn_detector: Arc<HybridTurnDetector>,
-    stt: Arc<Mutex<StreamingStt>>,
+    /// STT backend (StreamingStt or IndicConformerStt)
+    stt: Arc<Mutex<dyn SttBackend + Send>>,
     tts: Arc<StreamingTts>,
     state: Mutex<PipelineState>,
     /// Event broadcaster
@@ -225,14 +233,48 @@ pub struct VoicePipeline {
 }
 
 impl VoicePipeline {
-    /// Create a new voice pipeline with simple components (for testing)
+    /// Create a new voice pipeline with simple components
+    /// Uses Silero VAD for production-ready voice detection
     pub fn simple(config: PipelineConfig) -> Result<Self, PipelineError> {
-        let vad = Arc::new(VoiceActivityDetector::simple(config.vad.clone())?);
+        // Try to load Silero VAD model (production-ready)
+        let silero_path = std::path::Path::new("models/vad/silero_vad.onnx");
+        let vad: Arc<dyn ProcessableVad> = if silero_path.exists() {
+            let silero_config = SileroConfig {
+                threshold: config.vad.threshold,
+                sample_rate: config.vad.sample_rate,
+                min_speech_frames: config.vad.min_speech_frames,
+                min_silence_frames: config.vad.min_silence_frames,
+                energy_floor_db: config.vad.energy_floor_db,
+                ..Default::default()
+            };
+            match SileroVad::new(silero_path, silero_config) {
+                Ok(vad) => {
+                    tracing::info!("Using Silero VAD for voice activity detection");
+                    Arc::new(vad)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to load Silero VAD: {}, falling back to energy-based",
+                        e
+                    );
+                    Arc::new(VoiceActivityDetector::simple(config.vad.clone())?)
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Silero VAD model not found at {}, using energy-based VAD",
+                silero_path.display()
+            );
+            Arc::new(VoiceActivityDetector::simple(config.vad.clone())?)
+        };
+
         let turn_detector = Arc::new(HybridTurnDetector::new(config.turn_detection.clone()));
-        let stt = Arc::new(Mutex::new(StreamingStt::simple(config.stt.clone())));
+        let stt: Arc<Mutex<dyn SttBackend + Send>> =
+            Arc::new(Mutex::new(StreamingStt::simple(config.stt.clone())));
         let tts = Arc::new(StreamingTts::simple(config.tts.clone()));
 
-        let (event_tx, _) = broadcast::channel(100);
+        // Use larger capacity to avoid lagging slow receivers
+        let (event_tx, _) = broadcast::channel(1000);
 
         // P1 FIX: Build processor chain if enabled
         let processor_chain = if config.processors.enabled {
@@ -256,6 +298,137 @@ impl VoicePipeline {
             pending_transcript: Mutex::new(None),
             text_processor: None, // P0 FIX: Not set by default, use with_text_processor()
             noise_suppressor: None, // P2 FIX: Not set by default, use with_noise_suppressor()
+        })
+    }
+
+    /// Create a voice pipeline with IndicConformer STT for Indian languages
+    ///
+    /// Uses AI4Bharat's IndicConformer model for accurate Hindi/Indian language STT.
+    /// Requires either `onnx` or `candle-onnx` feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `model_dir` - Path to IndicConformer model directory (containing assets/)
+    /// * `config` - Pipeline configuration
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pipeline = VoicePipeline::with_indicconformer(
+    ///     "models/stt/indicconformer",
+    ///     PipelineConfig::default()
+    /// )?;
+    /// ```
+    #[cfg(any(feature = "onnx", feature = "candle-onnx"))]
+    pub fn with_indicconformer(
+        model_dir: impl AsRef<std::path::Path>,
+        config: PipelineConfig,
+    ) -> Result<Self, PipelineError> {
+        // Try to load Silero VAD model (production-ready)
+        let silero_path = std::path::Path::new("models/vad/silero_vad.onnx");
+        let vad: Arc<dyn ProcessableVad> = if silero_path.exists() {
+            let silero_config = SileroConfig {
+                threshold: config.vad.threshold,
+                sample_rate: config.vad.sample_rate,
+                min_speech_frames: config.vad.min_speech_frames,
+                min_silence_frames: config.vad.min_silence_frames,
+                energy_floor_db: config.vad.energy_floor_db,
+                ..Default::default()
+            };
+            match SileroVad::new(silero_path, silero_config) {
+                Ok(vad) => {
+                    tracing::info!("Using Silero VAD for voice activity detection");
+                    Arc::new(vad)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to load Silero VAD: {}, falling back to energy-based",
+                        e
+                    );
+                    Arc::new(VoiceActivityDetector::simple(config.vad.clone())?)
+                }
+            }
+        } else {
+            tracing::warn!(
+                "Silero VAD model not found at {}, using energy-based VAD",
+                silero_path.display()
+            );
+            Arc::new(VoiceActivityDetector::simple(config.vad.clone())?)
+        };
+
+        let turn_detector = Arc::new(HybridTurnDetector::new(config.turn_detection.clone()));
+
+        // Create IndicConformer STT with ONNX models
+        let indicconformer_config = IndicConformerConfig {
+            language: config.stt.language.clone().unwrap_or_else(|| "hi".to_string()),
+            sample_rate: config.stt.sample_rate,
+            chunk_ms: config.stt.chunk_ms,
+            enable_partials: config.stt.enable_partials,
+            partial_interval: config.stt.partial_interval,
+            decoder: config.stt.decoder.clone(),
+            ..Default::default()
+        };
+
+        let stt = IndicConformerStt::new(model_dir, indicconformer_config)?;
+        let stt: Arc<Mutex<dyn SttBackend + Send>> = Arc::new(Mutex::new(stt));
+
+        // P0 FIX: Configure TTS with IndicF5 model if available
+        // IndicF5 uses SafeTensors format, model directory contains model.safetensors
+        let tts_model_path = std::path::Path::new("models/tts/IndicF5");
+        let tts_reference_path = std::path::Path::new("models/tts/IndicF5/samples/namaste.wav");
+
+        let tts_config = if tts_model_path.exists() {
+            if tts_reference_path.exists() {
+                tracing::info!("Configuring TTS with IndicF5 model and reference audio");
+                TtsConfig::indicf5_with_reference(tts_model_path, tts_reference_path)
+            } else {
+                tracing::info!("Configuring TTS with IndicF5 model (no reference audio)");
+                TtsConfig::indicf5(tts_model_path)
+            }
+        } else {
+            tracing::warn!("IndicF5 TTS model not found at {}, using default TTS config", tts_model_path.display());
+            config.tts.clone()
+        };
+
+        // P0 FIX: Use from_config to load real TTS model, fallback to simple (silence) on error
+        let tts = match StreamingTts::from_config(tts_config.clone()) {
+            Ok(tts) => {
+                tracing::info!("TTS model loaded successfully");
+                Arc::new(tts)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load TTS model: {}, using silence TTS", e);
+                Arc::new(StreamingTts::simple(tts_config))
+            }
+        };
+
+        // Use larger capacity to avoid lagging slow receivers
+        let (event_tx, _) = broadcast::channel(1000);
+
+        // Build processor chain if enabled
+        let processor_chain = if config.processors.enabled {
+            Some(Self::build_processor_chain(&config.processors, tts.clone()))
+        } else {
+            None
+        };
+
+        tracing::info!(
+            "Created VoicePipeline with IndicConformer STT (ONNX enabled)"
+        );
+
+        Ok(Self {
+            config,
+            vad,
+            turn_detector,
+            stt,
+            tts,
+            state: Mutex::new(PipelineState::Idle),
+            event_tx,
+            barge_in_speech_ms: Mutex::new(0),
+            last_audio_time: Mutex::new(Instant::now()),
+            processor_chain,
+            llm: None,
+            pending_transcript: Mutex::new(None),
+            text_processor: None,
+            noise_suppressor: None,
         })
     }
 
@@ -429,6 +602,12 @@ impl VoicePipeline {
                 Ok(chunk) => {
                     full_response.push_str(&chunk.delta);
 
+                    // P0 FIX: Emit Response event with accumulated text
+                    let _ = self.event_tx.send(PipelineEvent::Response {
+                        text: full_response.clone(),
+                        is_final: false,
+                    });
+
                     // Send chunk to TTS channel
                     if tx.send(chunk.delta).await.is_err() {
                         tracing::warn!("TTS channel closed while streaming LLM response");
@@ -443,6 +622,14 @@ impl VoicePipeline {
                     break;
                 },
             }
+        }
+
+        // P0 FIX: Emit final Response event with complete text
+        if !full_response.is_empty() {
+            let _ = self.event_tx.send(PipelineEvent::Response {
+                text: full_response.clone(),
+                is_final: true,
+            });
         }
 
         // Drop sender to signal completion
@@ -533,6 +720,19 @@ impl VoicePipeline {
         let now = Instant::now();
         *self.last_audio_time.lock() = now;
 
+        // Debug: Log frame stats periodically (every 100 frames ~= 2 seconds)
+        let frame_seq = frame.sequence;
+        if frame_seq % 100 == 0 {
+            let state = *self.state.lock();
+            tracing::debug!(
+                frame = frame_seq,
+                samples = frame.samples.len(),
+                energy_db = format!("{:.1}", frame.energy_db),
+                state = ?state,
+                "Pipeline: Processing audio frame"
+            );
+        }
+
         // P2 FIX: Apply noise suppression before VAD/STT if configured
         if let Some(ns) = &self.noise_suppressor {
             frame = ns
@@ -546,7 +746,19 @@ impl VoicePipeline {
         }
 
         // 1. Run VAD
-        let (vad_state, _vad_prob, _vad_result) = self.vad.process_frame(&mut frame)?;
+        let (vad_state, vad_prob, vad_result) = self.vad.process_frame(&mut frame)?;
+
+        // Log VAD transitions
+        if frame_seq % 50 == 0 || vad_state == VadState::SpeechStart || vad_state == VadState::SpeechEnd {
+            tracing::debug!(
+                frame = frame_seq,
+                vad_state = ?vad_state,
+                vad_prob = format!("{:.2}", vad_prob),
+                vad_result = ?vad_result,
+                energy_db = format!("{:.1}", frame.energy_db),
+                "Pipeline: VAD state"
+            );
+        }
 
         // Emit VAD event on state change
         let _ = self
@@ -566,46 +778,178 @@ impl VoicePipeline {
 
         match current_state {
             PipelineState::Idle => {
-                if vad_state == VadState::Speech || vad_state == VadState::SpeechStart {
+                // Energy gate: Don't trigger on very quiet audio (likely muted mic or noise)
+                // Real speech typically has energy > -45 dB
+                const MIN_SPEECH_ENERGY_DB: f32 = -45.0;
+                let has_enough_energy = frame.energy_db > MIN_SPEECH_ENERGY_DB;
+
+                if (vad_state == VadState::Speech || vad_state == VadState::SpeechStart) && has_enough_energy {
+                    tracing::info!(
+                        vad_state = ?vad_state,
+                        energy_db = format!("{:.1}", frame.energy_db),
+                        "Pipeline: Idle -> Listening (speech detected)"
+                    );
                     *self.state.lock() = PipelineState::Listening;
                     self.stt.lock().reset();
+                } else if vad_state == VadState::Speech || vad_state == VadState::SpeechStart {
+                    tracing::debug!(
+                        vad_state = ?vad_state,
+                        energy_db = format!("{:.1}", frame.energy_db),
+                        threshold = MIN_SPEECH_ENERGY_DB,
+                        "Pipeline: Ignoring low-energy VAD trigger (likely noise/muted)"
+                    );
                 }
             },
 
             PipelineState::Listening => {
+                // DIAGNOSTIC: Track listening frame statistics
+                static LISTENING_FRAMES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let listening_frame = LISTENING_FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                // Log every 25 frames (~500ms) or at start
+                if listening_frame % 25 == 0 || listening_frame < 3 {
+                    tracing::debug!(
+                        listening_frame = listening_frame,
+                        vad_state = ?vad_state,
+                        samples = frame.samples.len(),
+                        energy_db = format!("{:.1}", frame.energy_db),
+                        "Pipeline: Listening state frame"
+                    );
+                }
+
+                // TIMEOUT: Force turn completion if we've been listening too long (10 seconds)
+                // At ~20ms per frame, 500 frames = 10 seconds
+                const MAX_LISTENING_FRAMES: u64 = 500;
+                if listening_frame >= MAX_LISTENING_FRAMES {
+                    tracing::warn!(
+                        listening_frame = listening_frame,
+                        max = MAX_LISTENING_FRAMES,
+                        "Pipeline: Max listening timeout, forcing turn completion"
+                    );
+                    let final_transcript = self.stt.lock().finalize_sync();
+                    tracing::info!(
+                        text = %final_transcript.text,
+                        confidence = format!("{:.2}", final_transcript.confidence),
+                        "Pipeline: Timeout -> Processing"
+                    );
+                    let _ = self.event_tx.send(PipelineEvent::FinalTranscript(final_transcript.clone()));
+                    *self.pending_transcript.lock() = Some(final_transcript);
+                    *self.state.lock() = PipelineState::Processing;
+                    LISTENING_FRAMES.store(0, std::sync::atomic::Ordering::Relaxed);
+                    return Ok(());
+                }
+
                 // Feed audio to STT
                 // Note: True parallelization with spawn_blocking isn't possible because
                 // ort::Session contains raw pointers that aren't Send. The ONNX runtime
                 // handles threading internally, so this is acceptable for now.
-                if let Some(partial) = self.stt.lock().process(&frame.samples)? {
-                    let _ = self
-                        .event_tx
-                        .send(PipelineEvent::PartialTranscript(partial.clone()));
+                let samples_len = frame.samples.len();
+                let stt_start = std::time::Instant::now();
+                let stt_result = self.stt.lock().process(&frame.samples);
+                let stt_time = stt_start.elapsed();
 
-                    // Update turn detector with transcript
-                    let turn_result = self.turn_detector.process(vad_state, Some(&partial.text))?;
+                // DIAGNOSTIC: Log STT processing time periodically
+                if listening_frame % 10 == 0 {
+                    tracing::debug!(
+                        stt_ms = stt_time.as_millis() as u64,
+                        samples = samples_len,
+                        "Pipeline: STT process() timing"
+                    );
+                }
 
-                    let _ = self
-                        .event_tx
-                        .send(PipelineEvent::TurnStateChanged(turn_result.clone()));
-
-                    // Check for turn completion
-                    if turn_result.is_turn_complete {
-                        let final_transcript = self.stt.lock().finalize();
+                match stt_result {
+                    Ok(Some(partial)) => {
+                        tracing::info!(
+                            samples = samples_len,
+                            text = %partial.text,
+                            confidence = format!("{:.2}", partial.confidence),
+                            words = partial.words.len(),
+                            stt_ms = stt_time.as_millis() as u64,
+                            "Pipeline: STT partial transcript received"
+                        );
                         let _ = self
                             .event_tx
-                            .send(PipelineEvent::FinalTranscript(final_transcript.clone()));
+                            .send(PipelineEvent::PartialTranscript(partial.clone()));
 
-                        // P0-3 FIX: Store transcript and transition to Processing
-                        *self.pending_transcript.lock() = Some(final_transcript);
-                        *self.state.lock() = PipelineState::Processing;
+                        // Update turn detector with transcript
+                        let turn_result = self.turn_detector.process(vad_state, Some(&partial.text))?;
+
+                        tracing::debug!(
+                            turn_state = ?turn_result.state,
+                            is_complete = turn_result.is_turn_complete,
+                            silence_ms = turn_result.silence_duration.as_millis(),
+                            threshold_ms = turn_result.silence_threshold.as_millis(),
+                            "Pipeline: Turn detection result (with transcript)"
+                        );
+
+                        let _ = self
+                            .event_tx
+                            .send(PipelineEvent::TurnStateChanged(turn_result.clone()));
+
+                        // Check for turn completion
+                        if turn_result.is_turn_complete {
+                            let final_transcript = self.stt.lock().finalize_sync();
+                            tracing::info!(
+                                text = %final_transcript.text,
+                                confidence = format!("{:.2}", final_transcript.confidence),
+                                "Pipeline: Turn complete -> Processing"
+                            );
+                            let _ = self
+                                .event_tx
+                                .send(PipelineEvent::FinalTranscript(final_transcript.clone()));
+
+                            // P0-3 FIX: Store transcript and transition to Processing
+                            *self.pending_transcript.lock() = Some(final_transcript);
+                            *self.state.lock() = PipelineState::Processing;
+                            LISTENING_FRAMES.store(0, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    },
+                    Ok(None) => {
+                        // No transcript yet, but still check turn detector with VAD
+                        let turn_result = self.turn_detector.process(vad_state, None)?;
+
+                        // DIAGNOSTIC: Log turn detection periodically when no transcript
+                        if listening_frame % 15 == 0 {
+                            tracing::debug!(
+                                turn_state = ?turn_result.state,
+                                is_complete = turn_result.is_turn_complete,
+                                silence_ms = turn_result.silence_duration.as_millis(),
+                                "Pipeline: Turn detection (no transcript yet)"
+                            );
+                        }
+
+                        let _ = self
+                            .event_tx
+                            .send(PipelineEvent::TurnStateChanged(turn_result.clone()));
+
+                        // P0-3 FIX: Check for turn completion even without partial transcript
+                        // This handles cases where speech ends before we get any partial text
+                        if turn_result.is_turn_complete {
+                            let final_transcript = self.stt.lock().finalize_sync();
+                            tracing::info!(
+                                text = %final_transcript.text,
+                                confidence = format!("{:.2}", final_transcript.confidence),
+                                "Pipeline: Turn complete (VAD-based) -> Processing"
+                            );
+                            let _ = self
+                                .event_tx
+                                .send(PipelineEvent::FinalTranscript(final_transcript.clone()));
+
+                            // Store transcript and transition to Processing
+                            *self.pending_transcript.lock() = Some(final_transcript);
+                            *self.state.lock() = PipelineState::Processing;
+                            LISTENING_FRAMES.store(0, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!(
+                            error = %e,
+                            samples = samples_len,
+                            stt_ms = stt_time.as_millis() as u64,
+                            "Pipeline: STT processing error"
+                        );
+                        return Err(e);
                     }
-                } else {
-                    // No transcript yet, just update turn detector with VAD
-                    let turn_result = self.turn_detector.process(vad_state, None)?;
-                    let _ = self
-                        .event_tx
-                        .send(PipelineEvent::TurnStateChanged(turn_result));
                 }
             },
 

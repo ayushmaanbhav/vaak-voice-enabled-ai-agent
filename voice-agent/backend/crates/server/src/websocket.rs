@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use voice_agent_core::{AudioFrame, Channels, Frame, SampleRate};
+use voice_agent_core::{AudioFrame, Channels, Frame, LanguageModel, SampleRate};
+use voice_agent_llm::{LlmFactory, LlmProviderConfig};
 use voice_agent_pipeline::{create_noise_suppressor, PipelineConfig, PipelineEvent, VoicePipeline};
 
 use crate::rate_limit::RateLimiter;
@@ -140,11 +141,34 @@ impl WebSocketHandler {
         // P2 FIX: Wire noise suppression for cleaner audio input
         let noise_suppressor: Arc<dyn voice_agent_core::AudioProcessor> =
             Arc::from(create_noise_suppressor(16000)); // 16kHz input
-        let pipeline = match VoicePipeline::simple(PipelineConfig::default()) {
+
+        // P0 FIX: Create LLM backend (Ollama with qwen3) for response generation
+        let llm: Option<Arc<dyn LanguageModel>> = {
+            let llm_config = LlmProviderConfig::ollama("qwen3:4b-instruct-2507-q4_K_M");
+            match LlmFactory::create(&llm_config) {
+                Ok(llm) => {
+                    tracing::info!("LLM backend initialized: Ollama qwen3:4b");
+                    Some(llm)
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to create LLM backend: {}, responses will not be generated", e);
+                    None
+                }
+            }
+        };
+
+        // Use IndicConformer STT for real speech recognition (Hindi/Indian languages)
+        let indicconformer_model_path = "models/stt/indicconformer";
+        let pipeline = match VoicePipeline::with_indicconformer(indicconformer_model_path, PipelineConfig::default()) {
             Ok(p) => {
-                let p = p
+                let mut p = p
                     .with_text_processor(text_processing.clone())
                     .with_noise_suppressor(noise_suppressor);
+                // Wire LLM for automatic response generation
+                if let Some(llm) = llm {
+                    p = p.with_llm(llm);
+                    tracing::info!("Voice pipeline created with LLM integration");
+                }
                 Some(Arc::new(tokio::sync::Mutex::new(p)))
             },
             Err(e) => {
@@ -163,8 +187,14 @@ impl WebSocketHandler {
         let audio_task = tokio::spawn(async move {
             let mut frame_count: u64 = 0;
 
+            tracing::info!("WebSocket audio processor task started");
+
             while let Some(audio_data) = audio_rx.recv().await {
                 session_clone.touch();
+
+                if frame_count % 100 == 0 {
+                    tracing::debug!("WebSocket audio frame {} received, {} bytes", frame_count, audio_data.len());
+                }
 
                 // Convert raw PCM bytes to f32 samples (assuming 16-bit PCM)
                 let samples: Vec<f32> = audio_data
@@ -181,18 +211,35 @@ impl WebSocketHandler {
 
                 // Create audio frame
                 let frame =
-                    AudioFrame::new(samples, SampleRate::Hz16000, Channels::Mono, frame_count);
+                    AudioFrame::new(samples.clone(), SampleRate::Hz16000, Channels::Mono, frame_count);
                 frame_count += 1;
 
                 // Process through pipeline if available
                 if let Some(ref pipeline) = pipeline_clone {
+                    // DIAGNOSTIC: Log before lock
+                    if frame_count % 10 == 0 {
+                        tracing::debug!("Audio task: Acquiring pipeline lock for frame {}", frame_count);
+                    }
                     let pipeline_guard = pipeline.lock().await;
+                    if frame_count % 10 == 0 {
+                        tracing::debug!("Audio task: Got pipeline lock, processing frame {}", frame_count);
+                    }
 
                     if let Err(e) = pipeline_guard.process_audio(frame).await {
                         tracing::debug!("Pipeline processing error: {}", e);
                     }
+
+                    if frame_count % 10 == 0 {
+                        tracing::debug!("Audio task: Finished processing frame {}", frame_count);
+                    }
+                } else {
+                    if frame_count == 1 {
+                        tracing::warn!("No pipeline available for audio processing");
+                    }
                 }
             }
+
+            tracing::info!("WebSocket audio processor task ended after {} frames", frame_count);
         });
 
         // Spawn pipeline event handler task
@@ -206,10 +253,25 @@ impl WebSocketHandler {
         #[allow(unused_mut)]
         let pipeline_event_task = if let Some(ref pipeline) = pipeline {
             let mut pipeline_events = pipeline.lock().await.subscribe();
+            tracing::info!("Pipeline event handler task started, listening for events");
             Some(tokio::spawn(async move {
-                while let Ok(event) = pipeline_events.recv().await {
+                loop {
+                    let event = match pipeline_events.recv().await {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!("Pipeline event handler lagged, missed {} events", n);
+                            // Continue receiving - don't exit the loop!
+                            continue;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::info!("Pipeline event channel closed, exiting handler");
+                            break;
+                        }
+                    };
+                    tracing::info!("Pipeline event received: {:?}", std::any::type_name_of_val(&event));
                     match event {
                         PipelineEvent::PartialTranscript(transcript) => {
+                            tracing::debug!("Sending partial transcript to client: {}", transcript.text);
                             // Send partial transcript to client
                             let msg = WsMessage::Transcript {
                                 text: transcript.text,
@@ -415,6 +477,18 @@ impl WebSocketHandler {
                         PipelineEvent::Error(e) => {
                             tracing::error!("Pipeline error: {}", e);
                         },
+                        PipelineEvent::Response { text, is_final } => {
+                            // P0 FIX: Send text response to client (before TTS audio)
+                            if is_final && !text.is_empty() {
+                                let msg = WsMessage::Response {
+                                    text: text.clone(),
+                                };
+                                let json = serde_json::to_string(&msg).unwrap();
+                                let mut s = sender_for_pipeline.lock().await;
+                                let _ = s.send(Message::Text(json)).await;
+                                tracing::info!("Sent response to client: {} chars", text.len());
+                            }
+                        },
                         PipelineEvent::TtsAudio {
                             samples,
                             text: _,
@@ -602,6 +676,8 @@ impl WebSocketHandler {
                     }
                 },
                 Ok(Message::Binary(data)) => {
+                    tracing::debug!("WebSocket binary audio received: {} bytes", data.len());
+
                     // Check rate limit for audio data
                     {
                         let mut limiter = rate_limiter_main.lock().await;
@@ -619,7 +695,9 @@ impl WebSocketHandler {
                     }
 
                     // Raw binary audio data (PCM)
-                    let _ = audio_tx.send(data).await;
+                    if let Err(e) = audio_tx.send(data).await {
+                        tracing::warn!("Failed to send audio to pipeline: {}", e);
+                    }
                 },
                 Ok(Message::Ping(data)) => {
                     let mut s = sender.lock().await;
@@ -674,11 +752,31 @@ pub async fn create_session(
                 );
             }
 
+            // Build ICE servers from config for frontend
+            let config = state.config.read();
+            let mut ice_servers: Vec<serde_json::Value> = config
+                .server
+                .stun_servers
+                .iter()
+                .map(|url| serde_json::json!({ "urls": url }))
+                .collect();
+
+            // Add TURN servers with credentials
+            for turn in &config.server.turn_servers {
+                ice_servers.push(serde_json::json!({
+                    "urls": turn.url,
+                    "username": turn.username,
+                    "credential": turn.credential
+                }));
+            }
+            drop(config);
+
             Ok(axum::Json(serde_json::json!({
                 "session_id": session.id,
                 "websocket_url": format!("/ws/{}", session.id),
                 "rag_enabled": state.vector_store.is_some(),
                 "tools_wired": true,
+                "ice_servers": ice_servers
             })))
         },
         Err(_) => Err(axum::http::StatusCode::SERVICE_UNAVAILABLE),
