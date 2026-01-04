@@ -18,7 +18,15 @@ use std::path::Path;
 use ndarray::Array3;
 
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::session::{builder::GraphOptimizationLevel, Session};
+#[cfg(feature = "onnx")]
+use ort::value::Tensor;
+
+// Candle ONNX imports (pure Rust ONNX support)
+#[cfg(feature = "candle-onnx")]
+use candle_core::{Device, Tensor};
+#[cfg(feature = "candle-onnx")]
+use candle_onnx::onnx::ModelProto;
 
 use super::decoder::{DecoderConfig, EnhancedDecoder};
 use super::vocab::Vocabulary;
@@ -60,9 +68,11 @@ impl Default for IndicConformerConfig {
             n_fft: 512,
             hop_length: 160, // 10ms at 16kHz
             win_length: 400, // 25ms at 16kHz
-            chunk_ms: 100,
+            // Chunk size: 500ms gives ~5 decoder frames after Conformer downsampling
+            // (100ms chunks only produce 1 frame, insufficient for CTC decoding)
+            chunk_ms: 500,
             enable_partials: true,
-            partial_interval: 10,
+            partial_interval: 1, // Emit partials every chunk for responsive turn detection
             decoder: DecoderConfig::default(),
         }
     }
@@ -94,17 +104,30 @@ struct IndicConformerState {
 
 /// IndicConformer STT implementation
 pub struct IndicConformerStt {
+    // ORT backend (external ONNX Runtime)
     #[cfg(feature = "onnx")]
-    encoder_session: Session,
+    encoder_session: Mutex<Session>,
     #[cfg(feature = "onnx")]
-    decoder_session: Session,
+    decoder_session: Mutex<Session>,
     #[cfg(feature = "onnx")]
-    post_net_session: Option<Session>,
+    post_net_session: Option<Mutex<Session>>,
+
+    // Candle ONNX backend (pure Rust)
+    #[cfg(feature = "candle-onnx")]
+    encoder_model: ModelProto,
+    #[cfg(feature = "candle-onnx")]
+    decoder_model: ModelProto,
+    #[cfg(feature = "candle-onnx")]
+    post_net_model: Option<ModelProto>,
+    #[cfg(feature = "candle-onnx")]
+    device: Device,
 
     config: IndicConformerConfig,
     vocabulary: Vocabulary,
     decoder: EnhancedDecoder,
     mel_filterbank: MelFilterbank,
+    /// Language mask to constrain decoder output to target language tokens
+    language_mask: Vec<bool>,
     state: Mutex<IndicConformerState>,
 }
 
@@ -144,9 +167,15 @@ impl IndicConformerStt {
         let vocab_path = assets_dir.join("vocab.json");
         let vocabulary = Self::load_vocab(&vocab_path, &config.language)?;
 
-        // Create decoder with vocabulary
-        let decoder =
-            EnhancedDecoder::new(vocabulary.clone().into_tokens(), config.decoder.clone());
+        // Load language mask to constrain output to target language
+        let language_mask = Self::load_language_mask(&assets_dir, &config.language)?;
+
+        // Create decoder with vocabulary and correct blank_id
+        // IndicConformer uses joint vocabulary: 22 languages × 256 tokens + 1 shared blank = 5633
+        // The blank token "|" is at position 5632 (the last token)
+        let mut decoder_config = config.decoder.clone();
+        decoder_config.blank_id = 5632; // Blank token position in IndicConformer joint vocab
+        let decoder = EnhancedDecoder::new(vocabulary.clone().into_tokens(), decoder_config);
 
         // Create mel filterbank
         let mel_filterbank = MelFilterbank::new(
@@ -156,13 +185,116 @@ impl IndicConformerStt {
         );
 
         Ok(Self {
-            encoder_session,
-            decoder_session,
-            post_net_session,
+            encoder_session: Mutex::new(encoder_session),
+            decoder_session: Mutex::new(decoder_session),
+            post_net_session: post_net_session.map(Mutex::new),
             config,
             vocabulary,
             decoder,
             mel_filterbank,
+            language_mask,
+            state: Mutex::new(IndicConformerState {
+                audio_buffer: Vec::new(),
+                frame_count: 0,
+                words: Vec::new(),
+                start_time_ms: 0,
+                encoder_state: None,
+                confidence_sum: 0.0,
+                confidence_count: 0,
+                current_word_confidence: 0.0,
+                current_word_frames: 0,
+                total_audio_frames: 0,
+            }),
+        })
+    }
+
+    /// Create IndicConformer using candle-onnx (pure Rust ONNX)
+    ///
+    /// This uses Huggingface Candle's ONNX support which doesn't require
+    /// external ONNX Runtime libraries.
+    #[cfg(feature = "candle-onnx")]
+    pub fn new(
+        model_dir: impl AsRef<Path>,
+        config: IndicConformerConfig,
+    ) -> Result<Self, PipelineError> {
+        let model_dir = model_dir.as_ref();
+        let assets_dir = model_dir.join("assets");
+
+        tracing::info!(
+            model_dir = %model_dir.display(),
+            assets_dir = %assets_dir.display(),
+            "IndicConformer: Starting model loading with candle-onnx"
+        );
+
+        // Load ONNX models using candle-onnx
+        // Use encoder_inline.onnx which has all weights embedded (not external data)
+        let encoder_path = assets_dir.join("encoder_inline.onnx");
+        tracing::debug!(path = %encoder_path.display(), "IndicConformer: Loading encoder...");
+        let encoder_model = candle_onnx::read_file(&encoder_path)
+            .map_err(|e| {
+                tracing::error!(error = %e, path = %encoder_path.display(), "IndicConformer: Failed to load encoder");
+                PipelineError::Model(format!("Failed to load encoder: {}", e))
+            })?;
+        tracing::info!("IndicConformer: Encoder loaded successfully");
+
+        let decoder_path = assets_dir.join("ctc_decoder.onnx");
+        tracing::debug!(path = %decoder_path.display(), "IndicConformer: Loading CTC decoder...");
+        let decoder_model = candle_onnx::read_file(&decoder_path)
+            .map_err(|e| {
+                tracing::error!(error = %e, path = %decoder_path.display(), "IndicConformer: Failed to load CTC decoder");
+                PipelineError::Model(format!("Failed to load CTC decoder: {}", e))
+            })?;
+        tracing::info!("IndicConformer: CTC decoder loaded successfully");
+
+        // Load language-specific post-net (optional)
+        let post_net_path = assets_dir.join(format!("joint_post_net_{}.onnx", config.language));
+        let post_net_model = if post_net_path.exists() {
+            Some(candle_onnx::read_file(&post_net_path)
+                .map_err(|e| PipelineError::Model(format!("Failed to load post-net: {}", e)))?)
+        } else {
+            None
+        };
+
+        // Load vocabulary
+        let vocab_path = assets_dir.join("vocab.json");
+        let vocabulary = Self::load_vocab(&vocab_path, &config.language)?;
+
+        // Load language mask to constrain output to target language
+        let language_mask = Self::load_language_mask(&assets_dir, &config.language)?;
+
+        // Create decoder with vocabulary and correct blank_id
+        // IndicConformer uses joint vocabulary: 22 languages × 256 tokens + 1 shared blank = 5633
+        // The blank token "|" is at position 5632 (the last token)
+        let mut decoder_config = config.decoder.clone();
+        decoder_config.blank_id = 5632; // Blank token position in IndicConformer joint vocab
+        let decoder = EnhancedDecoder::new(vocabulary.clone().into_tokens(), decoder_config);
+
+        // Create mel filterbank
+        let mel_filterbank = MelFilterbank::new(
+            config.sample_rate.as_u32() as usize,
+            config.n_fft,
+            config.n_mels,
+        );
+
+        // Use CPU device (can be extended to support CUDA/Metal)
+        let device = Device::Cpu;
+
+        tracing::info!(
+            language = %config.language,
+            encoder = %encoder_path.display(),
+            "Loaded IndicConformer models using candle-onnx (pure Rust)"
+        );
+
+        Ok(Self {
+            encoder_model,
+            decoder_model,
+            post_net_model,
+            device,
+            config,
+            vocabulary,
+            decoder,
+            mel_filterbank,
+            language_mask,
             state: Mutex::new(IndicConformerState {
                 audio_buffer: Vec::new(),
                 frame_count: 0,
@@ -179,7 +311,7 @@ impl IndicConformerStt {
     }
 
     /// Create IndicConformer without ONNX (stub for testing)
-    #[cfg(not(feature = "onnx"))]
+    #[cfg(not(any(feature = "onnx", feature = "candle-onnx")))]
     pub fn new(
         _model_dir: impl AsRef<Path>,
         config: IndicConformerConfig,
@@ -188,7 +320,7 @@ impl IndicConformerStt {
     }
 
     /// Create a simple stub for testing
-    #[cfg(not(feature = "onnx"))]
+    #[cfg(not(any(feature = "onnx", feature = "candle-onnx")))]
     pub fn simple(config: IndicConformerConfig) -> Result<Self, PipelineError> {
         let vocabulary = Vocabulary::default_indicconformer();
         let decoder = EnhancedDecoder::simple(config.decoder.clone());
@@ -203,6 +335,7 @@ impl IndicConformerStt {
             vocabulary,
             decoder,
             mel_filterbank,
+            language_mask: Vec::new(), // No mask for simple/stub mode
             state: Mutex::new(IndicConformerState {
                 audio_buffer: Vec::new(),
                 frame_count: 0,
@@ -230,21 +363,87 @@ impl IndicConformerStt {
             .map_err(|e| PipelineError::Model(format!("Failed to load {}: {}", path.display(), e)))
     }
 
-    fn load_vocab(path: &Path, language: &str) -> Result<Vocabulary, PipelineError> {
+    fn load_vocab(path: &Path, _language: &str) -> Result<Vocabulary, PipelineError> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| PipelineError::Io(format!("Failed to read vocab: {}", e)))?;
 
         let vocab_map: HashMap<String, Vec<String>> = serde_json::from_str(&content)
             .map_err(|e| PipelineError::Stt(format!("Failed to parse vocab: {}", e)))?;
 
-        let tokens = vocab_map
-            .get(language)
-            .ok_or_else(|| {
-                PipelineError::Stt(format!("Language '{}' not found in vocab", language))
-            })?
-            .clone();
+        // IndicConformer uses a JOINT vocabulary across all 22 languages.
+        // Each language has 256 unique tokens + 1 shared "|" (pipe/blank) token.
+        // Total vocab: 22 * 256 + 1 = 5633 tokens (matching language_masks.json).
+        // Language order: as, bn, brx, doi, kok, gu, hi, kn, ks, mai, ml, mr, mni, ne, or, pa, sa, sat, sd, ta, te, ur
+        const LANGUAGE_ORDER: &[&str] = &[
+            "as", "bn", "brx", "doi", "kok", "gu", "hi", "kn", "ks", "mai",
+            "ml", "mr", "mni", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur"
+        ];
 
-        Ok(Vocabulary::from_tokens(tokens))
+        let mut all_tokens = Vec::new();
+        for lang in LANGUAGE_ORDER {
+            if let Some(lang_tokens) = vocab_map.get(*lang) {
+                // Add first 256 tokens from each language (excluding the final "|" which is shared)
+                let tokens_to_add = lang_tokens.len().min(256);
+                all_tokens.extend(lang_tokens.iter().take(tokens_to_add).cloned());
+            }
+        }
+
+        // Add the shared "|" (blank/pipe) token at the end
+        all_tokens.push("|".to_string());
+
+        tracing::info!(
+            joint_vocab_size = all_tokens.len(),
+            languages = LANGUAGE_ORDER.len(),
+            expected_size = 5633,
+            "IndicConformer: Loaded joint vocabulary"
+        );
+
+        Ok(Vocabulary::from_tokens(all_tokens))
+    }
+
+    /// Load language mask from language_masks.json
+    ///
+    /// The language mask constrains decoder output to only tokens valid for the target language.
+    fn load_language_mask(assets_dir: &Path, language: &str) -> Result<Vec<bool>, PipelineError> {
+        let mask_path = assets_dir.join("language_masks.json");
+
+        if !mask_path.exists() {
+            tracing::warn!("language_masks.json not found, decoder will use all tokens");
+            return Ok(Vec::new());
+        }
+
+        let content = std::fs::read_to_string(&mask_path)
+            .map_err(|e| PipelineError::Io(format!("Failed to read language masks: {}", e)))?;
+
+        let masks: HashMap<String, Vec<bool>> = serde_json::from_str(&content)
+            .map_err(|e| PipelineError::Stt(format!("Failed to parse language masks: {}", e)))?;
+
+        let mask = masks.get(language).cloned().unwrap_or_else(|| {
+            tracing::warn!(language = %language, "No mask found for language, using all tokens");
+            Vec::new()
+        });
+
+        tracing::info!(
+            language = %language,
+            mask_size = mask.len(),
+            true_count = mask.iter().filter(|&&x| x).count(),
+            "IndicConformer: Loaded language mask"
+        );
+
+        Ok(mask)
+    }
+
+    /// Apply language mask to logits, setting non-language tokens to -inf
+    fn apply_language_mask(logits: &mut [f32], mask: &[bool]) {
+        if mask.is_empty() || mask.len() != logits.len() {
+            return;
+        }
+
+        for (i, &allowed) in mask.iter().enumerate() {
+            if !allowed {
+                logits[i] = f32::NEG_INFINITY;
+            }
+        }
     }
 
     /// P0 FIX: Extract confidence from model logits using softmax
@@ -311,24 +510,74 @@ impl IndicConformerStt {
         state.audio_buffer.extend_from_slice(audio);
 
         let chunk_size = self.chunk_samples();
-        if state.audio_buffer.len() < chunk_size {
+        let buffer_len = state.audio_buffer.len();
+
+        // DIAGNOSTIC: Log buffer accumulation
+        if buffer_len % (chunk_size * 5) < audio.len() {
+            tracing::debug!(
+                buffer_len = buffer_len,
+                chunk_size = chunk_size,
+                audio_in = audio.len(),
+                total_frames = state.total_audio_frames,
+                "IndicConformer: Audio buffer status"
+            );
+        }
+
+        if buffer_len < chunk_size {
             return Ok(None);
         }
 
         // Process full chunks
+        let mut chunks_processed = 0;
         while state.audio_buffer.len() >= chunk_size {
             let chunk: Vec<f32> = state.audio_buffer.drain(..chunk_size).collect();
+            tracing::debug!(
+                chunk_size = chunk_size,
+                remaining_buffer = state.audio_buffer.len(),
+                "IndicConformer: About to process chunk"
+            );
             drop(state);
 
             self.process_chunk_internal(&chunk)?;
+            chunks_processed += 1;
 
+            tracing::debug!(
+                chunks_processed = chunks_processed,
+                "IndicConformer: Chunk processed, re-acquiring state lock"
+            );
             state = self.state.lock();
+            tracing::debug!(
+                buffer_len = state.audio_buffer.len(),
+                "IndicConformer: State lock acquired"
+            );
         }
+
+        // DIAGNOSTIC: Log chunk processing
+        tracing::debug!(
+            chunks_processed = chunks_processed,
+            frame_count = state.frame_count,
+            partial_interval = self.config.partial_interval,
+            enable_partials = self.config.enable_partials,
+            words_detected = state.words.len(),
+            "IndicConformer: Chunk processing complete"
+        );
 
         if self.config.enable_partials && state.frame_count >= self.config.partial_interval {
             state.frame_count = 0;
             drop(state);
-            return Ok(self.get_partial());
+            let partial = self.get_partial();
+
+            // DIAGNOSTIC: Log partial emission
+            match &partial {
+                Some(p) => tracing::info!(
+                    text = %p.text,
+                    confidence = p.confidence,
+                    words = p.words.len(),
+                    "IndicConformer: Emitting partial transcript"
+                ),
+                None => tracing::debug!("IndicConformer: No partial to emit (decoder has no text)"),
+            }
+            return Ok(partial);
         }
 
         Ok(None)
@@ -337,71 +586,288 @@ impl IndicConformerStt {
     /// Process a single audio chunk
     #[cfg(feature = "onnx")]
     fn process_chunk_internal(&self, audio: &[f32]) -> Result<(), PipelineError> {
-        // Extract mel spectrogram
+        let start_time = std::time::Instant::now();
+
+        // Extract mel spectrogram - returns flat vec in [time, n_mels] order
         let mel = self.mel_filterbank.extract(audio);
+        let mel_time = start_time.elapsed();
+        let n_frames = mel.len() / self.config.n_mels;
 
-        // Prepare input tensor [batch, time, n_mels]
-        let mel_input =
-            Array3::from_shape_vec((1, mel.len() / self.config.n_mels, self.config.n_mels), mel)
-                .map_err(|e| PipelineError::Stt(format!("Failed to reshape mel: {}", e)))?;
+        // Model expects [batch, n_mels, time] shape
+        // mel is in row-major [time][n_mels] order, need to transpose to [n_mels][time]
+        // Build the transposed array directly for correct memory layout
+        let n_mels = self.config.n_mels;
+        let mut transposed = vec![0.0f32; mel.len()];
+        for t in 0..n_frames {
+            for m in 0..n_mels {
+                // mel[t * n_mels + m] -> transposed[m * n_frames + t]
+                transposed[m * n_frames + t] = mel[t * n_mels + m];
+            }
+        }
 
-        // Run encoder
-        let encoder_outputs = self
-            .encoder_session
-            .run(
-                ort::inputs![
-                    "audio_signal" => mel_input.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+        // Create array with shape [1, n_mels, time]
+        let mel_input = Array3::from_shape_vec((1, n_mels, n_frames), transposed)
+            .map_err(|e| PipelineError::Stt(format!("Failed to create mel tensor: {}", e)))?;
+
+        // Create length tensor [batch_size] - required by encoder
+        let length_input = ndarray::Array1::from_vec(vec![n_frames as i64]);
+
+        // Run encoder - convert ndarray to ort Tensor
+        let encoder_start = std::time::Instant::now();
+        let mut encoder = self.encoder_session.lock();
+        let encoder_outputs = encoder
+            .run(ort::inputs![
+                "audio_signal" => Tensor::from_array(mel_input).map_err(|e| PipelineError::Model(e.to_string()))?,
+                "length" => Tensor::from_array(length_input).map_err(|e| PipelineError::Model(e.to_string()))?,
+            ])
             .map_err(|e| PipelineError::Model(format!("Encoder failed: {}", e)))?;
+        let encoder_time = encoder_start.elapsed();
 
-        // Get encoder output
+        // Get encoder output - model uses "outputs" not "encoded"
         let encoded = encoder_outputs
-            .get("encoded")
-            .ok_or_else(|| PipelineError::Model("Missing encoded output".to_string()))?
-            .try_extract_tensor::<f32>()
+            .get("outputs")
+            .ok_or_else(|| PipelineError::Model("Missing 'outputs' from encoder".to_string()))?
+            .try_extract_array::<f32>()
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
         // Run CTC decoder
-        let decoder_outputs = self
-            .decoder_session
-            .run(
-                ort::inputs![
-                    "encoder_output" => encoded.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+        let decoder_start = std::time::Instant::now();
+        let mut decoder = self.decoder_session.lock();
+        let decoder_outputs = decoder
+            .run(ort::inputs![
+                "encoder_output" => Tensor::from_array(encoded.to_owned()).map_err(|e| PipelineError::Model(e.to_string()))?,
+            ])
             .map_err(|e| PipelineError::Model(format!("Decoder failed: {}", e)))?;
+        let decoder_time = decoder_start.elapsed();
 
-        // Get logits
-        let logits = decoder_outputs
-            .get("logits")
-            .or_else(|| decoder_outputs.get("log_probs"))
-            .ok_or_else(|| PipelineError::Model("Missing logits output".to_string()))?
-            .try_extract_tensor::<f32>()
-            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        tracing::debug!(
+            mel_ms = mel_time.as_millis() as u64,
+            encoder_ms = encoder_time.as_millis() as u64,
+            decoder_ms = decoder_time.as_millis() as u64,
+            total_ms = start_time.elapsed().as_millis() as u64,
+            "IndicConformer: ONNX inference timing"
+        );
 
-        let logits_view = logits.view();
-        let shape = logits_view.shape();
+        // Get logits - try various output names (model uses "logprobs")
+        let logits = if let Some(output) = decoder_outputs.get("logprobs") {
+            output.try_extract_array::<f32>()
+                .map_err(|e| PipelineError::Model(e.to_string()))?
+        } else if let Some(output) = decoder_outputs.get("logits") {
+            output.try_extract_array::<f32>()
+                .map_err(|e| PipelineError::Model(e.to_string()))?
+        } else if let Some(output) = decoder_outputs.get("log_probs") {
+            output.try_extract_array::<f32>()
+                .map_err(|e| PipelineError::Model(e.to_string()))?
+        } else {
+            return Err(PipelineError::Model("Missing logits output".to_string()));
+        };
+
+        let shape = logits.shape().to_vec();
 
         // Process each frame through enhanced decoder
         if shape.len() >= 2 {
             let n_frames = shape[1];
             let vocab_size = if shape.len() > 2 { shape[2] } else { shape[1] };
 
+            // DIAGNOSTIC: Log decoder input dimensions
+            let frame_count = self.state.lock().frame_count;
+            if frame_count % 5 == 0 {
+                tracing::debug!(
+                    n_frames = n_frames,
+                    vocab_size = vocab_size,
+                    shape = ?shape,
+                    chunk = frame_count,
+                    "IndicConformer: Processing decoder output frames"
+                );
+            }
+
             for frame_idx in 0..n_frames {
-                let frame_logits: Vec<f32> = if shape.len() > 2 {
+                let mut frame_logits: Vec<f32> = if shape.len() > 2 {
                     (0..vocab_size)
-                        .map(|v| logits_view[[0, frame_idx, v]])
+                        .map(|v| logits[[0, frame_idx, v]])
                         .collect()
                 } else {
                     (0..vocab_size)
-                        .map(|v| logits_view[[frame_idx, v]])
+                        .map(|v| logits[[frame_idx, v]])
                         .collect()
                 };
 
+                // Apply language mask to constrain decoder to target language tokens
+                Self::apply_language_mask(&mut frame_logits, &self.language_mask);
+
                 // P0 FIX: Extract actual confidence from logits
+                let frame_confidence = Self::extract_confidence_from_logits(&frame_logits);
+
+                // DIAGNOSTIC: Log top token for first few frames of each chunk
+                if frame_idx < 3 && frame_count % 3 == 0 {
+                    let top_idx = frame_logits.iter().enumerate()
+                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    let top_token = self.vocabulary.get(top_idx).cloned().unwrap_or_else(|| format!("?{}", top_idx));
+                    tracing::trace!(
+                        chunk = frame_count,
+                        frame = frame_idx,
+                        top_token = %top_token,
+                        top_idx = top_idx,
+                        confidence = format!("{:.2}", frame_confidence),
+                        "IndicConformer: Frame token"
+                    );
+                }
+
+                // Update running confidence stats
+                {
+                    let mut state = self.state.lock();
+                    state.confidence_sum += frame_confidence;
+                    state.confidence_count += 1;
+                    state.current_word_confidence += frame_confidence;
+                    state.current_word_frames += 1;
+                    state.total_audio_frames += 1;
+                }
+
+                if let Some(word) = self.decoder.process_frame(&frame_logits)? {
+                    tracing::info!(word = %word, "IndicConformer: Word detected by decoder");
+                    self.add_word_with_confidence(&word, frame_confidence);
+                }
+            }
+        }
+
+        let mut state = self.state.lock();
+        state.frame_count += 1;
+
+        // DIAGNOSTIC: Log current decoder state periodically
+        if state.frame_count % 5 == 0 {
+            let current_text = self.decoder.current_best();
+            tracing::debug!(
+                chunk = state.frame_count,
+                total_frames = state.total_audio_frames,
+                words_detected = state.words.len(),
+                current_text = %current_text,
+                "IndicConformer: Chunk complete"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Process a single audio chunk using candle-onnx
+    #[cfg(feature = "candle-onnx")]
+    fn process_chunk_internal(&self, audio: &[f32]) -> Result<(), PipelineError> {
+        use std::collections::HashMap;
+
+        let frame_count = self.state.lock().frame_count;
+        if frame_count % 50 == 0 {
+            tracing::debug!(
+                audio_len = audio.len(),
+                frame = frame_count,
+                "IndicConformer: Processing audio chunk"
+            );
+        }
+
+        // Extract mel spectrogram
+        let mel = self.mel_filterbank.extract(audio);
+        let n_frames = mel.len() / self.config.n_mels;
+
+        if frame_count % 50 == 0 {
+            tracing::debug!(
+                mel_len = mel.len(),
+                n_frames = n_frames,
+                n_mels = self.config.n_mels,
+                "IndicConformer: Extracted mel spectrogram"
+            );
+        }
+
+        // Create input tensor [batch, n_mels, time] - ONNX model expects this shape order
+        // The mel spectrogram is extracted as [time, n_mels], so we need to transpose
+        let mel_tensor = Tensor::from_vec(
+            mel.clone(),
+            (n_frames, self.config.n_mels),
+            &self.device,
+        )
+        .and_then(|t| t.transpose(0, 1)) // [n_mels, time]
+        .and_then(|t| t.unsqueeze(0))    // [1, n_mels, time]
+        .map_err(|e| {
+            tracing::error!(error = %e, "IndicConformer: Failed to create mel tensor");
+            PipelineError::Stt(format!("Failed to create mel tensor: {}", e))
+        })?;
+
+        // Create length tensor (required by encoder)
+        let length_tensor = Tensor::from_vec(
+            vec![n_frames as i64],
+            (1,),
+            &self.device,
+        )
+        .map_err(|e| PipelineError::Stt(format!("Failed to create length tensor: {}", e)))?;
+
+        // Run encoder
+        let mut encoder_inputs = HashMap::new();
+        encoder_inputs.insert("audio_signal".to_string(), mel_tensor);
+        encoder_inputs.insert("length".to_string(), length_tensor);
+
+        let encoder_outputs = candle_onnx::simple_eval(&self.encoder_model, encoder_inputs)
+            .map_err(|e| {
+                tracing::error!(error = %e, "IndicConformer: Encoder inference failed");
+                PipelineError::Model(format!("Encoder inference failed: {}", e))
+            })?;
+
+        // Get encoder output (model uses "outputs" not "encoded")
+        let encoded = encoder_outputs
+            .get("outputs")
+            .ok_or_else(|| {
+                let keys: Vec<_> = encoder_outputs.keys().collect();
+                tracing::error!(available_keys = ?keys, "IndicConformer: Missing encoder output 'outputs'");
+                PipelineError::Model(format!("Missing 'outputs' from encoder. Available: {:?}", keys))
+            })?;
+
+        // Run CTC decoder
+        let mut decoder_inputs = HashMap::new();
+        decoder_inputs.insert("encoder_output".to_string(), encoded.clone());
+
+        let decoder_outputs = candle_onnx::simple_eval(&self.decoder_model, decoder_inputs)
+            .map_err(|e| PipelineError::Model(format!("CTC decoder inference failed: {}", e)))?;
+
+        // Get logprobs (model uses "logprobs")
+        let logits = decoder_outputs
+            .get("logprobs")
+            .or_else(|| decoder_outputs.get("logits"))
+            .or_else(|| decoder_outputs.get("log_probs"))
+            .ok_or_else(|| {
+                let keys: Vec<_> = decoder_outputs.keys().collect();
+                tracing::error!(available_keys = ?keys, "IndicConformer: Missing decoder output");
+                PipelineError::Model(format!("Missing logprobs from decoder. Available: {:?}", keys))
+            })?;
+
+        // Get shape and convert to Vec for processing
+        let shape = logits.dims();
+        let logits_flat: Vec<f32> = logits
+            .flatten_all()
+            .map_err(|e| PipelineError::Model(format!("Failed to flatten logits: {}", e)))?
+            .to_vec1()
+            .map_err(|e| PipelineError::Model(format!("Failed to convert logits: {}", e)))?;
+
+        // Process each frame through enhanced decoder
+        if shape.len() >= 2 {
+            let n_output_frames = shape[1];
+            let vocab_size = if shape.len() > 2 { shape[2] } else { shape[1] };
+
+            for frame_idx in 0..n_output_frames {
+                let frame_start = if shape.len() > 2 {
+                    frame_idx * vocab_size
+                } else {
+                    frame_idx * vocab_size
+                };
+                let frame_end = frame_start + vocab_size;
+
+                let mut frame_logits: Vec<f32> = if frame_end <= logits_flat.len() {
+                    logits_flat[frame_start..frame_end].to_vec()
+                } else {
+                    continue; // Skip incomplete frames
+                };
+
+                // Apply language mask to constrain decoder to target language tokens
+                Self::apply_language_mask(&mut frame_logits, &self.language_mask);
+
+                // Extract confidence from logits
                 let frame_confidence = Self::extract_confidence_from_logits(&frame_logits);
 
                 // Update running confidence stats
@@ -425,8 +891,8 @@ impl IndicConformerStt {
         Ok(())
     }
 
-    /// Process a single audio chunk (stub when ONNX disabled)
-    #[cfg(not(feature = "onnx"))]
+    /// Process a single audio chunk (stub when neither ONNX backend is enabled)
+    #[cfg(not(any(feature = "onnx", feature = "candle-onnx")))]
     fn process_chunk_internal(&self, _audio: &[f32]) -> Result<(), PipelineError> {
         let mut state = self.state.lock();
         state.frame_count += 1;
@@ -515,12 +981,16 @@ impl IndicConformerStt {
 
     /// Finalize and get final result
     pub fn finalize(&self) -> TranscriptResult {
+        // DIAGNOSTIC: Log finalize entry
+        let finalize_start = std::time::Instant::now();
+
         // Process remaining audio
         let remaining: Vec<f32> = {
             let mut state = self.state.lock();
             state.audio_buffer.drain(..).collect()
         };
 
+        let remaining_len = remaining.len();
         if !remaining.is_empty() {
             let chunk_size = self.chunk_samples();
             let mut padded = remaining;
@@ -545,6 +1015,19 @@ impl IndicConformerStt {
                 0.5 // Neutral confidence when no data
             }
         };
+
+        // DIAGNOSTIC: Log finalize results
+        tracing::info!(
+            text = %text,
+            text_len = text.len(),
+            words_count = words.len(),
+            confidence = format!("{:.2}", confidence),
+            total_frames = state.total_audio_frames,
+            confidence_count = state.confidence_count,
+            remaining_audio = remaining_len,
+            finalize_ms = finalize_start.elapsed().as_millis() as u64,
+            "IndicConformer: Finalize complete"
+        );
 
         TranscriptResult {
             text,
@@ -620,15 +1103,12 @@ impl IndicConformerStt {
 
 #[async_trait::async_trait]
 impl SttBackend for IndicConformerStt {
-    async fn process_chunk(
-        &mut self,
-        audio: &[f32],
-    ) -> Result<Option<TranscriptResult>, PipelineError> {
-        self.process(audio)
+    fn process(&mut self, audio: &[f32]) -> Result<Option<TranscriptResult>, PipelineError> {
+        IndicConformerStt::process(self, audio)
     }
 
-    async fn finalize(&mut self) -> Result<TranscriptResult, PipelineError> {
-        Ok(IndicConformerStt::finalize(self))
+    fn finalize_sync(&mut self) -> TranscriptResult {
+        IndicConformerStt::finalize(self)
     }
 
     fn reset(&mut self) {
@@ -759,7 +1239,11 @@ impl MelFilterbank {
         }
     }
 
-    /// Extract mel spectrogram from audio (batch mode)
+    /// Extract mel spectrogram from audio (batch mode) with per-utterance normalization
+    ///
+    /// NeMo/IndicConformer expects normalized features:
+    /// 1. Log mel spectrogram computation
+    /// 2. Per-utterance mean subtraction and variance normalization
     pub fn extract(&self, audio: &[f32]) -> Vec<f32> {
         let n_frames = (audio.len().saturating_sub(self.n_fft)) / self.hop_length + 1;
 
@@ -793,7 +1277,43 @@ impl MelFilterbank {
             }
         }
 
+        // Apply per-utterance normalization (CMVN-style)
+        // This is critical for IndicConformer/NeMo models
+        Self::normalize_features(&mut mel_spec, self.n_mels, n_frames);
+
         mel_spec
+    }
+
+    /// Apply per-utterance normalization to mel features
+    ///
+    /// Computes per-channel mean and standard deviation, then normalizes
+    fn normalize_features(features: &mut [f32], n_mels: usize, n_frames: usize) {
+        if n_frames == 0 {
+            return;
+        }
+
+        // Compute per-channel mean and variance
+        for mel_idx in 0..n_mels {
+            let mut sum = 0.0f32;
+            let mut sum_sq = 0.0f32;
+
+            for frame_idx in 0..n_frames {
+                let idx = frame_idx * n_mels + mel_idx;
+                let val = features[idx];
+                sum += val;
+                sum_sq += val * val;
+            }
+
+            let mean = sum / n_frames as f32;
+            let variance = (sum_sq / n_frames as f32) - (mean * mean);
+            let std = (variance + 1e-10).sqrt();
+
+            // Normalize this channel
+            for frame_idx in 0..n_frames {
+                let idx = frame_idx * n_mels + mel_idx;
+                features[idx] = (features[idx] - mean) / std;
+            }
+        }
     }
 
     /// Streaming mel extraction - add audio and get new mel frames

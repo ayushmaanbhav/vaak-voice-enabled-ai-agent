@@ -28,6 +28,8 @@ pub struct DecoderConfig {
     pub stability_window: usize,
     /// Enable named entity boosting
     pub entity_boosting: bool,
+    /// Blank token ID for CTC decoding (default 0, IndicConformer uses 5632)
+    pub blank_id: u32,
 }
 
 impl Default for DecoderConfig {
@@ -40,6 +42,7 @@ impl Default for DecoderConfig {
             stability_threshold: 0.8,
             stability_window: 5,
             entity_boosting: true,
+            blank_id: 0, // Default for most CTC models; IndicConformer uses 5632
         }
     }
 }
@@ -134,6 +137,23 @@ impl EnhancedDecoder {
         // Get top-k tokens from logits
         let top_k = self.get_top_k(logits, self.config.beam_width * 2);
 
+        // DIAGNOSTIC: Log top tokens every 5 frames
+        let frame_num = frame_history.len();
+        if frame_num % 5 == 0 || frame_num < 3 {
+            let top_3: Vec<_> = top_k.iter().take(3).map(|(id, prob)| {
+                let text = self.vocab.get(*id as usize).cloned().unwrap_or_else(|| format!("?{}", id));
+                (*id, text, *prob)
+            }).collect();
+            let current_text = beam.first().map(|h| h.text.as_str()).unwrap_or("");
+            tracing::debug!(
+                frame = frame_num,
+                top_tokens = ?top_3,
+                current_text = %current_text,
+                beam_size = beam.len(),
+                "Decoder: Frame analysis"
+            );
+        }
+
         // Expand beam
         let mut new_beam = Vec::with_capacity(self.config.beam_width * 2);
 
@@ -143,7 +163,7 @@ impl EnhancedDecoder {
                 new_hyp.log_prob += log_prob;
 
                 // Skip blank token (CTC)
-                if token_id == 0 {
+                if token_id == self.config.blank_id {
                     new_beam.push(new_hyp);
                     continue;
                 }
@@ -157,9 +177,19 @@ impl EnhancedDecoder {
                 // Add token
                 new_hyp.tokens.push(token_id);
                 if let Some(token_text) = self.vocab.get(token_id as usize) {
-                    // Handle word pieces
-                    if token_text.starts_with("##") || token_text.starts_with("▁") {
+                    // Handle word pieces - use chars().skip() for proper Unicode handling
+                    // "##" prefix (BERT-style) and "▁" prefix (SentencePiece) indicate continuation
+                    if token_text.starts_with("##") {
+                        // BERT-style: "##" is 2 ASCII chars = 2 bytes
                         new_hyp.text.push_str(&token_text[2..]);
+                    } else if token_text.starts_with('▁') {
+                        // SentencePiece: "▁" is U+2581 = 3 bytes in UTF-8
+                        // Skip the first char and add the rest (with leading space for word boundary)
+                        let rest: String = token_text.chars().skip(1).collect();
+                        if !new_hyp.text.is_empty() {
+                            new_hyp.text.push(' ');
+                        }
+                        new_hyp.text.push_str(&rest);
                     } else {
                         if !new_hyp.text.is_empty() && !new_hyp.text.ends_with(' ') {
                             new_hyp.text.push(' ');
@@ -198,6 +228,11 @@ impl EnhancedDecoder {
         }
 
         *beam = new_beam;
+
+        // Drop locks before calling check_stable_partial to avoid deadlock
+        // (check_stable_partial needs to acquire its own locks)
+        drop(beam);
+        drop(frame_history);
 
         // Check for stable partial
         self.check_stable_partial()
@@ -297,14 +332,26 @@ impl EnhancedDecoder {
         // Get best hypothesis
         if let Some(best) = beam.first() {
             let new_text = &best.text;
-            if new_text.len() > stable_prefix.len() {
+            // P0 FIX: Use character count instead of byte length to avoid UTF-8 boundary panics
+            let stable_prefix_chars = stable_prefix.chars().count();
+            let new_text_chars = new_text.chars().count();
+
+            if new_text_chars > stable_prefix_chars {
                 // Find stable boundary (last space before current position)
-                let diff_start = stable_prefix.len();
-                if let Some(space_pos) = new_text[..diff_start.max(1)].rfind(' ') {
-                    let stable_end = space_pos + 1;
-                    if stable_end > stable_prefix.len() {
-                        let emission = new_text[stable_prefix.len()..stable_end].to_string();
-                        *stable_prefix = new_text[..stable_end].to_string();
+                // Use fully character-based operations to avoid UTF-8 boundary panics
+                let prefix_chars: Vec<char> = new_text.chars().take(stable_prefix_chars.max(1)).collect();
+
+                // Find last space index (in characters, not bytes)
+                if let Some(space_char_idx) = prefix_chars.iter().rposition(|&c| c == ' ') {
+                    let space_end_idx = space_char_idx + 1;
+                    if space_end_idx > stable_prefix_chars {
+                        // Extract emission using char-based slicing
+                        let emission: String = new_text
+                            .chars()
+                            .skip(stable_prefix_chars)
+                            .take(space_end_idx - stable_prefix_chars)
+                            .collect();
+                        *stable_prefix = new_text.chars().take(space_end_idx).collect();
                         return Ok(Some(emission));
                     }
                 }
