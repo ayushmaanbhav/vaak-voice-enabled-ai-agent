@@ -14,12 +14,16 @@
 use std::sync::Arc;
 
 use crate::{
-    HybridRetriever, RagError, RerankerConfig, RetrieverConfig, SearchResult, VectorStore,
+    query_expansion::QueryExpander, HybridRetriever, RagError, RerankerConfig, RetrieverConfig,
+    SearchResult, VectorStore,
 };
 
 use voice_agent_llm::{LlmBackend, Message, Role};
 
 /// Configuration for agentic RAG
+///
+/// For small models (< 3B params), disable LLM-based operations
+/// and rely on rule-based query expansion for better latency.
 #[derive(Debug, Clone)]
 pub struct AgenticRagConfig {
     /// Minimum sufficiency score to skip rewrite (0.0-1.0)
@@ -36,6 +40,18 @@ pub struct AgenticRagConfig {
 
     /// Final top-k after reranking
     pub final_top_k: usize,
+
+    /// Enable LLM-based query rewriting (disable for small models)
+    /// When false, only rule-based query expansion is used.
+    pub llm_query_rewriting: bool,
+
+    /// Enable LLM-based sufficiency checking (disable for small models)
+    /// When false, heuristic scoring is used.
+    pub llm_sufficiency_check: bool,
+
+    /// Enable rule-based query expansion (always recommended)
+    /// Uses domain synonyms, Hindi transliteration, and term expansion.
+    pub use_rule_based_expansion: bool,
 }
 
 impl Default for AgenticRagConfig {
@@ -49,7 +65,47 @@ impl Default for AgenticRagConfig {
             enabled: true,
             initial_top_k: 10,
             final_top_k: rag::DEFAULT_TOP_K,
+            // LLM operations enabled by default (large models)
+            llm_query_rewriting: true,
+            llm_sufficiency_check: true,
+            // Rule-based expansion always enabled
+            use_rule_based_expansion: true,
         }
+    }
+}
+
+impl AgenticRagConfig {
+    /// Create config optimized for small models (< 3B params)
+    ///
+    /// Disables LLM-based operations for lower latency:
+    /// - No LLM query rewriting (uses rule-based expansion only)
+    /// - No LLM sufficiency checking (uses heuristic scoring)
+    /// - Single-shot retrieval (max_iterations = 0)
+    pub fn for_small_model() -> Self {
+        use voice_agent_config::constants::rag;
+
+        Self {
+            sufficiency_threshold: rag::SUFFICIENCY_THRESHOLD as f32,
+            max_iterations: 0, // Single-shot retrieval
+            enabled: true,
+            initial_top_k: 10,
+            final_top_k: rag::DEFAULT_TOP_K,
+            // Disable LLM operations for small models
+            llm_query_rewriting: false,
+            llm_sufficiency_check: false,
+            // Keep rule-based expansion
+            use_rule_based_expansion: true,
+        }
+    }
+
+    /// Check if LLM operations are enabled
+    pub fn uses_llm(&self) -> bool {
+        self.llm_query_rewriting || self.llm_sufficiency_check
+    }
+
+    /// Check if this is configured for single-shot retrieval
+    pub fn is_single_shot(&self) -> bool {
+        self.max_iterations == 0 || !self.llm_query_rewriting
     }
 }
 
@@ -86,10 +142,15 @@ pub struct AgenticSearchResult {
 }
 
 /// Agentic retriever with multi-step refinement
+///
+/// Supports two modes based on configuration:
+/// 1. **Large Model Mode**: Full iterative refinement with LLM query rewriting
+/// 2. **Small Model Mode**: Single-shot retrieval with rule-based expansion only
 pub struct AgenticRetriever {
     config: AgenticRagConfig,
     retriever: HybridRetriever,
     query_rewriter: Option<QueryRewriter>,
+    query_expander: QueryExpander,
     sufficiency_checker: SufficiencyChecker,
 }
 
@@ -109,6 +170,7 @@ impl AgenticRetriever {
             config,
             retriever,
             query_rewriter: None,
+            query_expander: QueryExpander::gold_loan(),
             sufficiency_checker: SufficiencyChecker::new(),
         }
     }
@@ -119,50 +181,100 @@ impl AgenticRetriever {
             config,
             retriever,
             query_rewriter: None,
+            query_expander: QueryExpander::gold_loan(),
             sufficiency_checker: SufficiencyChecker::new(),
         }
     }
 
-    /// Set LLM for query rewriting
+    /// Set LLM for query rewriting (only used if llm_query_rewriting is enabled)
     pub fn with_llm(mut self, llm: Arc<dyn LlmBackend>) -> Self {
-        self.query_rewriter = Some(QueryRewriter::new(llm));
+        // Only set query rewriter if LLM rewriting is enabled
+        if self.config.llm_query_rewriting {
+            self.query_rewriter = Some(QueryRewriter::new(llm));
+        }
+        self
+    }
+
+    /// Set a custom query expander
+    pub fn with_query_expander(mut self, expander: QueryExpander) -> Self {
+        self.query_expander = expander;
         self
     }
 
     /// Multi-step retrieval with configurable complexity
     ///
     /// This implements the agentic RAG flow:
-    /// 1. Initial hybrid retrieval
-    /// 2. Check sufficiency of results
-    /// 3. If insufficient and LLM available, rewrite query
-    /// 4. Re-retrieve with rewritten query
-    /// 5. Repeat up to max_iterations
-    /// 6. Return final results
+    /// 1. Apply rule-based query expansion (if enabled)
+    /// 2. Initial hybrid retrieval
+    /// 3. Check sufficiency of results
+    /// 4. If insufficient and LLM rewriting enabled, rewrite query
+    /// 5. Re-retrieve with rewritten query
+    /// 6. Repeat up to max_iterations
+    /// 7. Return final results
+    ///
+    /// For small models, steps 4-6 are skipped (single-shot retrieval).
     pub async fn search(
         &self,
         query: &str,
         vector_store: &VectorStore,
         context: Option<&QueryContext>,
     ) -> Result<AgenticSearchResult, RagError> {
+        // Step 1: Apply rule-based query expansion if enabled
+        let search_query = if self.config.use_rule_based_expansion {
+            let expanded = self.query_expander.expand(query);
+            if expanded.was_expanded {
+                tracing::debug!(
+                    original = query,
+                    expanded_terms = expanded.terms.len(),
+                    synonyms = expanded.stats.synonym_expansions,
+                    translits = expanded.stats.transliteration_expansions,
+                    domain = expanded.stats.domain_expansions,
+                    "Query expanded with rule-based expansion"
+                );
+            }
+            // Use expanded query string for search
+            self.query_expander.expand_to_string(query)
+        } else {
+            query.to_string()
+        };
+
         // Fast path: single-shot if agentic disabled
         if !self.config.enabled {
-            let results = self.retriever.search(query, vector_store, None).await?;
+            let results = self.retriever.search(&search_query, vector_store, None).await?;
             return Ok(AgenticSearchResult {
                 sufficiency_score: self.sufficiency_checker.score(&results, query),
                 results,
                 iterations: 1,
                 query_rewritten: false,
-                final_query: query.to_string(),
+                final_query: search_query,
             });
         }
 
-        // Step 1: Initial retrieval
-        let mut results = self.retriever.search(query, vector_store, None).await?;
-        let mut current_query = query.to_string();
+        // Step 2: Initial retrieval with expanded query
+        let mut results = self.retriever.search(&search_query, vector_store, None).await?;
+        let mut current_query = search_query;
         let mut iterations = 1;
         let mut query_rewritten = false;
 
-        // Step 2-4: Iterative refinement
+        // Fast path for single-shot mode (small models)
+        // Skip LLM iterations if llm_query_rewriting is disabled
+        if !self.config.llm_query_rewriting || self.config.max_iterations == 0 {
+            tracing::debug!(
+                llm_rewriting = self.config.llm_query_rewriting,
+                max_iterations = self.config.max_iterations,
+                "Single-shot retrieval mode (LLM rewriting disabled)"
+            );
+            let score = self.sufficiency_checker.score(&results, &current_query);
+            return Ok(AgenticSearchResult {
+                results,
+                iterations: 1,
+                query_rewritten: false,
+                final_query: current_query,
+                sufficiency_score: score,
+            });
+        }
+
+        // Step 3-6: Iterative refinement (only for large models with LLM rewriting)
         for iteration in 0..self.config.max_iterations {
             // Check sufficiency
             let score = self.sufficiency_checker.score(&results, &current_query);
@@ -182,7 +294,7 @@ impl AgenticRetriever {
                 });
             }
 
-            // Rewrite query if we have a rewriter
+            // Rewrite query if we have a rewriter and LLM rewriting is enabled
             if let Some(ref rewriter) = self.query_rewriter {
                 let default_ctx = QueryContext::default();
                 let ctx = context.unwrap_or(&default_ctx);
@@ -194,7 +306,7 @@ impl AgenticRetriever {
                                 iteration = iteration + 1,
                                 old_query = %current_query,
                                 new_query = %new_query,
-                                "Query rewritten"
+                                "Query rewritten by LLM"
                             );
 
                             current_query = new_query;
@@ -253,6 +365,26 @@ impl AgenticRetriever {
     /// Check if query rewriting is available
     pub fn has_query_rewriter(&self) -> bool {
         self.query_rewriter.is_some()
+    }
+
+    /// Check if LLM query rewriting is enabled in config
+    pub fn llm_rewriting_enabled(&self) -> bool {
+        self.config.llm_query_rewriting
+    }
+
+    /// Check if using single-shot retrieval mode
+    pub fn is_single_shot(&self) -> bool {
+        self.config.is_single_shot()
+    }
+
+    /// Get the configuration
+    pub fn config(&self) -> &AgenticRagConfig {
+        &self.config
+    }
+
+    /// Get the query expander
+    pub fn query_expander(&self) -> &QueryExpander {
+        &self.query_expander
     }
 }
 
@@ -787,6 +919,100 @@ mod tests {
         let retriever = AgenticRetriever::new(config);
 
         assert!(!retriever.is_enabled());
+    }
+
+    // =========================================================================
+    // Small Model Configuration Tests
+    // =========================================================================
+
+    #[test]
+    fn test_config_for_small_model() {
+        let config = AgenticRagConfig::for_small_model();
+
+        // Should have LLM operations disabled
+        assert!(!config.llm_query_rewriting);
+        assert!(!config.llm_sufficiency_check);
+
+        // Should have single-shot retrieval
+        assert_eq!(config.max_iterations, 0);
+
+        // Rule-based expansion should be enabled
+        assert!(config.use_rule_based_expansion);
+
+        // Should still be enabled overall
+        assert!(config.enabled);
+    }
+
+    #[test]
+    fn test_config_default_has_llm_enabled() {
+        let config = AgenticRagConfig::default();
+
+        // Default should have LLM operations enabled
+        assert!(config.llm_query_rewriting);
+        assert!(config.llm_sufficiency_check);
+        assert!(config.use_rule_based_expansion);
+        assert_eq!(config.max_iterations, 3);
+    }
+
+    #[test]
+    fn test_config_uses_llm() {
+        let default_config = AgenticRagConfig::default();
+        assert!(default_config.uses_llm());
+
+        let small_config = AgenticRagConfig::for_small_model();
+        assert!(!small_config.uses_llm());
+    }
+
+    #[test]
+    fn test_config_is_single_shot() {
+        let default_config = AgenticRagConfig::default();
+        assert!(!default_config.is_single_shot());
+
+        let small_config = AgenticRagConfig::for_small_model();
+        assert!(small_config.is_single_shot());
+
+        // Config with llm_query_rewriting=false should also be single-shot
+        let no_llm_config = AgenticRagConfig {
+            llm_query_rewriting: false,
+            max_iterations: 3, // Even with iterations, no LLM means single-shot
+            ..Default::default()
+        };
+        assert!(no_llm_config.is_single_shot());
+    }
+
+    #[test]
+    fn test_agentic_retriever_small_model_mode() {
+        let config = AgenticRagConfig::for_small_model();
+        let retriever = AgenticRetriever::new(config);
+
+        assert!(retriever.is_enabled());
+        assert!(!retriever.llm_rewriting_enabled());
+        assert!(retriever.is_single_shot());
+        assert!(!retriever.has_query_rewriter()); // No rewriter set
+    }
+
+    #[test]
+    fn test_agentic_retriever_with_llm_but_disabled() {
+        // Even if we try to set LLM, it shouldn't be used if config disables it
+        let config = AgenticRagConfig::for_small_model();
+        let retriever = AgenticRetriever::new(config);
+
+        // Since llm_query_rewriting is false, query_rewriter should not be set
+        assert!(!retriever.has_query_rewriter());
+        assert!(!retriever.llm_rewriting_enabled());
+    }
+
+    #[test]
+    fn test_query_expander_accessible() {
+        let config = AgenticRagConfig::default();
+        let retriever = AgenticRetriever::new(config);
+
+        // Query expander should always be available
+        let expander = retriever.query_expander();
+
+        // Test that it can expand queries
+        let expanded = expander.expand("gold loan");
+        assert!(expanded.terms.len() >= 2); // At least original terms
     }
 
     fn create_test_result(id: &str, score: f32) -> SearchResult {

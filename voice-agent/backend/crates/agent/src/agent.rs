@@ -289,6 +289,14 @@ impl Default for AgentConfig {
             4096
         };
 
+        // Configure agentic RAG based on model size
+        // Small models use single-shot retrieval with rule-based expansion only
+        let agentic_rag = if is_small {
+            AgenticRagConfig::for_small_model()
+        } else {
+            AgenticRagConfig::default()
+        };
+
         Self {
             language: "en".to_string(),
             conversation: ConversationConfig::default(),
@@ -308,8 +316,8 @@ impl Default for AgentConfig {
             speculative: SpeculativeDecodingConfig::default(),
             // Phase 5: DST configuration
             dst_config: DstConfig::default(),
-            // Phase 11: Agentic RAG enabled by default for multi-step retrieval
-            agentic_rag: AgenticRagConfig::default(),
+            // Phase 11: Agentic RAG - single-shot for small models, iterative for large
+            agentic_rag,
             // Small model config (auto-detected)
             small_model,
         }
@@ -340,11 +348,18 @@ impl AgentConfig {
         } else {
             4096
         };
+        // Configure agentic RAG based on model size
+        let agentic_rag = if is_small {
+            AgenticRagConfig::for_small_model()
+        } else {
+            AgenticRagConfig::default()
+        };
 
         Self {
             llm_provider: LlmProviderConfig::ollama(model_name),
             context_window_tokens: context_tokens,
             small_model,
+            agentic_rag,
             ..Default::default()
         }
     }
@@ -353,6 +368,8 @@ impl AgentConfig {
     pub fn optimize_for_small_model(mut self) -> Self {
         self.small_model = SmallModelConfig::enabled();
         self.context_window_tokens = self.small_model.context_window_tokens;
+        // Switch to single-shot retrieval with rule-based expansion
+        self.agentic_rag = AgenticRagConfig::for_small_model();
         self
     }
 }
@@ -3002,6 +3019,30 @@ mod tests {
         let optimized = config.optimize_for_small_model();
         assert!(optimized.is_small_model());
         assert_eq!(optimized.context_window_tokens, 2500);
+        // Should also configure agentic RAG for small model
+        assert!(!optimized.agentic_rag.llm_query_rewriting);
+        assert!(optimized.agentic_rag.use_rule_based_expansion);
+    }
+
+    #[test]
+    fn test_agent_config_agentic_rag_for_small_model() {
+        // Small model should have agentic RAG configured for single-shot
+        let config = AgentConfig::with_model("qwen2.5:1.5b");
+        assert!(config.is_small_model());
+        assert!(!config.agentic_rag.llm_query_rewriting);
+        assert!(!config.agentic_rag.llm_sufficiency_check);
+        assert_eq!(config.agentic_rag.max_iterations, 0);
+        assert!(config.agentic_rag.use_rule_based_expansion);
+    }
+
+    #[test]
+    fn test_agent_config_agentic_rag_for_large_model() {
+        // Large model should have full agentic RAG
+        let config = AgentConfig::with_model("llama3:70b");
+        assert!(!config.is_small_model());
+        assert!(config.agentic_rag.llm_query_rewriting);
+        assert!(config.agentic_rag.llm_sufficiency_check);
+        assert_eq!(config.agentic_rag.max_iterations, 3);
     }
 
     #[test]
