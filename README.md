@@ -152,7 +152,6 @@ graph TB
     end
 
     subgraph Pipeline[Core Pipeline]
-        direction TB
         VAD[Voice Activity Detection]
         STT[Speech-to-Text]
         NLU[Text Processing]
@@ -168,8 +167,8 @@ graph TB
     end
 
     subgraph Data[Data Layer]
-        QDRANT[(Qdrant Vector DB)]
-        SCYLLA[(ScyllaDB)]
+        QDRANT[Qdrant Vector DB]
+        SCYLLA[ScyllaDB]
         CONFIG[YAML Configs]
         MODELS[ONNX Models]
     end
@@ -587,29 +586,26 @@ sequenceDiagram
 graph TB
     subgraph Single[Single Node Deployment]
         SN_APP[VARTALAAP Binary]
-        SN_QD[(Qdrant)]
-        SN_SC[(ScyllaDB)]
+        SN_QD[Qdrant]
+        SN_SC[ScyllaDB]
         SN_OL[Ollama]
 
         SN_APP --> SN_QD
         SN_APP --> SN_SC
         SN_APP --> SN_OL
     end
+```
 
+```mermaid
+graph TB
     subgraph Distributed[Distributed Deployment]
         LB[Load Balancer]
-
-        subgraph AppTier[App Tier]
-            APP1[VARTALAAP-1]
-            APP2[VARTALAAP-2]
-            APP3[VARTALAAP-3]
-        end
-
-        subgraph DataTier[Data Tier]
-            QD[(Qdrant Cluster)]
-            SC[(ScyllaDB Cluster)]
-            OL[Ollama Pool]
-        end
+        APP1[VARTALAAP-1]
+        APP2[VARTALAAP-2]
+        APP3[VARTALAAP-3]
+        QD[Qdrant Cluster]
+        SC[ScyllaDB Cluster]
+        OL[Ollama Pool]
 
         LB --> APP1
         LB --> APP2
