@@ -378,14 +378,12 @@ impl SileroVad {
 }
 
 /// Implement VadEngine trait for SileroVad
-#[async_trait::async_trait]
 impl VadEngine for SileroVad {
-    fn process_frame(&mut self, frame: &mut AudioFrame) -> Result<VadResult, PipelineError> {
-        let (_, _, result) = self.process(frame)?;
-        Ok(result)
+    fn process_frame(&self, frame: &mut AudioFrame) -> Result<(VadState, f32, VadResult), PipelineError> {
+        self.process(frame)
     }
 
-    fn reset(&mut self) {
+    fn reset(&self) {
         SileroVad::reset(self);
     }
 

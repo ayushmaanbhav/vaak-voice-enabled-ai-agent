@@ -15,10 +15,12 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::auth::auth_middleware;
-use crate::mcp_server::handle_mcp_request; // P2 FIX: MCP JSON-RPC endpoint
+use crate::mcp_server::handle_mcp_request;
 use crate::metrics::metrics_handler;
+use crate::ptt;
 use crate::state::AppState;
-use crate::webrtc; // P2 FIX: WebRTC signaling
+#[cfg(feature = "webrtc")]
+use crate::webrtc;
 use crate::websocket::{create_session, WebSocketHandler};
 use voice_agent_tools::ToolExecutor;
 
@@ -30,7 +32,7 @@ pub fn create_router(state: AppState) -> Router {
     let cors_layer = build_cors_layer(&config.server.cors_origins, config.server.cors_enabled);
     drop(config); // Release lock before building router
 
-    Router::new()
+    let router = Router::new()
         // Session endpoints
         .route("/api/sessions", post(create_session))
         .route("/api/sessions/:id", get(get_session))
@@ -41,33 +43,33 @@ pub fn create_router(state: AppState) -> Router {
         // Tool endpoints
         .route("/api/tools", get(list_tools))
         .route("/api/tools/:name", post(call_tool))
-        // P2 FIX: MCP JSON-RPC endpoint for external MCP clients
+        // MCP JSON-RPC endpoint
         .route("/mcp", post(handle_mcp_request))
         // Health check
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
-        // P0 FIX: Prometheus metrics endpoint
+        // Prometheus metrics
         .route("/metrics", get(metrics_handler))
-        // P1 FIX: Config reload endpoint (admin only)
+        // Admin endpoints
         .route("/admin/reload-config", post(reload_config))
-        // P4 FIX: Domain config reload endpoint
         .route("/admin/reload-domain-config", post(reload_domain_config))
-        // P4 FIX: Domain config info endpoint
         .route("/api/domain/info", get(domain_info))
         // WebSocket
         .route("/ws/:session_id", get(ws_handler))
-        // P2 FIX: WebRTC signaling endpoints for low-latency audio transport
+        // Push-to-talk
+        .route("/api/ptt/process", post(ptt::handle_ptt))
+        .route("/api/ptt/health", get(ptt::ptt_health));
+
+    // WebRTC routes (optional)
+    #[cfg(feature = "webrtc")]
+    let router = router
         .route("/api/webrtc/:session_id/offer", post(webrtc::handle_offer))
-        .route(
-            "/api/webrtc/:session_id/ice",
-            post(webrtc::add_ice_candidate),
-        )
-        .route(
-            "/api/webrtc/:session_id/candidates",
-            get(webrtc::get_ice_candidates),
-        )
+        .route("/api/webrtc/:session_id/ice", post(webrtc::add_ice_candidate))
+        .route("/api/webrtc/:session_id/candidates", get(webrtc::get_ice_candidates))
         .route("/api/webrtc/:session_id/status", get(webrtc::get_status))
-        .route("/api/webrtc/:session_id/restart", post(webrtc::ice_restart))
+        .route("/api/webrtc/:session_id/restart", post(webrtc::ice_restart));
+
+    router
         // Middleware (order matters - auth runs after CORS but before handlers)
         // P1 FIX: Apply auth middleware layer via Extension
         .layer(axum::middleware::from_fn(

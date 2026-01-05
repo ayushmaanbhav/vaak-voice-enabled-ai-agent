@@ -10,6 +10,13 @@ description = "WebSocket and HTTP server for voice agent"
 name = "voice-agent"
 path = "src/main.rs"
 
+[features]
+default = []
+# WebRTC support (heavy: ~200 deps)
+webrtc = ["dep:voice-agent-transport"]
+# OpenTelemetry tracing (heavy: tonic/grpc)
+telemetry = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
+
 [dependencies]
 voice-agent-core.workspace = true
 voice-agent-config.workspace = true
@@ -19,10 +26,9 @@ voice-agent-llm.workspace = true
 voice-agent-tools.workspace = true
 voice-agent-agent.workspace = true
 voice-agent-persistence.workspace = true
-# P2 FIX: Wire transport crate for future WebRTC support
-voice-agent-transport.workspace = true
-# P2 FIX: Wire text processing crate for grammar, PII, compliance
 voice-agent-text-processing.workspace = true
+# Optional heavy crates
+voice-agent-transport = { workspace = true, optional = true }
 
 # Web framework
 axum = { workspace = true, features = ["ws", "macros"] }
@@ -50,15 +56,16 @@ parking_lot.workspace = true
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono.workspace = true
 base64 = "0.21"
+once_cell.workspace = true
 
 # Observability
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
-# P5 FIX: Distributed tracing via OpenTelemetry
-opentelemetry.workspace = true
-opentelemetry_sdk.workspace = true
-opentelemetry-otlp.workspace = true
-tracing-opentelemetry.workspace = true
+# Optional: OpenTelemetry (heavy)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

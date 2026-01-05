@@ -339,7 +339,7 @@ pub struct Session {
     pub last_activity: RwLock<Instant>,
     /// Is active
     pub active: RwLock<bool>,
-    /// P2 FIX: WebRTC transport (optional, for low-latency audio)
+    #[cfg(feature = "webrtc")]
     webrtc: RwLock<Option<crate::webrtc::WebRtcSession>>,
 }
 
@@ -353,11 +353,12 @@ impl Session {
             created_at: Instant::now(),
             last_activity: RwLock::new(Instant::now()),
             active: RwLock::new(true),
+            #[cfg(feature = "webrtc")]
             webrtc: RwLock::new(None),
         }
     }
 
-    /// P0 FIX: Create a new session with vector store for RAG
+    /// Create a new session with vector store for RAG
     pub fn with_vector_store(
         id: impl Into<String>,
         config: AgentConfig,
@@ -371,17 +372,12 @@ impl Session {
             created_at: Instant::now(),
             last_activity: RwLock::new(Instant::now()),
             active: RwLock::new(true),
+            #[cfg(feature = "webrtc")]
             webrtc: RwLock::new(None),
         }
     }
 
-    /// P0 FIX: Create a new session with full integration (RAG + persistence-wired tools)
-    ///
-    /// This method creates a session with:
-    /// - Vector store for RAG retrieval (optional)
-    /// - Tool registry with persistence services wired (SMS, GoldPrice, Appointments)
-    ///
-    /// Use this for production deployments where tool calls should persist to ScyllaDB.
+    /// Create a new session with full integration (RAG + persistence-wired tools)
     pub fn with_full_integration(
         id: impl Into<String>,
         config: AgentConfig,
@@ -399,23 +395,24 @@ impl Session {
             created_at: Instant::now(),
             last_activity: RwLock::new(Instant::now()),
             active: RwLock::new(true),
+            #[cfg(feature = "webrtc")]
             webrtc: RwLock::new(None),
         }
     }
 
-    /// P2 FIX: Set the WebRTC transport for this session
+    #[cfg(feature = "webrtc")]
     pub fn set_webrtc_transport(&self, session: crate::webrtc::WebRtcSession) {
         *self.webrtc.write() = Some(session);
     }
 
-    /// P2 FIX: Get the WebRTC transport Arc if connected
+    #[cfg(feature = "webrtc")]
     pub fn get_webrtc_transport(
         &self,
     ) -> Option<std::sync::Arc<tokio::sync::RwLock<voice_agent_transport::WebRtcTransport>>> {
         self.webrtc.read().as_ref().map(|s| s.transport.clone())
     }
 
-    /// P2 FIX: Check if WebRTC is connected
+    #[cfg(feature = "webrtc")]
     pub fn has_webrtc(&self) -> bool {
         self.webrtc.read().is_some()
     }

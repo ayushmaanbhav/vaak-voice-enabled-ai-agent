@@ -157,9 +157,16 @@ impl WebSocketHandler {
             }
         };
 
-        // Use IndicConformer STT for real speech recognition (Hindi/Indian languages)
-        let indicconformer_model_path = "models/stt/indicconformer";
-        let pipeline = match VoicePipeline::with_indicconformer(indicconformer_model_path, PipelineConfig::default()) {
+        // Create voice pipeline (use IndicConformer if onnx feature enabled, otherwise simple)
+        #[cfg(feature = "onnx")]
+        let pipeline_result = {
+            let indicconformer_model_path = "models/stt/indicconformer";
+            VoicePipeline::with_indicconformer(indicconformer_model_path, PipelineConfig::default())
+        };
+        #[cfg(not(feature = "onnx"))]
+        let pipeline_result = VoicePipeline::simple(PipelineConfig::default());
+
+        let pipeline = match pipeline_result {
             Ok(p) => {
                 let mut p = p
                     .with_text_processor(text_processing.clone())

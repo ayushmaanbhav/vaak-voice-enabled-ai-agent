@@ -4,13 +4,15 @@
 
 pub mod auth;
 pub mod http;
-pub mod mcp_server; // P2 FIX: MCP JSON-RPC endpoint
+pub mod mcp_server;
 pub mod metrics;
+pub mod ptt;
 pub mod rate_limit;
 pub mod session;
 pub mod state;
-pub mod webrtc; // P2 FIX: WebRTC signaling endpoints
-pub mod websocket; // P1 FIX: Auth middleware
+#[cfg(feature = "webrtc")]
+pub mod webrtc;
+pub mod websocket;
 
 pub use auth::auth_middleware;
 pub use http::create_router;
@@ -24,6 +26,7 @@ pub use session::{
     SessionMetadata, SessionStore,
 };
 pub use state::AppState;
+#[cfg(feature = "webrtc")]
 pub use webrtc::WebRtcSession;
 pub use websocket::WebSocketHandler;
 

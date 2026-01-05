@@ -381,6 +381,21 @@ impl VoiceActivityDetector {
     }
 }
 
+/// Implement VadEngine trait for VoiceActivityDetector
+impl super::VadEngine for VoiceActivityDetector {
+    fn process_frame(&self, frame: &mut AudioFrame) -> Result<(VadState, f32, VadResult), crate::PipelineError> {
+        VoiceActivityDetector::process_frame(self, frame)
+    }
+
+    fn reset(&self) {
+        VoiceActivityDetector::reset(self);
+    }
+
+    fn state(&self) -> VadState {
+        VoiceActivityDetector::state(self)
+    }
+}
+
 // ============================================================================
 // ONNX-only: Mel Filterbank for feature extraction
 // ============================================================================

@@ -180,10 +180,8 @@ async fn shutdown_signal() {
     }
 }
 
-/// P5 FIX: Initialize tracing with optional OpenTelemetry integration
-///
-/// When `observability.otlp_endpoint` is configured, traces are exported to
-/// the specified OTLP collector (e.g., Jaeger, Tempo, or Datadog).
+/// Initialize tracing (with optional OpenTelemetry when feature enabled)
+#[cfg(feature = "telemetry")]
 fn init_tracing(config: &Settings) {
     use opentelemetry_otlp::WithExportConfig;
 
@@ -192,20 +190,15 @@ fn init_tracing(config: &Settings) {
         format!("voice_agent={},tower_http=debug", level).into()
     });
 
-    // Build the base subscriber
     let subscriber = tracing_subscriber::registry().with(env_filter);
-
-    // Add format layer (JSON or pretty)
     let fmt_layer = if config.observability.log_json {
         tracing_subscriber::fmt::layer().json().boxed()
     } else {
         tracing_subscriber::fmt::layer().boxed()
     };
 
-    // Check if OpenTelemetry should be enabled
     if let Some(otlp_endpoint) = &config.observability.otlp_endpoint {
         if config.observability.tracing_enabled {
-            // Configure OTLP exporter
             match opentelemetry_otlp::new_pipeline()
                 .tracing()
                 .with_exporter(
@@ -222,28 +215,32 @@ fn init_tracing(config: &Settings) {
                 .install_batch(opentelemetry_sdk::runtime::Tokio)
             {
                 Ok(tracer) => {
-                    // install_batch returns a Tracer directly
                     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
                     subscriber.with(fmt_layer).with(otel_layer).init();
-
-                    tracing::info!(
-                        endpoint = %otlp_endpoint,
-                        "OpenTelemetry tracing enabled, exporting to OTLP endpoint"
-                    );
+                    tracing::info!(endpoint = %otlp_endpoint, "OpenTelemetry tracing enabled");
                     return;
                 },
-                Err(e) => {
-                    eprintln!(
-                        "Failed to initialize OpenTelemetry: {}. Falling back to console logging.",
-                        e
-                    );
-                },
+                Err(e) => eprintln!("Failed to initialize OpenTelemetry: {}. Falling back.", e),
             }
         }
     }
+    subscriber.with(fmt_layer).init();
+}
 
-    // Fallback: console logging only
+/// Initialize tracing (console only - telemetry feature disabled)
+#[cfg(not(feature = "telemetry"))]
+fn init_tracing(config: &Settings) {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let level = &config.observability.log_level;
+        format!("voice_agent={},tower_http=debug", level).into()
+    });
+
+    let subscriber = tracing_subscriber::registry().with(env_filter);
+    let fmt_layer = if config.observability.log_json {
+        tracing_subscriber::fmt::layer().json().boxed()
+    } else {
+        tracing_subscriber::fmt::layer().boxed()
+    };
     subscriber.with(fmt_layer).init();
 }
 

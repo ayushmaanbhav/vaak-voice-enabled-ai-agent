@@ -14,13 +14,16 @@ use crate::PipelineError;
 use voice_agent_core::AudioFrame;
 
 /// VAD engine trait for pluggable implementations
-#[async_trait::async_trait]
+///
+/// Returns (VadState, probability, VadResult) tuple to provide full context
+/// for downstream processing (turn detection, barge-in, etc.)
 pub trait VadEngine: Send + Sync {
     /// Process a single audio frame
-    fn process_frame(&mut self, frame: &mut AudioFrame) -> Result<VadResult, PipelineError>;
+    /// Returns (current_state, speech_probability, detailed_result)
+    fn process_frame(&self, frame: &mut AudioFrame) -> Result<(VadState, f32, VadResult), PipelineError>;
 
     /// Reset VAD state
-    fn reset(&mut self);
+    fn reset(&self);
 
     /// Get current state
     fn state(&self) -> VadState;
