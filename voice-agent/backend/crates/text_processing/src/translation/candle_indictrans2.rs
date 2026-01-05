@@ -14,7 +14,7 @@ mod candle_impl {
 
     use async_trait::async_trait;
     use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
-    use candle_nn::{embedding, layer_norm, linear, Embedding, LayerNorm, Linear, VarBuilder};
+    use candle_nn::{embedding, layer_norm, linear, linear_no_bias, Embedding, LayerNorm, Linear, VarBuilder};
     use futures::Stream;
     use parking_lot::RwLock;
     use sentencepiece::SentencePieceProcessor;
@@ -722,7 +722,7 @@ mod candle_impl {
             Ok(Self {
                 encoder: Encoder::new(&config, vb.pp("model.encoder"), device)?,
                 decoder: Decoder::new(&config, vb.pp("model.decoder"), device)?,
-                lm_head: linear(
+                lm_head: linear_no_bias(
                     config.decoder_embed_dim,
                     config.decoder_vocab_size,
                     vb.pp("lm_head"),

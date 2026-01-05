@@ -30,6 +30,7 @@ use voice_agent_text_processing::translation::{
 };
 
 use crate::conversation::{Conversation, ConversationConfig, ConversationEvent, EndReason};
+use crate::dst::{DialogueStateTracker, DstConfig};
 use crate::memory::{
     AgenticMemory, AgenticMemoryConfig, ConversationTurn, TurnRole,
 };
@@ -60,6 +61,8 @@ pub struct AgentConfig {
     pub llm_provider: LlmProviderConfig,
     /// P1-2 FIX: Speculative decoding configuration (SLM + LLM)
     pub speculative: SpeculativeDecodingConfig,
+    /// Phase 5: Dialogue State Tracking configuration
+    pub dst_config: DstConfig,
 }
 
 /// P1 FIX: Configurable default values for tool calls
@@ -182,6 +185,8 @@ impl Default for AgentConfig {
             // P1-2 FIX: Speculative decoding disabled by default
             // Enable via config with speculative.enabled = true
             speculative: SpeculativeDecodingConfig::default(),
+            // Phase 5: DST configuration
+            dst_config: DstConfig::default(),
         }
     }
 }
@@ -256,6 +261,8 @@ pub struct GoldLoanAgent {
     /// MemGPT-style agentic memory system
     /// Provides hierarchical memory: Core (human/persona) + Recall (FIFO) + Archival (long-term)
     agentic_memory: AgenticMemory,
+    /// Phase 5: Dialogue State Tracker for slot-based state management
+    dialogue_state: RwLock<DialogueStateTracker>,
 }
 
 impl GoldLoanAgent {
@@ -373,6 +380,9 @@ impl GoldLoanAgent {
             None
         };
 
+        // Extract DST config before moving config into struct
+        let dst_config = config.dst_config.clone();
+
         Self {
             config,
             conversation,
@@ -389,6 +399,7 @@ impl GoldLoanAgent {
             persuasion,
             speculative,
             agentic_memory,
+            dialogue_state: RwLock::new(DialogueStateTracker::with_config(dst_config)),
         }
     }
 
@@ -475,7 +486,7 @@ impl GoldLoanAgent {
         };
 
         Self {
-            config,
+            config: config.clone(),
             conversation,
             tools,
             llm: Some(llm),
@@ -490,6 +501,7 @@ impl GoldLoanAgent {
             persuasion,
             speculative,
             agentic_memory,
+            dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
         }
     }
 
@@ -541,7 +553,7 @@ impl GoldLoanAgent {
         let persuasion = PersuasionEngine::new();
 
         Self {
-            config,
+            config: config.clone(),
             conversation,
             tools,
             llm: None,
@@ -556,6 +568,7 @@ impl GoldLoanAgent {
             persuasion,
             speculative: None, // P1-2 FIX: No speculative without LLM
             agentic_memory,
+            dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
         }
     }
 
@@ -859,6 +872,18 @@ impl GoldLoanAgent {
                     let _ = self.agentic_memory.core_memory_append(k, value);
                 }
             }
+        }
+
+        // Phase 5: Update Dialogue State Tracker with detected intent
+        {
+            let mut dst = self.dialogue_state.write();
+            dst.update(&intent);
+            tracing::debug!(
+                primary_intent = ?dst.state().primary_intent(),
+                filled_slots = ?dst.state().filled_slots(),
+                pending = ?dst.slots_needing_confirmation(),
+                "Dialogue state updated"
+            );
         }
 
         // P4 FIX: Process input through personalization engine
@@ -1173,6 +1198,37 @@ impl GoldLoanAgent {
         let context = self.conversation.get_context();
         if !context.is_empty() {
             builder = builder.with_context(&context);
+        }
+
+        // Phase 5: Add DST state context for guided response generation
+        {
+            let dst = self.dialogue_state.read();
+            let dst_context = dst.state_context();
+            if !dst_context.is_empty() && dst_context != "No information collected yet." {
+                let dst_section = format!(
+                    "## Collected Customer Information\n{}\n\n## Slots Needing Confirmation\n{}",
+                    dst_context,
+                    if dst.slots_needing_confirmation().is_empty() {
+                        "None".to_string()
+                    } else {
+                        dst.slots_needing_confirmation().join(", ")
+                    }
+                );
+                builder = builder.with_context(&dst_section);
+            }
+
+            // Add intent completeness info to guide next question
+            if let Some(primary_intent) = dst.state().primary_intent() {
+                let missing = dst.missing_slots_for_intent(primary_intent);
+                if !missing.is_empty() {
+                    let guidance = format!(
+                        "## Next Steps\nTo complete the {} flow, please collect: {}",
+                        primary_intent,
+                        missing.join(", ")
+                    );
+                    builder = builder.with_context(&guidance);
+                }
+            }
         }
 
         // Add RAG context

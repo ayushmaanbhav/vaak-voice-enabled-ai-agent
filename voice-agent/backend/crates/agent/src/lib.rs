@@ -25,6 +25,8 @@ pub mod persuasion;
 pub mod traits;
 // P3 FIX: FSM adapter to bridge StageManager with core ConversationFSM trait
 pub mod fsm_adapter;
+// Phase 5: Dialogue State Tracking (DST)
+pub mod dst;
 
 // P1-2 FIX: Re-export intent module from text_processing for backward compatibility
 pub mod intent {
@@ -63,6 +65,11 @@ pub use voice_session::{VoiceSession, VoiceSessionConfig, VoiceSessionEvent, Voi
 pub use traits::{Agent, PersonalizableAgent, PrefetchingAgent};
 // P3 FIX: Export FSM adapter
 pub use fsm_adapter::{create_fsm_adapter, StageManagerAdapter};
+// Phase 5: Export DST types
+pub use dst::{
+    ChangeSource, DialogueStateTracker, DstConfig, GoldLoanDialogueState, GoldPurity, SlotExtractor,
+    SlotValue, StateChange, UrgencyLevel,
+};
 
 // Re-export transport types for convenience
 pub use voice_agent_transport::{
