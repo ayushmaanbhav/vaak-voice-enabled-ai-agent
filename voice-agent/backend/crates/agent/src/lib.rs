@@ -37,6 +37,13 @@ pub mod intent {
 
 pub use conversation::{Conversation, ConversationConfig, ConversationEvent};
 pub use memory::MemoryConfig;
+// Context compression types
+pub use memory::{CompressionLevel, CompressionMethod, CompressionStats};
+// Agentic memory types
+pub use memory::{
+    AgenticMemory, AgenticMemoryConfig, ArchivalMemory, ArchivalMemoryConfig,
+    ConversationTurn, CoreMemory, MemoryNote, MemoryStats, MemoryType, RecallMemory, TurnRole,
+};
 pub use memory_legacy::{ConversationMemory, MemoryEntry};
 pub use stage::{
     ConversationStage, RagTimingStrategy, StageManager, StageTransition, TransitionReason,

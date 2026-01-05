@@ -94,6 +94,53 @@ pub struct QueryExpander {
     transliterations: RwLock<HashMap<String, Vec<String>>>,
     /// Domain-specific term expansions
     domain_terms: RwLock<HashMap<String, Vec<String>>>,
+    /// Stopwords (common words to filter out)
+    stopwords: RwLock<std::collections::HashSet<String>>,
+}
+
+/// Domain-specific stopwords for Hindi/English gold loan queries
+pub fn gold_loan_stopwords() -> std::collections::HashSet<String> {
+    let words = [
+        // English common stopwords
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
+        "may", "might", "must", "shall", "can", "need", "dare", "ought", "used",
+        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into",
+        "through", "during", "before", "after", "above", "below", "between", "under",
+        "and", "but", "or", "nor", "so", "yet", "both", "either", "neither",
+        "not", "only", "own", "same", "than", "too", "very", "just", "also",
+        "i", "me", "my", "mine", "we", "us", "our", "ours",
+        "you", "your", "yours", "he", "him", "his", "she", "her", "hers",
+        "it", "its", "they", "them", "their", "theirs",
+        "this", "that", "these", "those", "what", "which", "who", "whom",
+        "here", "there", "when", "where", "why", "how", "all", "each", "every",
+        "some", "any", "no", "more", "most", "other", "such", "few", "now",
+        "about", "please", "want", "get", "tell", "know",
+        // Hindi common stopwords (Romanized)
+        "hai", "hain", "tha", "thi", "the", "hoga", "hogi", "ho", "hota", "hoti",
+        "ka", "ki", "ke", "ko", "se", "me", "mein", "par", "pe", "tak", "ke liye",
+        "aur", "ya", "lekin", "par", "magar", "kyonki", "isliye", "jab", "tab",
+        "mai", "main", "mera", "meri", "mere", "hum", "humara", "humari", "humare",
+        "tu", "tum", "tera", "teri", "tere", "aap", "aapka", "aapki", "aapke",
+        "wo", "woh", "uska", "uski", "uske", "ye", "yeh", "iska", "iski", "iske",
+        "ve", "unka", "unki", "unke", "kya", "kaun", "kahan", "kab", "kaise", "kyun",
+        "yahan", "wahan", "ab", "abhi", "phir", "fir", "bhi", "hi", "sirf", "bas",
+        "kuch", "sab", "bahut", "thoda", "zyada", "kam", "itna", "utna", "jitna",
+        "chahiye", "chahte", "chahti", "karein", "karo", "karna", "kar",
+        "bataiye", "batao", "batana", "boliye", "bolo", "bolna",
+        // Hindi stopwords (Devanagari)
+        "है", "हैं", "था", "थी", "थे", "होगा", "होगी", "हो", "होता", "होती",
+        "का", "की", "के", "को", "से", "में", "पर", "तक",
+        "और", "या", "लेकिन", "पर", "मगर", "क्योंकि", "इसलिए", "जब", "तब",
+        "मैं", "मेरा", "मेरी", "मेरे", "हम", "हमारा", "हमारी", "हमारे",
+        "तू", "तुम", "तेरा", "तेरी", "तेरे", "आप", "आपका", "आपकी", "आपके",
+        "वो", "वह", "उसका", "उसकी", "उसके", "ये", "यह", "इसका", "इसकी", "इसके",
+        "वे", "उनका", "उनकी", "उनके", "क्या", "कौन", "कहाँ", "कब", "कैसे", "क्यों",
+        "यहाँ", "वहाँ", "अब", "अभी", "फिर", "भी", "ही", "सिर्फ", "बस",
+        "कुछ", "सब", "बहुत", "थोड़ा", "ज्यादा", "कम",
+        "चाहिए", "चाहते", "चाहती", "करें", "करो", "करना", "कर",
+    ];
+    words.iter().map(|s| s.to_string()).collect()
 }
 
 impl QueryExpander {
@@ -104,6 +151,7 @@ impl QueryExpander {
             synonyms: RwLock::new(HashMap::new()),
             transliterations: RwLock::new(HashMap::new()),
             domain_terms: RwLock::new(HashMap::new()),
+            stopwords: RwLock::new(std::collections::HashSet::new()),
         };
         expander.load_default_dictionaries();
         expander
@@ -111,10 +159,42 @@ impl QueryExpander {
 
     /// Create with default gold loan configuration
     pub fn gold_loan() -> Self {
-        Self::new(QueryExpansionConfig {
+        let config = QueryExpansionConfig {
             domain: "gold_loan".to_string(),
             ..Default::default()
-        })
+        };
+        let expander = Self {
+            config,
+            synonyms: RwLock::new(HashMap::new()),
+            transliterations: RwLock::new(HashMap::new()),
+            domain_terms: RwLock::new(HashMap::new()),
+            stopwords: RwLock::new(gold_loan_stopwords()),
+        };
+        expander.load_default_dictionaries();
+        expander
+    }
+
+    /// Check if a word is a stopword
+    pub fn is_stopword(&self, word: &str) -> bool {
+        self.stopwords.read().contains(&word.to_lowercase())
+    }
+
+    /// Filter stopwords from a query
+    pub fn filter_stopwords(&self, query: &str) -> String {
+        let stopwords = self.stopwords.read();
+        query
+            .split_whitespace()
+            .filter(|word| !stopwords.contains(&word.to_lowercase()))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Add custom stopwords
+    pub fn add_stopwords(&self, words: &[&str]) {
+        let mut stopwords = self.stopwords.write();
+        for word in words {
+            stopwords.insert(word.to_lowercase());
+        }
     }
 
     /// Load default dictionaries for gold loan domain

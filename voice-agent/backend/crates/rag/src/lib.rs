@@ -32,6 +32,8 @@ pub mod context;
 pub mod knowledge_loader;
 // P2-2 FIX: Context compression for long conversations
 pub mod compressor;
+// Phase 4: Semantic chunking for improved RAG
+pub mod chunker;
 
 pub use adapter::{EnhancedRetriever, EnhancedRetrieverConfig};
 pub use agentic::{
@@ -65,7 +67,8 @@ pub use domain_boost::{
 pub use embeddings::{Embedder, EmbeddingConfig, SimpleEmbedder};
 pub use knowledge_loader::{KnowledgeDocument, KnowledgeFile, KnowledgeLoader};
 pub use query_expansion::{
-    ExpandedQuery, ExpansionStats, QueryExpander, QueryExpansionConfig, TermSource, WeightedTerm,
+    gold_loan_stopwords, ExpandedQuery, ExpansionStats, QueryExpander, QueryExpansionConfig,
+    TermSource, WeightedTerm,
 };
 pub use reranker::{EarlyExitReranker, ExitStrategy, RerankerConfig};
 pub use retriever::{HybridRetriever, RetrieverConfig, SearchResult};
@@ -75,6 +78,8 @@ pub use vector_store::{VectorDistance, VectorStore, VectorStoreConfig};
 pub use compressor::{
     CompressedContext, CompressorConfig, ContextCompressor, RuleBasedSummarizer, Summarizer, Turn,
 };
+// Semantic chunking exports
+pub use chunker::{Chunk, ChunkConfig, ChunkStrategy, SemanticChunker};
 
 use thiserror::Error;
 
