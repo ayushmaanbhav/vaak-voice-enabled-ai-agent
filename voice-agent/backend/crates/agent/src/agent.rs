@@ -19,7 +19,8 @@ use voice_agent_config::PersonaConfig;
 use voice_agent_tools::{ToolExecutor, ToolRegistry};
 // P1 FIX: Import RAG components for retrieval-augmented generation
 use voice_agent_rag::{
-    HybridRetriever, RerankerConfig, RetrieverConfig, SearchResult, VectorStore,
+    AgenticRagConfig, AgenticRetriever, AgenticSearchResult, HybridRetriever, QueryContext,
+    RerankerConfig, RetrieverConfig, SearchResult, VectorStore,
 };
 // P4 FIX: Import personalization engine for dynamic response adaptation
 use voice_agent_core::personalization::{PersonalizationContext, PersonalizationEngine};
@@ -66,6 +67,8 @@ pub struct AgentConfig {
     pub speculative: SpeculativeDecodingConfig,
     /// Phase 5: Dialogue State Tracking configuration
     pub dst_config: DstConfig,
+    /// Phase 11: Agentic RAG configuration for multi-step retrieval
+    pub agentic_rag: AgenticRagConfig,
 }
 
 /// P1 FIX: Configurable default values for tool calls
@@ -190,6 +193,8 @@ impl Default for AgentConfig {
             speculative: SpeculativeDecodingConfig::default(),
             // Phase 5: DST configuration
             dst_config: DstConfig::default(),
+            // Phase 11: Agentic RAG enabled by default for multi-step retrieval
+            agentic_rag: AgenticRagConfig::default(),
         }
     }
 }
@@ -252,8 +257,9 @@ pub struct GoldLoanAgent {
     tools: Arc<ToolRegistry>,
     /// P1 FIX: Now uses LanguageModel trait instead of LlmBackend for proper abstraction
     llm: Option<Arc<dyn LanguageModel>>,
-    /// P1 FIX: RAG retriever for context augmentation
-    retriever: Option<Arc<HybridRetriever>>,
+    /// Phase 11: Agentic RAG retriever for multi-step retrieval with query rewriting
+    /// Replaces simple HybridRetriever with iterative retrieval flow
+    agentic_retriever: Option<Arc<AgenticRetriever>>,
     /// P1 FIX: Vector store for RAG search (optional, can be injected)
     vector_store: Option<Arc<VectorStore>>,
     event_tx: broadcast::Sender<AgentEvent>,
@@ -324,12 +330,24 @@ impl GoldLoanAgent {
             },
         };
 
-        // P1 FIX: Create RAG retriever if enabled
-        let retriever = if config.rag_enabled {
-            Some(Arc::new(HybridRetriever::new(
-                RetrieverConfig::default(),
-                RerankerConfig::default(),
-            )))
+        // Phase 11: Create Agentic RAG retriever if enabled
+        // This replaces the simple HybridRetriever with multi-step retrieval
+        let agentic_retriever = if config.rag_enabled {
+            let retriever = AgenticRetriever::new(config.agentic_rag.clone());
+            // Wire LLM backend for query rewriting if LLM is available
+            let retriever = if llm.is_some() {
+                // Get LLM backend for query rewriting
+                if let Ok(backend) = LlmFactory::create_backend(&config.llm_provider) {
+                    tracing::info!("AgenticRetriever initialized with LLM for query rewriting");
+                    retriever.with_llm(backend)
+                } else {
+                    tracing::debug!("AgenticRetriever initialized without query rewriting");
+                    retriever
+                }
+            } else {
+                retriever
+            };
+            Some(Arc::new(retriever))
         } else {
             None
         };
@@ -409,7 +427,7 @@ impl GoldLoanAgent {
             conversation,
             tools,
             llm,
-            retriever,
+            agentic_retriever,
             vector_store: None,
             event_tx,
             prefetch_cache: RwLock::new(None),
@@ -466,12 +484,17 @@ impl GoldLoanAgent {
 
         let tools = Arc::new(voice_agent_tools::registry::create_default_registry());
 
-        // P1 FIX: Create RAG retriever if enabled
-        let retriever = if config.rag_enabled {
-            Some(Arc::new(HybridRetriever::new(
-                RetrieverConfig::default(),
-                RerankerConfig::default(),
-            )))
+        // Phase 11: Create Agentic RAG retriever if enabled
+        let agentic_retriever = if config.rag_enabled {
+            let retriever = AgenticRetriever::new(config.agentic_rag.clone());
+            // Wire LLM backend for query rewriting
+            let retriever = if let Ok(backend) = LlmFactory::create_backend(&config.llm_provider) {
+                tracing::info!("AgenticRetriever initialized with LLM for query rewriting");
+                retriever.with_llm(backend)
+            } else {
+                retriever
+            };
+            Some(Arc::new(retriever))
         } else {
             None
         };
@@ -515,7 +538,7 @@ impl GoldLoanAgent {
             conversation,
             tools,
             llm: Some(llm),
-            retriever,
+            agentic_retriever,
             vector_store: None,
             event_tx,
             prefetch_cache: RwLock::new(None),
@@ -550,12 +573,10 @@ impl GoldLoanAgent {
 
         let tools = Arc::new(voice_agent_tools::registry::create_default_registry());
 
-        // P1 FIX: Create RAG retriever if enabled
-        let retriever = if config.rag_enabled {
-            Some(Arc::new(HybridRetriever::new(
-                RetrieverConfig::default(),
-                RerankerConfig::default(),
-            )))
+        // Phase 11: Create Agentic RAG retriever if enabled
+        // Without LLM, agentic retriever works but without query rewriting
+        let agentic_retriever = if config.rag_enabled {
+            Some(Arc::new(AgenticRetriever::new(config.agentic_rag.clone())))
         } else {
             None
         };
@@ -586,7 +607,7 @@ impl GoldLoanAgent {
             conversation,
             tools,
             llm: None,
-            retriever,
+            agentic_retriever,
             vector_store: None,
             event_tx,
             prefetch_cache: RwLock::new(None),
@@ -669,10 +690,12 @@ impl GoldLoanAgent {
             return false;
         }
 
-        let (retriever, vector_store) = match (&self.retriever, &self.vector_store) {
-            (Some(r), Some(vs)) => (r.clone(), vs.clone()),
-            _ => return false,
-        };
+        // Phase 11: Use AgenticRetriever's underlying HybridRetriever for prefetch
+        let (agentic_retriever, vector_store) =
+            match (&self.agentic_retriever, &self.vector_store) {
+                (Some(ar), Some(vs)) => (ar.clone(), vs.clone()),
+                _ => return false,
+            };
 
         // P4 FIX: Use timing strategy to determine if we should prefetch
         let stage = self.conversation.stage();
@@ -715,8 +738,10 @@ impl GoldLoanAgent {
             "Triggering RAG prefetch on partial transcript"
         );
 
-        // Run prefetch asynchronously
-        match retriever
+        // Phase 11: Run prefetch using the underlying HybridRetriever from AgenticRetriever
+        // This is faster than full agentic retrieval (no query rewriting)
+        match agentic_retriever
+            .retriever()
             .prefetch(&partial, confidence, &vector_store)
             .await
         {
@@ -729,15 +754,15 @@ impl GoldLoanAgent {
                     timestamp: std::time::Instant::now(),
                 });
                 true
-            },
+            }
             Ok(_) => {
                 tracing::trace!("RAG prefetch returned no results");
                 false
-            },
+            }
             Err(e) => {
                 tracing::warn!("RAG prefetch failed: {}", e);
                 false
-            },
+            }
         }
     }
 
@@ -750,10 +775,12 @@ impl GoldLoanAgent {
             return;
         }
 
-        let (retriever, vector_store) = match (&self.retriever, &self.vector_store) {
-            (Some(r), Some(vs)) => (r.clone(), vs.clone()),
-            _ => return,
-        };
+        // Phase 11: Use AgenticRetriever's underlying HybridRetriever for background prefetch
+        let (agentic_retriever, vector_store) =
+            match (&self.agentic_retriever, &self.vector_store) {
+                (Some(ar), Some(vs)) => (ar.clone(), vs.clone()),
+                _ => return,
+            };
 
         if partial_transcript.split_whitespace().count() < 2 {
             return;
@@ -780,14 +807,16 @@ impl GoldLoanAgent {
                 confidence = confidence,
                 "Background RAG prefetch triggered"
             );
-            match retriever
+            // Use underlying HybridRetriever for fast prefetch (no query rewriting)
+            match agentic_retriever
+                .retriever()
                 .prefetch(&partial_transcript, confidence, &vector_store)
                 .await
             {
                 Ok(results) if !results.is_empty() => {
                     tracing::debug!(count = results.len(), "Background prefetch completed");
                     // Note: Results are not cached in background mode - use prefetch_on_partial for caching
-                },
+                }
                 Ok(_) => tracing::trace!("Background prefetch returned no results"),
                 Err(e) => tracing::warn!("Background prefetch failed: {}", e),
             }
@@ -1369,23 +1398,56 @@ impl GoldLoanAgent {
             }
         }
 
-        // Add RAG context
+        // Phase 11: Add RAG context using Agentic RAG with multi-step retrieval
         if self.config.rag_enabled {
             let stage = self.conversation.stage();
             let rag_fraction = stage.rag_context_fraction();
 
             if rag_fraction > 0.0 {
-                if let (Some(retriever), Some(vector_store)) = (&self.retriever, &self.vector_store)
+                if let (Some(agentic_retriever), Some(vector_store)) =
+                    (&self.agentic_retriever, &self.vector_store)
                 {
+                    // Check for prefetched results first
                     let results = if let Some(prefetched) = self.get_prefetch_results(english_input)
                     {
                         self.clear_prefetch_cache();
                         prefetched
                     } else {
-                        retriever
-                            .search(english_input, vector_store, None)
+                        // Build query context for agentic retrieval
+                        let human_block = self.agentic_memory.core.human_snapshot();
+                        let query_context = QueryContext {
+                            // Use conversation context as summary for query rewriting
+                            summary: self.conversation.get_context(),
+                            stage: Some(stage.display_name().to_string()),
+                            entities: human_block
+                                .facts
+                                .iter()
+                                .map(|(k, entry)| (k.clone(), entry.value.clone()))
+                                .collect(),
+                        };
+
+                        // Use AgenticRetriever for multi-step retrieval with query rewriting
+                        match agentic_retriever
+                            .search(english_input, vector_store, Some(&query_context))
                             .await
-                            .unwrap_or_default()
+                        {
+                            Ok(agentic_result) => {
+                                if agentic_result.query_rewritten {
+                                    tracing::debug!(
+                                        original = %english_input,
+                                        rewritten = %agentic_result.final_query,
+                                        iterations = agentic_result.iterations,
+                                        sufficiency = agentic_result.sufficiency_score,
+                                        "Agentic RAG rewrote query"
+                                    );
+                                }
+                                agentic_result.results
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Agentic RAG search failed");
+                                vec![]
+                            }
+                        }
                     };
 
                     if !results.is_empty() {
@@ -1714,7 +1776,9 @@ impl GoldLoanAgent {
 
             // Skip RAG entirely for stages that don't need it (greeting, farewell)
             if rag_fraction > 0.0 {
-                if let (Some(retriever), Some(vector_store)) = (&self.retriever, &self.vector_store)
+                // Phase 11: Use AgenticRetriever for multi-step retrieval
+                if let (Some(agentic_retriever), Some(vector_store)) =
+                    (&self.agentic_retriever, &self.vector_store)
                 {
                     // First, try to use prefetched results
                     let results = if let Some(prefetched) = self.get_prefetch_results(user_input) {
@@ -1723,13 +1787,39 @@ impl GoldLoanAgent {
                         self.clear_prefetch_cache();
                         prefetched
                     } else {
-                        // Fall back to fresh search
-                        match retriever.search(user_input, vector_store, None).await {
-                            Ok(r) => r,
+                        // Build query context for agentic retrieval
+                        let human_block = self.agentic_memory.core.human_snapshot();
+                        let query_context = QueryContext {
+                            // Use conversation context as summary for query rewriting
+                            summary: self.conversation.get_context(),
+                            stage: Some(stage.display_name().to_string()),
+                            entities: human_block
+                                .facts
+                                .iter()
+                                .map(|(k, entry)| (k.clone(), entry.value.clone()))
+                                .collect(),
+                        };
+
+                        // Use AgenticRetriever for multi-step retrieval
+                        match agentic_retriever
+                            .search(user_input, vector_store, Some(&query_context))
+                            .await
+                        {
+                            Ok(agentic_result) => {
+                                if agentic_result.query_rewritten {
+                                    tracing::debug!(
+                                        original = %user_input,
+                                        rewritten = %agentic_result.final_query,
+                                        iterations = agentic_result.iterations,
+                                        "Agentic RAG rewrote query (streaming)"
+                                    );
+                                }
+                                agentic_result.results
+                            }
                             Err(e) => {
                                 tracing::warn!("RAG search failed, continuing without: {}", e);
                                 Vec::new()
-                            },
+                            }
                         }
                     };
 
