@@ -33,12 +33,16 @@
 //! - `conversation_search`: Search conversation history
 
 pub mod archival;
+pub mod compressor;
 pub mod core;
 pub mod recall;
 
 pub use archival::{
     ArchivalMemory, ArchivalMemoryConfig, ArchivalSearchResult, MemoryNote, MemorySource,
     MemoryType,
+};
+pub use compressor::{
+    ExtractiveCompressor, ExtractiveCompressorConfig, ExtractionStats, ScoredSentence,
 };
 pub use core::{
     CoreMemory, CoreMemoryConfig, CoreMemoryError, EntrySource, HumanBlock, MemoryBlockEntry,
@@ -71,6 +75,13 @@ pub struct AgenticMemoryConfig {
     pub low_watermark_tokens: usize,
     /// Enable automatic summarization
     pub auto_summarize: bool,
+    /// Use extractive compression instead of LLM summarization
+    /// Recommended for small models (< 3B parameters)
+    #[serde(default)]
+    pub use_extractive_compression: bool,
+    /// Extractive compressor configuration (RECOMP-style)
+    #[serde(default)]
+    pub extractive: ExtractiveCompressorConfig,
 }
 
 impl Default for AgenticMemoryConfig {
@@ -83,6 +94,8 @@ impl Default for AgenticMemoryConfig {
             high_watermark_tokens: 3072,
             low_watermark_tokens: 2048,
             auto_summarize: true,
+            use_extractive_compression: false, // Default to LLM, enable for small models
+            extractive: ExtractiveCompressorConfig::default(),
         }
     }
 }
@@ -215,15 +228,19 @@ pub struct AgenticMemory {
     session_id: String,
     /// Optional LLM for summarization
     llm: RwLock<Option<Arc<dyn LanguageModel>>>,
+    /// RECOMP-style extractive compressor (for small models)
+    extractive_compressor: ExtractiveCompressor,
 }
 
 impl AgenticMemory {
     /// Create new agentic memory system
     pub fn new(config: AgenticMemoryConfig, session_id: impl Into<String>) -> Self {
+        let extractive_compressor = ExtractiveCompressor::new(config.extractive.clone());
         Self {
             core: CoreMemory::new(config.core.clone()),
             recall: RecallMemory::new(config.recall.clone()),
             archival: ArchivalMemory::new(config.archival.clone()),
+            extractive_compressor,
             config,
             session_id: session_id.into(),
             llm: RwLock::new(None),
@@ -493,6 +510,19 @@ impl AgenticMemory {
     /// - Preserve customer-stated information
     /// - Maintain conversation flow markers
     async fn summarize_turns(&self, turns: &[ConversationTurn]) -> Result<String, String> {
+        // Use RECOMP-style extractive compression for small models
+        if self.config.use_extractive_compression {
+            let (compressed, stats) = self.extractive_compressor.compress(turns, None);
+            tracing::debug!(
+                compression_ratio = stats.compression_ratio,
+                sentences_selected = stats.selected_sentences,
+                entities_preserved = stats.entities_preserved,
+                "Extractive compression completed (RECOMP-style)"
+            );
+            return Ok(compressed);
+        }
+
+        // Otherwise, try LLM-based summarization
         let llm = {
             let guard = self.llm.read();
             match guard.as_ref() {
@@ -691,6 +721,40 @@ Compressed Summary (max 100 words):"#,
             }
         }
         None
+    }
+
+    // =========================================================================
+    // RECOMP-Style Extractive Compression (for Small Models)
+    // =========================================================================
+
+    /// Get compressed context using RECOMP-style extractive compression
+    ///
+    /// This method is optimized for small models (< 3B parameters) and:
+    /// 1. Extracts and scores sentences by entity density, intent relevance, recency
+    /// 2. Selects top sentences within token budget
+    /// 3. Prepends DST state summary for explicit state tracking
+    ///
+    /// Reference: RECOMP (arXiv:2310.04408)
+    pub fn get_compressed_context(
+        &self,
+        dst_slots: &std::collections::HashMap<String, String>,
+    ) -> (String, ExtractionStats) {
+        let turns = self.recall.get_all();
+        self.extractive_compressor.compress_with_dst_slots(&turns, dst_slots)
+    }
+
+    /// Get compressed context with optional DST state string
+    pub fn get_compressed_context_with_state(
+        &self,
+        dst_state: Option<&str>,
+    ) -> (String, ExtractionStats) {
+        let turns = self.recall.get_all();
+        self.extractive_compressor.compress(&turns, dst_state)
+    }
+
+    /// Check if extractive compression is enabled
+    pub fn uses_extractive_compression(&self) -> bool {
+        self.config.use_extractive_compression
     }
 
     // =========================================================================
