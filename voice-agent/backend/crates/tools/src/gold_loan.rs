@@ -1557,6 +1557,430 @@ fn get_mock_branches(
         .collect()
 }
 
+// =============================================================================
+// Phase 6: Additional Gold Loan Tools
+// =============================================================================
+
+/// Document Checklist Tool
+///
+/// Returns the list of documents required for a gold loan application.
+/// Helps customers prepare for their branch visit.
+pub struct DocumentChecklistTool;
+
+impl DocumentChecklistTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentChecklistTool {
+    fn name(&self) -> &str {
+        "get_document_checklist"
+    }
+
+    fn description(&self) -> &str {
+        "Get the list of documents required for gold loan application based on loan type and customer category"
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema {
+            name: self.name().to_string(),
+            description: self.description().to_string(),
+            input_schema: InputSchema::object()
+                .property(
+                    "loan_type",
+                    PropertySchema::enum_type(
+                        "Type of gold loan",
+                        vec![
+                            "new_loan".into(),
+                            "top_up".into(),
+                            "balance_transfer".into(),
+                            "renewal".into(),
+                        ],
+                    ),
+                    true,
+                )
+                .property(
+                    "customer_type",
+                    PropertySchema::enum_type(
+                        "Customer category",
+                        vec![
+                            "individual".into(),
+                            "self_employed".into(),
+                            "business".into(),
+                            "nri".into(),
+                        ],
+                    ),
+                    false,
+                )
+                .property(
+                    "existing_customer",
+                    PropertySchema::boolean("Is an existing Kotak customer"),
+                    false,
+                ),
+        }
+    }
+
+    async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
+        let loan_type = input
+            .get("loan_type")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::invalid_params("loan_type is required"))?;
+
+        let customer_type = input
+            .get("customer_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("individual");
+
+        let existing_customer = input
+            .get("existing_customer")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // Base documents required for all gold loans
+        let mut mandatory_docs = vec![
+            json!({
+                "document": "Valid Photo ID",
+                "accepted": ["Aadhaar Card", "PAN Card", "Passport", "Voter ID", "Driving License"],
+                "copies": 1,
+                "notes": "Original required for verification"
+            }),
+            json!({
+                "document": "Address Proof",
+                "accepted": ["Aadhaar Card", "Utility Bill (last 3 months)", "Bank Statement", "Rent Agreement"],
+                "copies": 1,
+                "notes": "Should match current residence"
+            }),
+            json!({
+                "document": "Passport Size Photographs",
+                "copies": 2,
+                "notes": "Recent photographs (within 6 months)"
+            }),
+        ];
+
+        // Add PAN for larger loans
+        mandatory_docs.push(json!({
+            "document": "PAN Card",
+            "copies": 1,
+            "notes": "Mandatory for loans above ₹50,000"
+        }));
+
+        // Documents related to gold
+        let gold_docs = vec![
+            json!({
+                "document": "Gold Items",
+                "notes": "Bring gold jewelry/items for valuation. Remove any non-gold attachments (stones, pearls)"
+            }),
+            json!({
+                "document": "Gold Purchase Invoice (if available)",
+                "notes": "Helps with valuation and authenticity verification"
+            }),
+        ];
+
+        // Additional documents based on loan type
+        let additional_docs: Vec<Value> = match loan_type {
+            "balance_transfer" => vec![
+                json!({
+                    "document": "Existing Loan Statement",
+                    "notes": "From current lender showing outstanding amount"
+                }),
+                json!({
+                    "document": "Gold Loan Account Details",
+                    "notes": "Loan account number and lender details"
+                }),
+                json!({
+                    "document": "NOC from Current Lender",
+                    "notes": "May be obtained after approval"
+                }),
+            ],
+            "top_up" => vec![
+                json!({
+                    "document": "Existing Kotak Gold Loan Details",
+                    "notes": "Loan account number for top-up"
+                }),
+            ],
+            "renewal" => vec![
+                json!({
+                    "document": "Previous Loan Details",
+                    "notes": "Loan account number for renewal"
+                }),
+            ],
+            _ => vec![],
+        };
+
+        // Customer type specific documents
+        let customer_specific: Vec<Value> = match customer_type {
+            "self_employed" | "business" => vec![
+                json!({
+                    "document": "Business Proof",
+                    "accepted": ["GST Registration", "Shop & Establishment Certificate", "Trade License"],
+                    "notes": "Any one document for business verification"
+                }),
+            ],
+            "nri" => vec![
+                json!({
+                    "document": "Passport with Valid Visa",
+                    "notes": "Required for NRI customers"
+                }),
+                json!({
+                    "document": "NRE/NRO Bank Account Statement",
+                    "notes": "Last 6 months statement"
+                }),
+            ],
+            _ => vec![],
+        };
+
+        // Simplified requirements for existing customers
+        let existing_customer_note = if existing_customer {
+            "As an existing Kotak customer, some documents may already be on file. Please bring originals for verification."
+        } else {
+            "Please bring original documents along with photocopies."
+        };
+
+        let result = json!({
+            "loan_type": loan_type,
+            "customer_type": customer_type,
+            "existing_customer": existing_customer,
+            "mandatory_documents": mandatory_docs,
+            "gold_related": gold_docs,
+            "additional_documents": additional_docs,
+            "customer_specific_documents": customer_specific,
+            "total_documents": mandatory_docs.len() + gold_docs.len() + additional_docs.len() + customer_specific.len(),
+            "important_notes": [
+                existing_customer_note,
+                "Original documents are required for verification at the branch.",
+                "Gold items should be free of non-gold attachments for accurate valuation.",
+                "Processing time: Same day disbursement subject to document verification."
+            ],
+            "message": format!(
+                "For a {} gold loan, you'll need {} documents. Key documents: Valid ID, Address Proof, PAN Card, and your gold items.",
+                loan_type.replace("_", " "),
+                mandatory_docs.len() + gold_docs.len() + additional_docs.len() + customer_specific.len()
+            )
+        });
+
+        Ok(ToolOutput::json(result))
+    }
+}
+
+impl Default for DocumentChecklistTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Competitor Comparison Tool
+///
+/// Compares gold loan offerings from various lenders to highlight Kotak's advantages.
+pub struct CompetitorComparisonTool {
+    /// Domain configuration for Kotak rates
+    config: Option<GoldLoanConfig>,
+}
+
+impl CompetitorComparisonTool {
+    pub fn new() -> Self {
+        Self { config: None }
+    }
+
+    pub fn with_config(config: GoldLoanConfig) -> Self {
+        Self {
+            config: Some(config),
+        }
+    }
+
+    fn get_kotak_rate(&self) -> f64 {
+        self.config
+            .as_ref()
+            .map(|c| c.kotak_interest_rate)
+            .unwrap_or(10.49)
+    }
+
+    fn get_kotak_ltv(&self) -> f64 {
+        self.config
+            .as_ref()
+            .map(|c| c.ltv_percent)
+            .unwrap_or(75.0)
+    }
+}
+
+#[async_trait]
+impl Tool for CompetitorComparisonTool {
+    fn name(&self) -> &str {
+        "compare_lenders"
+    }
+
+    fn description(&self) -> &str {
+        "Compare gold loan offerings from Kotak with other major lenders including interest rates, LTV, and features"
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema {
+            name: self.name().to_string(),
+            description: self.description().to_string(),
+            input_schema: InputSchema::object()
+                .property(
+                    "competitor",
+                    PropertySchema::enum_type(
+                        "Competitor to compare with",
+                        vec![
+                            "muthoot".into(),
+                            "manappuram".into(),
+                            "iifl".into(),
+                            "hdfc".into(),
+                            "sbi".into(),
+                            "federal".into(),
+                            "icici".into(),
+                            "all".into(),
+                        ],
+                    ),
+                    false,
+                )
+                .property(
+                    "loan_amount",
+                    PropertySchema::number("Loan amount for comparison").with_default(json!(100000)),
+                    false,
+                )
+                .property(
+                    "tenure_months",
+                    PropertySchema::integer("Tenure in months").with_default(json!(12)),
+                    false,
+                ),
+        }
+    }
+
+    async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
+        let competitor = input
+            .get("competitor")
+            .and_then(|v| v.as_str())
+            .unwrap_or("all");
+
+        let loan_amount = input
+            .get("loan_amount")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(100000.0);
+
+        let tenure_months = input
+            .get("tenure_months")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(12);
+
+        // Competitor data (rates as of 2024)
+        let competitors = vec![
+            ("muthoot", "Muthoot Finance", 12.0, 75.0, vec!["Large branch network", "Same day disbursement"]),
+            ("manappuram", "Manappuram Gold Loan", 12.0, 75.0, vec!["Quick processing", "Multiple schemes"]),
+            ("iifl", "IIFL Gold Loan", 11.0, 75.0, vec!["Online account access", "Flexible repayment"]),
+            ("hdfc", "HDFC Bank Gold Loan", 10.5, 75.0, vec!["Banking relationship benefits", "Online tracking"]),
+            ("sbi", "SBI Gold Loan", 9.85, 75.0, vec!["Low interest for PSU", "Longer tenure options"]),
+            ("federal", "Federal Bank Gold Loan", 10.49, 75.0, vec!["Quick processing", "Doorstep service"]),
+            ("icici", "ICICI Bank Gold Loan", 10.0, 75.0, vec!["Part payment facility", "Online management"]),
+        ];
+
+        let kotak_rate = self.get_kotak_rate();
+        let kotak_ltv = self.get_kotak_ltv();
+
+        // Filter competitors based on input
+        let selected_competitors: Vec<_> = if competitor == "all" {
+            competitors.clone()
+        } else {
+            competitors
+                .iter()
+                .filter(|(id, _, _, _, _)| *id == competitor)
+                .cloned()
+                .collect()
+        };
+
+        // Calculate comparison data
+        let kotak_monthly_interest = loan_amount * kotak_rate / 100.0 / 12.0;
+        let kotak_annual_interest = loan_amount * kotak_rate / 100.0;
+
+        let mut comparisons: Vec<Value> = vec![];
+        let mut kotak_advantages: Vec<String> = vec![];
+
+        for (id, name, rate, ltv, features) in selected_competitors {
+            let competitor_monthly = loan_amount * rate / 100.0 / 12.0;
+            let competitor_annual = loan_amount * rate / 100.0;
+            let monthly_savings = competitor_monthly - kotak_monthly_interest;
+            let annual_savings = competitor_annual - kotak_annual_interest;
+
+            let comparison = json!({
+                "lender_id": id,
+                "lender_name": name,
+                "interest_rate": rate,
+                "ltv_percent": ltv,
+                "features": features,
+                "monthly_interest": competitor_monthly,
+                "annual_interest": competitor_annual,
+                "vs_kotak": {
+                    "rate_difference": rate - kotak_rate,
+                    "monthly_savings": monthly_savings,
+                    "annual_savings": annual_savings,
+                    "tenure_savings": monthly_savings * tenure_months as f64,
+                    "kotak_is_cheaper": kotak_rate < rate
+                }
+            });
+            comparisons.push(comparison);
+
+            if kotak_rate < rate {
+                kotak_advantages.push(format!(
+                    "{}% lower rate than {} (saving ₹{:.0}/month)",
+                    ((rate - kotak_rate) * 100.0).round() / 100.0,
+                    name,
+                    monthly_savings
+                ));
+            }
+        }
+
+        // Kotak features
+        let kotak_features = vec![
+            "Competitive interest rate from 10.49% p.a.",
+            "Up to 75% LTV (Loan-to-Value)",
+            "Same day disbursement",
+            "No hidden charges",
+            "Flexible repayment options",
+            "Part payment facility",
+            "Online loan management",
+            "Wide branch network",
+            "Transparent valuation process",
+        ];
+
+        let result = json!({
+            "comparison_for": {
+                "loan_amount": loan_amount,
+                "tenure_months": tenure_months
+            },
+            "kotak_mahindra_bank": {
+                "interest_rate": kotak_rate,
+                "ltv_percent": kotak_ltv,
+                "monthly_interest": kotak_monthly_interest,
+                "annual_interest": kotak_annual_interest,
+                "features": kotak_features
+            },
+            "competitors": comparisons,
+            "kotak_advantages": kotak_advantages,
+            "summary": format!(
+                "For a loan of ₹{:.0}, Kotak offers {}% p.a. with monthly interest of ₹{:.0}. {}",
+                loan_amount,
+                kotak_rate,
+                kotak_monthly_interest,
+                if kotak_advantages.is_empty() {
+                    "Kotak rates are competitive with the market.".to_string()
+                } else {
+                    format!("You can save compared to: {}", kotak_advantages.join(", "))
+                }
+            )
+        });
+
+        Ok(ToolOutput::json(result))
+    }
+}
+
+impl Default for CompetitorComparisonTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

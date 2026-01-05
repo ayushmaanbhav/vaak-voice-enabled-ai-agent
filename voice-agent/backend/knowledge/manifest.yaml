@@ -1,0 +1,90 @@
+# Knowledge Base Manifest
+# Lists all knowledge files and their categories for indexing
+
+version: "1.0"
+name: "Kotak Gold Loan Knowledge Base"
+description: "Comprehensive knowledge base for voice agent RAG system"
+
+# Embedding configuration
+embedding:
+  model: "intfloat/multilingual-e5-small"
+  dimensions: 384
+  batch_size: 32
+
+# Vector store configuration
+vector_store:
+  collection: "gold_loan_knowledge"
+  distance: "cosine"
+
+# Knowledge files to load
+files:
+  - path: "products.yaml"
+    category: "product"
+    priority: 1
+    description: "Product information - standard, Shakti, bullet, overdraft, agricultural"
+
+  - path: "rates.yaml"
+    category: "rate"
+    priority: 1
+    description: "Interest rates, fees, savings calculations"
+
+  - path: "objections.yaml"
+    category: "objection"
+    priority: 1
+    description: "Objection handling scripts for sales conversion"
+
+  - path: "switching.yaml"
+    category: "switching"
+    priority: 1
+    description: "Balance transfer and Switch & Save program"
+
+  - path: "eligibility.yaml"
+    category: "eligibility"
+    priority: 2
+    description: "Eligibility criteria, valuation, LTV"
+
+  - path: "segments.yaml"
+    category: "segment"
+    priority: 2
+    description: "Customer segment-specific content (P1-P5)"
+
+  - path: "faqs.yaml"
+    category: "faq"
+    priority: 2
+    description: "Frequently asked questions"
+
+  - path: "safety.yaml"
+    category: "safety"
+    priority: 2
+    description: "Safety, compliance, RBI regulations"
+
+  - path: "process.yaml"
+    category: "process"
+    priority: 2
+    description: "Application process, doorstep service, tips"
+
+  - path: "branches.yaml"
+    category: "branch"
+    priority: 3
+    description: "Branch locations and contact information"
+
+  - path: "competitors.yaml"
+    category: "competitor"
+    priority: 2
+    description: "Competitor comparison (Muthoot, Manappuram, IIFL)"
+
+# Document statistics (updated after loading)
+statistics:
+  total_documents: 0
+  total_tokens: 0
+  by_category: {}
+  by_language: {}
+  last_updated: null
+
+# Quality checks
+quality:
+  min_document_length: 100
+  max_document_length: 1500
+  required_fields: ["id", "title", "content", "category", "language", "keywords"]
+  validate_keywords: true
+  check_duplicates: true

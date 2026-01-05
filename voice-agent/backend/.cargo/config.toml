@@ -1,0 +1,6 @@
+[env]
+ORT_LIB_LOCATION = "/home/vscode/goldloan-study/voice-agent/backend/onnxruntime"
+ORT_PREFER_DYNAMIC_LINK = "1"
+
+[build]
+rustflags = ["-L", "/home/vscode/goldloan-study/voice-agent/backend/onnxruntime/lib"]

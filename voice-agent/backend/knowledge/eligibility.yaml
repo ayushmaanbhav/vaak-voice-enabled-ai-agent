@@ -1,0 +1,200 @@
+# Eligibility and Requirements Knowledge Base
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # BASIC ELIGIBILITY
+  # =============================================================================
+  - id: elig_basic_001
+    title: "Gold Loan Eligibility Criteria"
+    content: |
+      Kotak Gold Loan has simple eligibility requirements.
+
+      Who Can Apply:
+      - Age: 21 to 65 years
+      - Citizenship: Indian citizens and NRIs
+      - Income Proof: NOT required (gold is collateral)
+      - Credit Score: NOT checked (secured loan)
+
+      What Gold is Accepted:
+      - 18 Karat and above (18K, 20K, 22K, 24K)
+      - Gold jewelry and ornaments
+      - Gold coins (with valid purchase receipt from banks)
+      - Gold bars (with hallmark)
+
+      What is NOT Accepted:
+      - Gold below 18 Karat purity
+      - Gold-plated jewelry
+      - Gold coins from non-bank sources
+      - Temple jewelry (if cannot be mortgaged)
+      - Third-party gold (not in your name)
+
+      Documents Required:
+      - ID Proof: Aadhaar, PAN, Passport, Voter ID
+      - Address Proof: Aadhaar, Utility bill, Bank statement
+      - Photographs: 2 passport size
+
+      No salary slip, no bank statement, no income tax return needed.
+    category: eligibility
+    language: en
+    keywords: ["eligible", "qualify", "who can", "requirements", "age", "documents"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["eligible", "qualify", "can I", "requirements", "who can apply"]
+
+  - id: elig_basic_002_hi
+    title: "Gold Loan Eligibility (Hindi)"
+    content: |
+      Kotak Gold Loan ke liye simple eligibility hai.
+
+      Kaun Apply Kar Sakta Hai:
+      - Umar: 21 se 65 saal
+      - Citizenship: Indian ya NRI
+      - Income Proof: Zaruri NAHI (gold collateral hai)
+      - Credit Score: Check NAHI hota (secured loan)
+
+      Kaunsa Gold Accept Hota Hai:
+      - 18 Karat aur usse zyada (18K, 20K, 22K, 24K)
+      - Gold jewelry aur gehne
+      - Gold coins (bank se kharide ho toh)
+      - Gold bars (hallmark ke saath)
+
+      Kya Accept NAHI Hota:
+      - 18 Karat se kam purity ka sona
+      - Gold-plated jewelry
+      - Bina receipt ke coins
+      - Mandir ke gehne (jo mortgage nahi ho sakte)
+      - Dusre ke naam ka sona
+
+      Documents:
+      - ID Proof: Aadhaar, PAN, Passport
+      - Address Proof: Aadhaar, bijli bill
+      - 2 passport size photos
+
+      Salary slip, bank statement, ITR zaruri NAHI hai.
+    category: eligibility
+    language: hi
+    keywords: ["eligible", "patrta", "kon", "age", "documents"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+
+  # =============================================================================
+  # GOLD VALUATION
+  # =============================================================================
+  - id: elig_valuation_001
+    title: "How Gold is Valued for Loan"
+    content: |
+      Understanding how we value your gold for the loan.
+
+      Valuation Process:
+      1. You bring gold to branch (in your presence)
+      2. Gold tested for purity using XRF machine (non-destructive)
+      3. Gold weighed on precision scale
+      4. Today's gold rate applied
+      5. Loan amount calculated (up to 75% of value)
+
+      Valuation Formula:
+      Loan Amount = Gold Weight x Purity Factor x Gold Rate x 75%
+
+      Example:
+      - Gold weight: 100 grams
+      - Purity: 22K (factor: 0.916)
+      - Gold rate: Rs 7,500/gram
+      - Market value: 100 x 0.916 x 7,500 = Rs 6,87,000
+      - Max loan (75% LTV): Rs 5,15,250
+
+      Purity Factors:
+      - 24K: 1.00 (pure gold)
+      - 22K: 0.916
+      - 20K: 0.833
+      - 18K: 0.750
+
+      Important:
+      - Stones deducted from weight (you keep them or we safekeep)
+      - Making charges not considered (only gold value)
+      - Rate based on IBJA (India Bullion Jewellers Association)
+
+      Valuation is FREE and takes only 15 minutes.
+    category: eligibility
+    language: en
+    keywords: ["valuation", "value", "how much", "purity", "weight", "karat"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["value", "how much loan", "purity", "weight", "valuation"]
+
+  - id: elig_valuation_002_hi
+    title: "Gold Ki Valuation Kaise Hoti Hai (Hindi)"
+    content: |
+      Samjhiye aapke gold ki valuation kaise hoti hai.
+
+      Valuation Process:
+      1. Aap gold branch laayein (aapki maujoodgi mein)
+      2. XRF machine se purity test (sona kharab nahi hota)
+      3. Precision scale pe weight
+      4. Aaj ka gold rate apply
+      5. Loan amount calculate (value ka 75% tak)
+
+      Formula:
+      Loan Amount = Weight x Purity Factor x Gold Rate x 75%
+
+      Example:
+      - Weight: 100 gram
+      - Purity: 22K (factor: 0.916)
+      - Rate: Rs 7,500/gram
+      - Market value: 100 x 0.916 x 7,500 = Rs 6,87,000
+      - Max loan (75% LTV): Rs 5,15,250
+
+      Purity Factors:
+      - 24K: 1.00 (pure gold)
+      - 22K: 0.916
+      - 20K: 0.833
+      - 18K: 0.750
+
+      Important:
+      - Stones ka weight alag hota hai
+      - Making charges consider nahi hote
+      - Rate IBJA ke hisaab se
+
+      Valuation FREE hai aur sirf 15 minute lagta hai.
+    category: eligibility
+    language: hi
+    keywords: ["valuation", "kitna milega", "purity", "weight", "karat"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+
+  # =============================================================================
+  # LTV EXPLAINED
+  # =============================================================================
+  - id: elig_ltv_001
+    title: "Loan-to-Value (LTV) Explained"
+    content: |
+      LTV determines how much loan you can get against your gold.
+
+      What is LTV:
+      Loan-to-Value ratio is the percentage of gold's market value you can borrow.
+
+      Current LTV at Kotak:
+      - Standard: Up to 75%
+      - Means: Rs 75 loan for every Rs 100 gold value
+
+      Why Not 100%:
+      - RBI regulation caps LTV at 75%
+      - Protects both bank and customer
+      - Cushion against gold price fluctuations
+
+      LTV Example:
+      - Your gold value: Rs 10 lakh
+      - Maximum loan at 75% LTV: Rs 7.5 lakh
+
+      What Affects Your LTV:
+      - Gold purity (higher = better)
+      - Gold type (jewelry may have lower LTV than bars)
+      - Loan product (overdraft may have 70% LTV)
+
+      RBI 2025 Rules (Coming April 2026):
+      - 12-month bullet loans: 75% LTV
+      - 12-24 month loans: 80% LTV
+      - 24-36 month loans: 85% LTV
+
+      Kotak already compliant with new rules.
+    category: eligibility
+    language: en
+    keywords: ["LTV", "loan to value", "how much", "percentage", "75%"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["LTV", "how much loan", "percentage", "75 percent"]

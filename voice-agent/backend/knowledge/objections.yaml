@@ -1,0 +1,373 @@
+# Objection Handling Knowledge Base
+# Critical for sales conversion - subtle, empathetic responses
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # RATE OBJECTIONS
+  # =============================================================================
+  - id: obj_rate_high_001
+    title: "Objection: Your rate seems high"
+    objection_type: rate
+    trigger_phrases: ["rate is high", "too expensive", "rate zyada", "mehnga", "cheaper elsewhere"]
+    content: |
+      Customer says rate is high or expensive.
+
+      Empathetic Response:
+      "I understand rate is an important factor. Let me share the complete picture.
+
+      Our rate of 10% may look similar to what you see elsewhere, but consider this:
+      - No hidden charges that add up later
+      - Zero foreclosure penalty - repay early and save
+      - Transparent processing - no surprises
+
+      Real Comparison (Rs 5 lakh loan, 12 months):
+      - Other lenders at 18%: You pay Rs 90,000 interest + Rs 15,000 hidden fees
+      - Kotak at 10%: You pay Rs 50,000 interest + Rs 5,000 processing
+      - Your net savings: Rs 50,000
+
+      Would you like me to calculate the exact savings for your loan amount?"
+
+      Key Points:
+      - Acknowledge their concern first
+      - Shift focus from rate to total cost
+      - Quantify savings with real numbers
+      - Offer personalized calculation
+    category: objection
+    language: en
+    keywords: ["rate", "expensive", "high", "cheaper", "cost", "interest"]
+    segment_relevance: ["P1", "P4"]
+    intent_triggers: ["expensive", "high rate", "cheaper", "too much"]
+
+  - id: obj_rate_high_002_hi
+    title: "Objection: Rate zyada hai (Hindi)"
+    objection_type: rate
+    trigger_phrases: ["rate zyada", "mehnga", "kam rate", "byaaj zyada"]
+    content: |
+      Customer kehta hai rate zyada hai.
+
+      Response:
+      "Main samajhta/samajhti hoon rate important hai. Poori picture dekhiye.
+
+      Hamare 10% rate mein koi hidden charges nahi hain:
+      - Prepayment free hai - jaldi repay karein, byaaj bachayein
+      - Processing fee transparent hai
+      - No surprises baad mein
+
+      Comparison (Rs 5 lakh loan):
+      - Dusre lenders 18% pe: Rs 90,000 byaaj + Rs 15,000 hidden
+      - Kotak 10% pe: Rs 50,000 byaaj + Rs 5,000 processing
+      - Aapki bachat: Rs 50,000
+
+      Aapke loan amount pe exact calculation karoon?"
+
+      Mukhya Baatein:
+      - Pehle unki baat maanein
+      - Rate se total cost pe focus shift karein
+      - Numbers se samjhayein
+    category: objection
+    language: hi
+    keywords: ["zyada", "mehnga", "kam rate", "byaaj"]
+    segment_relevance: ["P1", "P4"]
+
+  # =============================================================================
+  # SWITCHING HASSLE OBJECTIONS
+  # =============================================================================
+  - id: obj_hassle_001
+    title: "Objection: Switching is too much hassle"
+    objection_type: hassle
+    trigger_phrases: ["hassle", "too much work", "complicated", "time nahi", "busy"]
+    content: |
+      Customer thinks switching is complicated.
+
+      Response:
+      "I completely understand - your time is valuable. That's exactly why we've made switching almost effortless.
+
+      Here's our 3-Step Switch:
+      1. ONE visit to Kotak branch (we handle everything)
+      2. We pay off your existing loan directly (you don't need cash)
+      3. Your gold transfers same day with full insurance
+
+      What WE Do For You:
+      - Coordinate with your current lender
+      - Handle all paperwork
+      - Insure your gold during transit
+      - Complete in 1-3 days
+
+      What YOU Do:
+      - Just one branch visit
+      - Sign documents
+      - Start saving immediately
+
+      Many customers complete the entire switch in their lunch break. Would you like me to explain the process in more detail?"
+
+      Key Points:
+      - Acknowledge time concern
+      - Emphasize simplicity
+      - Show what we handle vs what they do
+    category: objection
+    language: en
+    keywords: ["hassle", "complicated", "time", "busy", "work", "effort"]
+    segment_relevance: ["P1", "P2", "P4"]
+    intent_triggers: ["hassle", "complicated", "difficult", "time waste"]
+
+  # =============================================================================
+  # LOYALTY OBJECTIONS
+  # =============================================================================
+  - id: obj_loyalty_001
+    title: "Objection: Happy with current lender"
+    objection_type: loyalty
+    trigger_phrases: ["happy", "satisfied", "relationship", "know me", "loyal"]
+    content: |
+      Customer is loyal to current lender.
+
+      Response:
+      "That's great that you have a good relationship. Loyalty matters.
+
+      But let me ask you this - is your loyalty being rewarded?
+      - Are you getting their best rate after years of relationship?
+      - Have they reduced your rate when market rates fell?
+      - Do they call you with better offers proactively?
+
+      At Kotak, we believe loyalty should work both ways:
+      - Existing Kotak customers get 0.5% lower rate
+      - Dedicated relationship manager from day one
+      - Priority service - you're not just another account
+      - All your banking in one place
+
+      You can continue your relationship there, but also explore what Kotak can offer. There's no commitment in just checking your options.
+
+      Would you like to see how much you could save while getting premium service?"
+
+      Key Points:
+      - Respect their loyalty
+      - Plant seed of doubt about value received
+      - Position Kotak relationship as upgrade
+      - Low-pressure next step
+    category: objection
+    language: en
+    keywords: ["happy", "satisfied", "loyalty", "relationship", "current lender"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["happy with", "satisfied", "good relationship", "know me"]
+
+  # =============================================================================
+  # GOLD SAFETY OBJECTIONS
+  # =============================================================================
+  - id: obj_safety_001
+    title: "Objection: Worried about gold safety during switch"
+    objection_type: safety
+    trigger_phrases: ["gold safe", "transit", "lost", "stolen", "risky"]
+    content: |
+      Customer worried about gold safety during transfer.
+
+      Response:
+      "Your concern is completely valid - your gold is precious, often with emotional value too.
+
+      Here's our Gold Safety Promise:
+
+      During Transit:
+      - Full insurance coverage from pickup to deposit
+      - GPS-tracked secure transport
+      - Bank staff accompanies the transfer
+      - You can track status via SMS/app
+
+      In Our Vaults:
+      - RBI-regulated bank-grade vaults (not NBFC branch)
+      - 24/7 armed security
+      - CCTV with 90-day recording
+      - Full insurance against theft, fire, natural disasters
+
+      Our Guarantee:
+      'If anything happens to your gold during transit or storage, Kotak bears 100% liability. Zero risk to you.'
+
+      Unlike some NBFCs where customers have faced issues, we have ZERO cases of gold loss or misplacement. Ever.
+
+      Would you like to know more about our vault security?"
+
+      Key Points:
+      - Validate emotional concern
+      - Explain insurance and tracking
+      - Contrast with NBFC issues subtly
+      - Offer guarantee
+    category: objection
+    language: en
+    keywords: ["safety", "secure", "vault", "lost", "stolen", "transit", "insurance"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["safe", "safety", "secure", "lost", "stolen", "worry"]
+
+  # =============================================================================
+  # CASH FLOW OBJECTIONS
+  # =============================================================================
+  - id: obj_cashflow_001
+    title: "Objection: Need cash to close existing loan first"
+    objection_type: cashflow
+    trigger_phrases: ["no money", "cash nahi", "how to close", "paise nahi"]
+    content: |
+      Customer doesn't have money to close existing loan.
+
+      Response:
+      "This is actually the #1 concern customers have, and we've solved it completely.
+
+      Our Bridge Loan Solution:
+      - Kotak gives you a 7-day interest-free bridge loan
+      - We pay your existing lender directly
+      - You redeem your gold and bring it to Kotak
+      - Bridge loan converts to regular gold loan
+
+      How It Works:
+      1. Day 1: Kotak transfers closure amount to your old lender
+      2. Day 1-3: You collect your gold with our insured transit help
+      3. Day 3: Gold pledged at Kotak, bridge loan becomes gold loan
+
+      Your Out-of-Pocket: ZERO rupees
+      Your Effort: One Kotak branch visit
+
+      This is unique to Kotak - most banks and NBFCs don't offer this.
+
+      Shall I explain how the bridge loan works in your case?"
+
+      Key Points:
+      - Acknowledge this is common concern
+      - Explain bridge loan clearly
+      - Emphasize zero out-of-pocket
+      - Highlight uniqueness
+    category: objection
+    language: en
+    keywords: ["cash", "money", "close loan", "pay off", "paise", "no funds"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["no money", "how close", "cash nahi", "funds nahi"]
+
+  # =============================================================================
+  # TRUST OBJECTIONS
+  # =============================================================================
+  - id: obj_trust_001
+    title: "Objection: Don't trust banks / heard bad things"
+    objection_type: trust
+    trigger_phrases: ["don't trust", "heard bad", "banks cheat", "bharosa nahi"]
+    content: |
+      Customer has trust concerns.
+
+      Response:
+      "I appreciate your honesty. Trust has to be earned, not assumed.
+
+      Let me share why Kotak is different:
+
+      Our Track Record:
+      - Zero RBI violations ever in gold loan business
+      - Zero cases of gold loss or misplacement
+      - Operating since 1985 - 40 years of trust
+
+      Compare with Industry:
+      - IIFL was banned by RBI for 6 months (2024)
+      - Muthoot paid Rs 27.5 lakh in penalties
+      - Manappuram faced multiple violations
+
+      What We Do Differently:
+      - Customer present during gold valuation (you watch)
+      - Video recording of entire process
+      - Real-time tracking through app
+      - 30-day notice before any auction (not 1 day like some)
+
+      Customer Reviews:
+      - 4.2/5 rating on Google
+      - 'Transparent and professional' - most common feedback
+
+      I don't expect you to trust us blindly. Visit our branch, see our vaults, talk to our team. Then decide.
+
+      Would you like to schedule a branch visit?"
+
+      Key Points:
+      - Acknowledge trust must be earned
+      - Use facts and track record
+      - Contrast with competitor issues subtly
+      - Offer low-commitment next step
+    category: objection
+    language: en
+    keywords: ["trust", "believe", "cheat", "fraud", "bharosa"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["trust", "believe", "fraud", "cheat", "bharosa nahi"]
+
+  # =============================================================================
+  # COMPETITION OBJECTIONS
+  # =============================================================================
+  - id: obj_muthoot_001
+    title: "Objection: Muthoot is good enough for me"
+    objection_type: competitor
+    trigger_phrases: ["Muthoot", "muthoot finance", "muthoot ok"]
+    content: |
+      Customer prefers Muthoot Finance.
+
+      Response:
+      "Muthoot is certainly well-known with many branches. They've been in business long.
+
+      But let me share some facts for your consideration:
+
+      Rate Comparison:
+      - Muthoot: 12% to 24% per annum
+      - Kotak: 9.5% to 11.5% per annum
+      - Your savings: 40-50% lower interest
+
+      On Rs 5 lakh loan for 12 months:
+      - Muthoot at 18%: Rs 90,000 interest
+      - Kotak at 10%: Rs 50,000 interest
+      - You save: Rs 40,000
+
+      Other Differences:
+      - Kotak: Bank-grade vaults (RBI regulated)
+      - Muthoot: NBFC vaults (different standards)
+
+      - Kotak: Zero foreclosure charges
+      - Muthoot: May charge penalty for early closure
+
+      - Kotak: Relationship with your bank
+      - Muthoot: Separate relationship to manage
+
+      Customer reviews mention Muthoot has 2.19/5 rating on MouthShut due to service issues.
+
+      I'm not saying switch blindly - just compare the numbers. What matters more to you - the familiarity or the savings?"
+    category: objection
+    language: en
+    keywords: ["Muthoot", "muthoot finance", "competitor"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["Muthoot", "muthoot finance"]
+
+  - id: obj_manappuram_001
+    title: "Objection: Manappuram gives good service"
+    objection_type: competitor
+    trigger_phrases: ["Manappuram", "manappuram finance"]
+    content: |
+      Customer prefers Manappuram Finance.
+
+      Response:
+      "Manappuram has good branch presence, especially in South India.
+
+      But here's what you should know:
+
+      Rate Comparison:
+      - Manappuram: 14% to 26% per annum
+      - Kotak: 9.5% to 11.5% per annum
+      - Potential savings: Up to 50%
+
+      Recent Issues:
+      - Manappuram's subsidiary Asirvad was banned by RBI (October 2024)
+      - Shows regulatory concerns in the group
+      - Kotak: Zero violations, zero bans ever
+
+      Digital Experience:
+      - Manappuram app reviews mention payment failures, login issues
+      - Customer complaints about Rs 75,000 stuck for 10 days
+      - Kotak 811: 20 million users, proven reliability
+
+      Real Savings (Rs 5 lakh, 12 months):
+      - Manappuram at 21%: Rs 1,05,000 interest
+      - Kotak at 10%: Rs 50,000 interest
+      - You save: Rs 55,000
+
+      That's over Rs 4,500 per month back in your pocket.
+
+      Would you like to compare for your specific loan amount?"
+    category: objection
+    language: en
+    keywords: ["Manappuram", "manappuram finance", "competitor"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["Manappuram", "manappuram finance"]

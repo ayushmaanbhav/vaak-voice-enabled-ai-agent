@@ -1,0 +1,228 @@
+# Balance Transfer / Switching Knowledge Base
+# Switch & Save program details
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # SWITCH & SAVE OVERVIEW
+  # =============================================================================
+  - id: switch_overview_001
+    title: "Switch & Save - Balance Transfer Program"
+    content: |
+      Switch & Save is Kotak's special program for customers switching gold loans from other lenders.
+
+      Who Can Switch:
+      - Existing gold loan with any NBFC (Muthoot, Manappuram, IIFL, etc.)
+      - Existing gold loan with other banks
+      - Current loan amount Rs 3 lakh or more
+
+      What You Get:
+      - Interest rate: 9.5% to 10.5% (40-50% lower than NBFCs)
+      - Processing fee: ZERO (waived for balance transfers)
+      - 7-day Bridge Loan: Interest-free to close your old loan
+      - Insured Transit: Your gold protected during transfer
+      - Rate Lock: 24 months guaranteed rate
+      - Cashback: Rs 1,000 to Rs 3,000 based on loan amount
+
+      Why Switch:
+      - Save Rs 40,000-80,000 annually on Rs 5-10 lakh loan
+      - Bank security instead of NBFC risk
+      - Combine with your existing Kotak banking
+      - Better digital experience
+
+      One visit. Three days. Savings for years.
+    category: switching
+    language: en
+    keywords: ["switch", "transfer", "balance transfer", "change lender", "move loan"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["switch", "transfer", "move", "change lender", "balance transfer"]
+
+  - id: switch_overview_002_hi
+    title: "Switch & Save - Balance Transfer (Hindi)"
+    content: |
+      Switch & Save Kotak ka special program hai jo dusre lenders se gold loan switch karna aasaan banata hai.
+
+      Kaun Switch Kar Sakta Hai:
+      - Kisi bhi NBFC se existing gold loan (Muthoot, Manappuram, IIFL)
+      - Kisi bank se existing gold loan
+      - Current loan Rs 3 lakh ya usse zyada
+
+      Aapko Kya Milega:
+      - Interest rate: 9.5% se 10.5% (NBFCs se 40-50% kam)
+      - Processing fee: ZERO (balance transfer pe waived)
+      - 7-din Bridge Loan: Purana loan close karne ke liye interest-free
+      - Insured Transit: Transfer mein gold safe
+      - Rate Lock: 24 mahine guaranteed rate
+      - Cashback: Rs 1,000 se Rs 3,000
+
+      Kyun Switch Karein:
+      - Rs 5-10 lakh loan pe saal mein Rs 40,000-80,000 bachayein
+      - NBFC risk ki jagah bank security
+      - Existing Kotak banking ke saath combine karein
+
+      Ek visit. Teen din. Saalon ki bachat.
+    category: switching
+    language: hi
+    keywords: ["switch", "transfer", "badalna", "loan move", "balance transfer"]
+    segment_relevance: ["P1", "P2"]
+
+  # =============================================================================
+  # BRIDGE LOAN
+  # =============================================================================
+  - id: switch_bridge_001
+    title: "7-Day Bridge Loan for Switching"
+    content: |
+      The biggest barrier to switching is: "I don't have cash to close my existing loan."
+
+      Our Solution: 7-Day Bridge Loan
+
+      How It Works:
+      1. Apply at Kotak branch (bring ID, existing loan documents)
+      2. Kotak pre-approves your new gold loan
+      3. We give you a 7-day bridge loan at ZERO interest
+      4. Bridge loan amount sent directly to your old lender
+      5. You redeem your gold (we help with insured transit)
+      6. Gold pledged at Kotak within 7 days
+      7. Bridge loan converts to regular gold loan
+
+      Key Features:
+      - Interest-free for 7 days
+      - Amount: Up to your expected new loan amount
+      - No separate collateral needed
+      - Direct payment to old lender (no cash in your hands)
+
+      Your Out-of-Pocket: Rs 0 (Zero)
+
+      Example:
+      - Your existing loan with Muthoot: Rs 5 lakh
+      - Kotak bridge loan: Rs 5 lakh (sent to Muthoot)
+      - You redeem gold, bring to Kotak
+      - New Kotak loan: Rs 5 lakh at 10% (replaces bridge)
+
+      This is unique to Kotak - no other bank offers this.
+    category: switching
+    language: en
+    keywords: ["bridge loan", "zero cash", "no money", "close loan", "interim"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["bridge", "no cash", "close first", "pay off", "interim"]
+
+  # =============================================================================
+  # SWITCHING PROCESS
+  # =============================================================================
+  - id: switch_process_001
+    title: "Step-by-Step Switching Process"
+    content: |
+      Switching your gold loan to Kotak is simple - just 3 steps.
+
+      Step 1: Apply (Day 1)
+      - Visit any Kotak branch with:
+        - ID proof (Aadhaar, PAN)
+        - Address proof
+        - Current loan statement
+        - Closure letter from existing lender
+      - Get instant pre-approval
+      - Bridge loan sanctioned (if needed)
+
+      Step 2: Redeem Gold (Day 1-3)
+      - Kotak pays your existing lender directly (or via bridge loan)
+      - Collect your gold with Kotak-insured transit
+      - Our executive can accompany you if needed
+
+      Step 3: Pledge at Kotak (Day 3)
+      - Gold valued at Kotak branch (15 minutes)
+      - Documents signed
+      - Loan disbursed same day
+      - Start saving on interest immediately
+
+      Total Time: 1-3 days
+      Branch Visits: Just 1 (or 2 if you prefer)
+      Your Effort: Minimal
+
+      Documents We Prepare For You:
+      - Loan application
+      - Agreement
+      - Insurance forms
+
+      All you do is sign and save.
+    category: switching
+    language: en
+    keywords: ["process", "steps", "how to", "procedure", "documents"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["how to switch", "process", "steps", "procedure"]
+
+  # =============================================================================
+  # INSURED TRANSIT
+  # =============================================================================
+  - id: switch_transit_001
+    title: "Insured Gold Transit During Switch"
+    content: |
+      Your gold is precious - we ensure it's 100% protected during the switch.
+
+      Our Transit Protection:
+
+      Full Insurance Coverage:
+      - Gold insured from moment you collect from old lender
+      - Coverage continues until deposited in Kotak vault
+      - Zero liability on you if anything happens
+
+      Tracking & Security:
+      - GPS-tracked secure pouches
+      - Real-time SMS updates
+      - Option for Kotak executive to accompany
+
+      Flexible Options:
+      - Self-carry with transit insurance (for smaller amounts)
+      - Kotak-assisted pickup (for Rs 5L+ loans)
+      - Doorstep service in select cities
+
+      What's Covered:
+      - Theft
+      - Loss
+      - Damage
+      - Accidents during transit
+
+      Our Guarantee:
+      "If your gold is lost or damaged during the switch, Kotak bears 100% liability. No questions asked."
+
+      Zero cases of loss in our switch program. Your gold is safe with us.
+    category: switching
+    language: en
+    keywords: ["transit", "insurance", "safe transfer", "protection", "lost"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["transit", "safe", "protect", "insurance", "carry gold"]
+
+  # =============================================================================
+  # SWITCHING CASHBACK
+  # =============================================================================
+  - id: switch_cashback_001
+    title: "Switch & Save Cashback Offer"
+    content: |
+      Get rewarded for switching to Kotak Gold Loan.
+
+      Cashback Tiers:
+      - Rs 3-5 lakh loan: Rs 1,000 cashback
+      - Rs 5-7 lakh loan: Rs 2,000 cashback
+      - Rs 7 lakh+ loan: Rs 3,000 cashback
+
+      How It Works:
+      - Switch your existing gold loan to Kotak
+      - Complete the process successfully
+      - Cashback credited to your Kotak account within 7 days
+
+      Additional Benefits:
+      - Zero processing fee (saving Rs 3,000-15,000)
+      - Lower interest rate (saving Rs 40,000+ annually)
+      - Rate lock for 24 months
+
+      Total First-Year Benefits (Rs 5L loan example):
+      - Interest savings: Rs 40,000
+      - Processing fee waived: Rs 5,000
+      - Cashback: Rs 1,000
+      - TOTAL: Rs 46,000 savings!
+
+      Limited time offer - terms apply.
+    category: switching
+    language: en
+    keywords: ["cashback", "reward", "bonus", "offer", "incentive"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["cashback", "offer", "reward", "bonus", "incentive"]

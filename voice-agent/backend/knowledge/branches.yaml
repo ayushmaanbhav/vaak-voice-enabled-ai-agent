@@ -1,0 +1,229 @@
+# Branch and Location Knowledge Base
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # BRANCH NETWORK OVERVIEW
+  # =============================================================================
+  - id: branch_network_001
+    title: "Kotak Branch Network for Gold Loans"
+    content: |
+      Kotak has extensive branch network for gold loans.
+
+      Network Overview:
+      - 1,600+ branches pan-India
+      - All branches offer gold loan service
+      - Extended hours at select branches
+      - Saturday banking available
+
+      State Coverage:
+      - Maharashtra: 200+ branches
+      - Gujarat: 120+ branches
+      - Karnataka: 100+ branches
+      - Tamil Nadu: 90+ branches
+      - Delhi NCR: 85+ branches
+      - Telangana: 70+ branches
+      - Kerala: 60+ branches
+
+      Metro City Branches:
+      - Mumbai: 120 branches
+      - Delhi: 85 branches
+      - Bangalore: 65 branches
+      - Chennai: 55 branches
+      - Hyderabad: 50 branches
+      - Pune: 45 branches
+      - Ahmedabad: 40 branches
+      - Kolkata: 35 branches
+
+      Finding Your Branch:
+      - Kotak website: kotak.com/branch-locator
+      - Kotak 811 app: Nearby branches
+      - Call: 1800-209-5577
+      - Google Maps: Search "Kotak Bank near me"
+
+      Gold Loan Specific:
+      - All branches have gold valuation
+      - Vault facility at all branches
+      - Trained gold loan executives
+    category: branch
+    language: en
+    keywords: ["branch", "location", "near me", "city", "address"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["branch", "location", "near me", "where", "address"]
+
+  # =============================================================================
+  # BRANCH FEATURES
+  # =============================================================================
+  - id: branch_features_001
+    title: "Gold Loan Branch Features"
+    content: |
+      What to expect at Kotak branches for gold loan.
+
+      Standard Features:
+      - Gold valuation counter
+      - Secure vault facility
+      - Aadhaar e-KYC
+      - CCTV monitored
+      - Air-conditioned waiting
+
+      Special Features (Select Branches):
+      - Women-priority counters
+      - Extended hours (till 7 PM)
+      - Sunday banking
+      - Premium lounge for high-value
+      - Multiple language support
+
+      Branch Timings:
+      - Weekdays: 9:30 AM to 5:30 PM
+      - Saturday: 9:30 AM to 2:00 PM
+      - Sunday: Closed (select branches open)
+      - Bank holidays: Closed
+
+      What to Expect:
+      - Token system for queue management
+      - Average wait: 10-15 minutes
+      - Appointment = no wait
+      - Dedicated gold loan desk
+
+      Languages Available:
+      - Hindi and English everywhere
+      - Marathi in Maharashtra
+      - Tamil in Tamil Nadu
+      - Telugu in Andhra/Telangana
+      - Kannada in Karnataka
+      - Malayalam in Kerala
+
+      Book appointment on Kotak 811 for fastest service.
+    category: branch
+    language: en
+    keywords: ["branch", "features", "timing", "hours", "service"]
+    segment_relevance: ["P2", "P3"]
+    intent_triggers: ["branch features", "timing", "hours", "expect"]
+
+  # =============================================================================
+  # CONTACT INFORMATION
+  # =============================================================================
+  - id: branch_contact_001
+    title: "Contact Kotak for Gold Loan"
+    content: |
+      Ways to reach us for gold loan queries.
+
+      Phone Numbers:
+      - Toll-Free: 1800-209-5577 (24/7)
+      - From Mobile: 1800-209-0000
+      - For NRIs: +91-22-6600-6022
+
+      Digital Channels:
+      - Website: www.kotak.com/gold-loan
+      - Kotak 811 App: In-app chat
+      - Email: goldloan@kotak.com
+      - WhatsApp: 9999999999 (coming soon)
+
+      Branch Visit:
+      - Use branch locator on website
+      - Book appointment on 811 app
+      - Walk-in welcome at all branches
+
+      Callback Request:
+      - Missed call to 9999999999
+      - Request on website
+      - Ask voice assistant for callback
+
+      For Complaints:
+      - Grievance redressal on website
+      - Write to: customercare@kotak.com
+      - Escalate to Nodal Officer if unresolved
+
+      Response Time:
+      - Phone: Immediate
+      - Chat: 2-5 minutes
+      - Email: 24-48 hours
+      - Callback: Within 2 hours (business hours)
+    category: branch
+    language: en
+    keywords: ["contact", "phone", "number", "call", "email", "reach"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["contact", "phone", "call", "reach", "number"]
+
+  # =============================================================================
+  # CITY-SPECIFIC
+  # =============================================================================
+  - id: branch_mumbai_001
+    title: "Gold Loan Branches in Mumbai"
+    content: |
+      Mumbai has 120+ Kotak branches for gold loan.
+
+      Major Areas:
+      - Andheri (East & West): 8 branches
+      - Bandra: 5 branches
+      - Borivali: 6 branches
+      - Thane: 7 branches
+      - Navi Mumbai: 9 branches
+      - Dadar/Parel: 4 branches
+      - South Mumbai (Fort, CST): 6 branches
+      - Malad/Kandivali: 7 branches
+
+      Popular Branches:
+      - Andheri West: Near Metro station
+      - Bandra Kurla Complex: For high-value
+      - Fort: Historical branch, premium service
+      - Thane Station Road: Extended hours
+
+      Special Services in Mumbai:
+      - Doorstep service for Rs 5L+ loans
+      - Saturday extended hours (till 4 PM)
+      - Express lanes at select branches
+      - Marathi and Hindi support
+
+      How to Find:
+      - Search "Kotak Bank [area name]" on Google
+      - Call 1800-209-5577 for nearest branch
+      - Use 811 app branch locator
+
+      Pro Tip: Andheri and BKC branches usually less crowded in mornings.
+    category: branch
+    language: en
+    keywords: ["Mumbai", "branch", "Andheri", "Bandra", "Thane"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["Mumbai", "Andheri", "Bandra", "Thane", "Navi Mumbai"]
+
+  - id: branch_delhi_001
+    title: "Gold Loan Branches in Delhi NCR"
+    content: |
+      Delhi NCR has 85+ Kotak branches for gold loan.
+
+      Delhi Areas:
+      - Connaught Place: 3 branches
+      - Karol Bagh: 4 branches
+      - Lajpat Nagar: 3 branches
+      - Dwarka: 5 branches
+      - Rohini: 4 branches
+
+      Noida/Gurgaon:
+      - Noida Sector 18: 2 branches
+      - Noida Sector 62: 2 branches
+      - Gurgaon DLF: 3 branches
+      - Gurgaon Sohna Road: 2 branches
+
+      Popular Branches:
+      - Connaught Place N Block: Premium service
+      - Karol Bagh Main: High capacity
+      - Dwarka Sector 10: New branch, less wait
+
+      Special Services:
+      - Doorstep available in Delhi, Noida, Gurgaon
+      - Hindi, English, Punjabi support
+      - Saturday banking till 2 PM
+      - Air-conditioned waiting areas
+
+      How to Find:
+      - Search "Kotak Bank [area name]"
+      - Call 1800-209-5577
+      - Use 811 app
+
+      Pro Tip: Book appointment for lunch hours - usually quicker.
+    category: branch
+    language: en
+    keywords: ["Delhi", "NCR", "Noida", "Gurgaon", "branch"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["Delhi", "Noida", "Gurgaon", "NCR"]

@@ -1,0 +1,347 @@
+# Frequently Asked Questions Knowledge Base
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # GENERAL FAQS
+  # =============================================================================
+  - id: faq_what_is_001
+    title: "What is a Gold Loan?"
+    content: |
+      A gold loan is a secured loan where you pledge your gold jewelry as collateral.
+
+      How It Works:
+      - You bring gold to bank
+      - Bank values it and gives you loan (up to 75% of value)
+      - Gold stored safely in bank vault
+      - You repay loan + interest
+      - You get your gold back
+
+      Benefits vs Other Loans:
+      - No income proof needed
+      - No credit score check
+      - Approval in 30 minutes
+      - Lower interest than personal loan
+      - Gold remains safe and insured
+
+      Common Use Cases:
+      - Business working capital
+      - Medical emergencies
+      - Education expenses
+      - Home renovation
+      - Wedding expenses
+
+      Your gold works for you while staying safe.
+    category: faq
+    language: en
+    keywords: ["what is", "gold loan", "how it works", "basics"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["what is", "how does", "explain", "basics"]
+
+  - id: faq_safe_001
+    title: "Is My Gold Safe?"
+    content: |
+      Your gold is completely safe at Kotak.
+
+      Security Measures:
+      - Bank-grade vaults (not branch storage)
+      - 24/7 armed security
+      - CCTV with 90-day recording
+      - Biometric access control
+      - Regular audits
+
+      Insurance:
+      - Full insurance from day one
+      - Covers theft, fire, natural disaster
+      - No extra charge for insurance
+
+      Track Your Gold:
+      - Check status on Kotak app
+      - Receive SMS alerts for any changes
+      - Visit and verify anytime
+
+      Our Record:
+      - ZERO cases of gold loss
+      - ZERO cases of misplacement
+      - Operating gold loans for decades
+
+      Unlike some NBFCs that have faced issues, Kotak is RBI-regulated bank with strictest security standards.
+
+      Your gold is as safe as money in the bank - because it IS in the bank.
+    category: faq
+    language: en
+    keywords: ["safe", "security", "vault", "insurance", "protect"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["safe", "security", "protect", "lose", "theft"]
+
+  - id: faq_time_001
+    title: "How Long Does Loan Approval Take?"
+    content: |
+      Kotak Gold Loan is one of the fastest loan products.
+
+      Timeline:
+      - Valuation: 15 minutes
+      - Documentation: 10 minutes
+      - Approval: Instant (after valuation)
+      - Disbursal: Same day (within 30 minutes of approval)
+
+      Total Time: As fast as 30-45 minutes
+
+      What Speeds It Up:
+      - Aadhaar-based KYC (instant verification)
+      - Pre-approved customers (existing Kotak customers)
+      - All documents ready when you visit
+      - Visit during non-peak hours
+
+      Disbursal:
+      - Directly to your bank account
+      - NEFT/IMPS same day
+      - No cash disbursal (RBI compliant)
+
+      Compare:
+      - Personal loan: 2-7 days
+      - Home loan: 2-4 weeks
+      - Gold loan at Kotak: 30-45 minutes
+
+      Need urgent funds? Gold loan is your fastest option.
+    category: faq
+    language: en
+    keywords: ["time", "how long", "fast", "quick", "disbursal"]
+    segment_relevance: ["P1", "P4"]
+    intent_triggers: ["how long", "time", "fast", "quick", "urgent"]
+
+  - id: faq_repay_001
+    title: "How Do I Repay the Gold Loan?"
+    content: |
+      Multiple flexible repayment options at Kotak.
+
+      Repayment Options:
+
+      1. EMI (Monthly Installment):
+      - Fixed amount every month
+      - Principal + Interest paid together
+      - Best for regular income
+
+      2. Bullet Payment:
+      - Pay only interest monthly
+      - Principal at end of tenure
+      - Best for seasonal income
+
+      3. Overdraft:
+      - Pay interest only on used amount
+      - Repay and redraw anytime
+      - Best for business owners
+
+      4. Part Payment:
+      - Pay extra anytime
+      - Reduces principal instantly
+      - Zero penalty for part payment
+
+      Payment Channels:
+      - Kotak 811 app
+      - Net banking
+      - Branch payment
+      - Auto-debit from account
+
+      Early Closure:
+      - Zero foreclosure charges
+      - Pay off anytime without penalty
+      - Get gold back same day
+
+      Missed Payment?
+      - Grace period available
+      - Contact us before due date
+      - We work with you, not against you
+    category: faq
+    language: en
+    keywords: ["repay", "payment", "EMI", "bullet", "close loan"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["repay", "pay", "EMI", "close", "early"]
+
+  - id: faq_getback_001
+    title: "How Do I Get My Gold Back?"
+    content: |
+      Getting your gold back is simple and quick.
+
+      Process to Get Gold Back:
+      1. Pay remaining loan amount (principal + interest)
+      2. Request release at branch or on app
+      3. Visit branch with ID proof
+      4. Gold released within 24 hours (usually same day)
+
+      Release Timeline:
+      - Standard: Same day if request before 2 PM
+      - Kotak Guarantee: Within 5 days (we beat RBI's 7-day rule)
+      - Urgent: Express release available
+
+      What You Need:
+      - Loan account number
+      - ID proof (Aadhaar/PAN)
+      - Acknowledgment receipt (from loan time)
+
+      Part Release:
+      - You can take back some gold
+      - Pay proportional loan amount
+      - Rest of gold stays as collateral
+
+      Our Promise:
+      - Your gold returned in same condition
+      - All pieces counted in your presence
+      - Photograph verified before release
+
+      Zero hassle getting your gold back.
+    category: faq
+    language: en
+    keywords: ["get back", "release", "return", "gold back", "retrieve"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["get back", "return", "release", "retrieve gold"]
+
+  - id: faq_auction_001
+    title: "When Can My Gold Be Auctioned?"
+    content: |
+      Understanding the auction process (and why you don't need to worry).
+
+      When Auction Happens:
+      - Only if loan is unpaid for 120+ days (4 months)
+      - Multiple reminders sent before auction
+      - You have many chances to pay
+
+      Our Process (Different from NBFCs):
+
+      Before Auction:
+      - Day 30: Gentle reminder SMS
+      - Day 60: Phone call + email
+      - Day 90: Written notice to address
+      - Day 100: Final notice with auction warning
+      - Day 120+: Auction scheduled with 30-day notice
+
+      TOTAL: 150+ days before auction
+      (Some NBFCs auction in just days of default)
+
+      Your Protections:
+      - 30-day written notice before auction (mandatory)
+      - You can pay and stop auction anytime
+      - Auction at market rate (not below)
+      - Surplus amount after auction returned to you
+
+      Kotak Reality:
+      - Our NPA is 0.22% (extremely low)
+      - We work WITH customers, not against
+      - Auction is last resort, not first option
+
+      Communicate with us if you have trouble paying - we find solutions.
+    category: faq
+    language: en
+    keywords: ["auction", "default", "unpaid", "notice", "sell gold"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["auction", "default", "not pay", "sell my gold"]
+
+  - id: faq_renewal_001
+    title: "Can I Renew My Gold Loan?"
+    content: |
+      Yes, loan renewal is easy at Kotak.
+
+      Renewal Options:
+
+      Simple Renewal:
+      - Pay interest due till date
+      - Extend tenure by 6-12 months
+      - No re-valuation needed (if gold price stable)
+      - Minimal documentation
+
+      Renewal with Top-Up:
+      - Get additional loan if gold value increased
+      - Combined processing for new amount
+      - Existing gold stays, new funds disbursed
+
+      Auto-Renewal:
+      - For good repayment customers
+      - Automatic extension offer
+      - Accept on app, no branch visit
+
+      Renewal Benefits:
+      - No foreclosure + new loan process
+      - Lower processing fee (0.5%)
+      - Rate review (may get better rate)
+      - Continuous relationship
+
+      When to Renew:
+      - 15 days before tenure ends
+      - We'll remind you via SMS/app
+      - Don't wait till last day
+
+      No penalty for not renewing - just close and take gold back.
+    category: faq
+    language: en
+    keywords: ["renew", "extend", "top-up", "continue", "tenure"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["renew", "extend", "continue", "more time"]
+
+  # =============================================================================
+  # HINDI FAQS
+  # =============================================================================
+  - id: faq_what_is_001_hi
+    title: "Gold Loan Kya Hota Hai?"
+    content: |
+      Gold loan ek secured loan hai jisme aap apne sone ke gehne collateral ke roop mein rakhte hain.
+
+      Kaise Kaam Karta Hai:
+      - Aap gold bank mein laate hain
+      - Bank value check karke loan deta hai (value ka 75% tak)
+      - Gold safely bank vault mein rahta hai
+      - Aap loan + interest repay karte hain
+      - Aapko gold wapas mil jaata hai
+
+      Fayde (Other Loans se):
+      - Income proof zaruri nahi
+      - Credit score check nahi
+      - 30 minute mein approval
+      - Personal loan se kam interest
+      - Gold safe aur insured
+
+      Common Use:
+      - Business working capital
+      - Medical emergency
+      - Education
+      - Ghar renovation
+      - Shaadi
+
+      Aapka sona aapke liye kaam karta hai, safe rehte hue.
+    category: faq
+    language: hi
+    keywords: ["kya hai", "gold loan", "kaise", "basics"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+
+  - id: faq_safe_001_hi
+    title: "Mera Sona Safe Hai Kya?"
+    content: |
+      Aapka sona Kotak mein poori tarah safe hai.
+
+      Security:
+      - Bank-grade vaults (branch storage nahi)
+      - 24/7 armed security
+      - CCTV recording
+      - Biometric access
+
+      Insurance:
+      - Day one se full insurance
+      - Chori, aag, natural disaster covered
+      - Extra charge nahi
+
+      Track Karein:
+      - Kotak app pe status dekhein
+      - SMS alerts
+      - Kabhi bhi verify karein
+
+      Hamara Record:
+      - ZERO gold loss cases
+      - ZERO misplacement
+      - Decades of operation
+
+      NBFC jaisi problems Kotak mein nahi hain. RBI regulated bank hai.
+
+      Aapka sona utna safe hai jitna bank mein paisa - kyunki yeh bank HI mein hai.
+    category: faq
+    language: hi
+    keywords: ["safe", "surakshit", "vault", "insurance", "chori"]
+    segment_relevance: ["P2"]

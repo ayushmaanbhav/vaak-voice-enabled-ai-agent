@@ -27,6 +27,9 @@ futures.workspace = true
 regex.workspace = true
 unicode-segmentation.workspace = true
 
+# Phonetic/Spelling correction
+symspell = "0.4"  # SymSpell fuzzy matching
+
 # ML - Candle (for native IndicTrans2)
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }

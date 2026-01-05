@@ -1,0 +1,235 @@
+# Application Process Knowledge Base
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # APPLICATION PROCESS
+  # =============================================================================
+  - id: process_apply_001
+    title: "How to Apply for Kotak Gold Loan"
+    content: |
+      Simple 3-step process for Kotak Gold Loan.
+
+      Step 1: Visit Branch with Documents
+      What to Bring:
+      - Your gold jewelry
+      - ID Proof (Aadhaar, PAN, Passport, or Voter ID)
+      - Address Proof (Aadhaar or utility bill)
+      - 2 passport size photos
+
+      Step 2: Gold Valuation (15 minutes)
+      - Gold weighed and tested in your presence
+      - XRF machine checks purity (non-destructive)
+      - Loan amount calculated
+      - You're shown the calculation
+
+      Step 3: Documentation & Disbursal (15-20 minutes)
+      - Loan agreement signed
+      - E-sign available (Aadhaar based)
+      - Amount disbursed to your bank account
+      - Gold stored in vault
+
+      Total Time: 30-45 minutes
+
+      For Existing Kotak Customers:
+      - Pre-approved offers on app
+      - Minimal documentation
+      - Even faster processing
+
+      What Happens After:
+      - Loan account visible on Kotak 811 app
+      - SMS confirmation received
+      - Gold acknowledgment provided
+    category: process
+    language: en
+    keywords: ["apply", "how to", "process", "steps", "documents"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["how to apply", "process", "steps", "what to bring"]
+
+  - id: process_apply_002_hi
+    title: "Kotak Gold Loan Kaise Apply Karein (Hindi)"
+    content: |
+      Simple 3-step process Kotak Gold Loan ke liye.
+
+      Step 1: Branch Jaayen Documents ke Saath
+      Kya Laana Hai:
+      - Aapke sone ke gehne
+      - ID Proof (Aadhaar, PAN, Passport ya Voter ID)
+      - Address Proof (Aadhaar ya bijli bill)
+      - 2 passport size photos
+
+      Step 2: Gold Valuation (15 minute)
+      - Aapki maujoodgi mein gold weigh aur test
+      - XRF machine se purity check (sona kharab nahi hota)
+      - Loan amount calculate
+      - Calculation dikhaya jaata hai
+
+      Step 3: Documentation aur Disbursement (15-20 minute)
+      - Loan agreement sign
+      - E-sign available (Aadhaar based)
+      - Amount aapke bank account mein
+      - Gold vault mein store
+
+      Total Time: 30-45 minute
+
+      Existing Kotak Customers ke liye:
+      - App pe pre-approved offers
+      - Kam documents
+      - Aur bhi fast processing
+
+      Baad mein kya hota hai:
+      - Kotak 811 app pe loan account dikhta hai
+      - SMS confirmation aata hai
+      - Gold acknowledgment milta hai
+    category: process
+    language: hi
+    keywords: ["apply", "kaise", "process", "steps", "documents"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+
+  # =============================================================================
+  # DOORSTEP SERVICE
+  # =============================================================================
+  - id: process_doorstep_001
+    title: "Doorstep Gold Loan Service"
+    content: |
+      For high-value customers, we come to you.
+
+      Doorstep Service Available:
+      - Loan amount Rs 5 lakh and above
+      - Available in major cities
+
+      Cities Covered:
+      - Mumbai
+      - Delhi NCR
+      - Bangalore
+      - Chennai
+      - Hyderabad
+      - Pune
+      - Ahmedabad
+      - Kolkata
+
+      How It Works:
+      1. Call 1800-209-5577 or request on app
+      2. Book appointment (24-48 hours advance)
+      3. Our executive visits your home/office
+      4. Gold valued using portable equipment
+      5. Documentation completed on-site
+      6. Gold collected with full insurance
+      7. Loan disbursed same day
+
+      What We Bring:
+      - Portable XRF machine for valuation
+      - Documentation kit
+      - Secure gold transport case
+      - Insurance covers
+
+      Your Convenience:
+      - No branch visit needed
+      - Choose your time slot
+      - Privacy maintained
+      - Premium service experience
+
+      Book doorstep service for amounts Rs 5 lakh+.
+    category: process
+    language: en
+    keywords: ["doorstep", "home service", "pickup", "come to home"]
+    segment_relevance: ["P1"]
+    intent_triggers: ["doorstep", "home", "come to me", "pickup", "no branch visit"]
+
+  # =============================================================================
+  # DIGITAL PROCESS
+  # =============================================================================
+  - id: process_digital_001
+    title: "Digital Gold Loan Journey"
+    content: |
+      Start your gold loan journey on Kotak 811 app.
+
+      On the App:
+      1. Check Eligibility (2 minutes)
+         - Login to Kotak 811
+         - Go to Loans > Gold Loan
+         - Enter estimated gold weight
+         - See instant eligibility
+
+      2. Get Pre-Approved (Instant)
+         - View pre-approved amount
+         - See applicable interest rate
+         - Download pre-approval letter
+
+      3. Book Branch Appointment
+         - Select nearest branch
+         - Choose convenient time slot
+         - Get confirmation SMS
+
+      4. Visit Branch (30 minutes)
+         - Bring gold and documents
+         - Fast-track with pre-approval
+         - Gold valued and loan disbursed
+
+      Post-Loan on App:
+      - View loan account
+      - Make payments
+      - Download statements
+      - Request gold release
+      - Track gold status
+
+      Why Digital-First:
+      - Skip queues with appointment
+      - Pre-approved = faster processing
+      - All information at fingertips
+      - 24/7 access to account
+
+      Download Kotak 811 from App Store or Play Store.
+    category: process
+    language: en
+    keywords: ["digital", "app", "online", "811", "mobile"]
+    segment_relevance: ["P4"]
+    intent_triggers: ["app", "online", "digital", "mobile", "811"]
+
+  # =============================================================================
+  # QUICK LOAN TIPS
+  # =============================================================================
+  - id: process_tips_001
+    title: "Tips for Faster Gold Loan Approval"
+    content: |
+      Get your gold loan faster with these tips.
+
+      Before You Visit:
+      - Download Kotak 811 and check pre-approval
+      - Keep all documents ready
+      - Verify gold you want to pledge
+      - Note down any questions
+
+      Documents Ready:
+      - Original Aadhaar (for e-KYC)
+      - PAN card
+      - Recent utility bill (if address different)
+      - 2 passport photos (some branches take live photo)
+
+      Gold Preparation:
+      - Clean your gold (no polish needed)
+      - Separate items you don't want to pledge
+      - Remove easily removable stones
+      - Know approximate weight if possible
+
+      Best Times to Visit:
+      - Weekday mornings (10-12 AM) - least crowded
+      - Avoid month-end (busy period)
+      - Book appointment for faster service
+
+      What Speeds Up Process:
+      - Existing Kotak customer? Use your CRN
+      - Have bank account? Disbursal is instant
+      - Documents complete? No delays
+
+      What to Avoid:
+      - Don't bring gold that's not yours
+      - Don't exaggerate gold purity
+      - Don't hide any existing gold loans
+
+      Well-prepared = 30 minutes. Unprepared = could be longer.
+    category: process
+    language: en
+    keywords: ["tips", "faster", "quick", "prepare", "ready"]
+    segment_relevance: ["P4"]
+    intent_triggers: ["tips", "faster", "prepare", "ready", "quick"]

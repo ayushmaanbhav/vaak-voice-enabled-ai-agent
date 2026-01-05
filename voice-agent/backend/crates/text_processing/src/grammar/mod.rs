@@ -4,9 +4,11 @@
 
 mod llm_corrector;
 mod noop;
+mod phonetic_corrector;
 
 pub use llm_corrector::LLMGrammarCorrector;
 pub use noop::NoopCorrector;
+pub use phonetic_corrector::{Correction, PhoneticCorrector, PhoneticCorrectorConfig};
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

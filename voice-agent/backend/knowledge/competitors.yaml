@@ -1,0 +1,268 @@
+# Competitor Comparison Knowledge Base
+# Subtle, factual comparison without aggressive disparagement
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # OVERALL COMPARISON
+  # =============================================================================
+  - id: comp_overview_001
+    title: "Gold Loan Provider Comparison Overview"
+    content: |
+      Compare Kotak with major gold loan providers.
+
+      Quick Comparison Table:
+
+      | Feature | Kotak | Muthoot | Manappuram | IIFL |
+      |---------|-------|---------|------------|------|
+      | Interest Rate | 9.5-11.5% | 12-24% | 14-26% | 11-24% |
+      | Regulator | RBI (Bank) | RBI (NBFC) | RBI (NBFC) | RBI (NBFC) |
+      | Branches | 1,600 | 5,500 | 4,500 | 2,500 |
+      | NPA Rate | 0.22% | ~2% | ~2% | ~3% |
+      | Violations | Zero | Penalties | Penalties | Banned 6mo |
+      | Digital | Kotak 811 | Basic | Basic | Basic |
+
+      Key Differences:
+
+      1. Interest Rates:
+      - Kotak saves you 40-50% on interest
+      - Example: Rs 5L loan saves Rs 40,000/year
+
+      2. Safety:
+      - Bank vaults vs NBFC branch storage
+      - Full insurance vs variable coverage
+      - RBI direct regulation vs NBFC oversight
+
+      3. Service:
+      - Relationship Manager at Kotak
+      - Call center at NBFCs
+      - Kotak 4.2/5 rating vs Muthoot 2.19/5
+
+      Choose based on what matters most to you.
+    category: competitor
+    language: en
+    keywords: ["comparison", "vs", "compare", "Muthoot", "Manappuram", "IIFL"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["compare", "vs", "better than", "difference", "which is"]
+
+  # =============================================================================
+  # VS MUTHOOT
+  # =============================================================================
+  - id: comp_muthoot_001
+    title: "Kotak vs Muthoot Finance Comparison"
+    content: |
+      Detailed comparison: Kotak vs Muthoot Finance.
+
+      Interest Rate Comparison:
+      - Muthoot: 12% to 24% per annum
+      - Kotak: 9.5% to 11.5% per annum
+      - Savings: 40-50% lower at Kotak
+
+      Cost Example (Rs 5 lakh loan, 12 months):
+      - Muthoot at 18%: Rs 90,000 interest
+      - Kotak at 10%: Rs 50,000 interest
+      - You Save: Rs 40,000
+
+      Processing Fee:
+      - Muthoot: 1-2%
+      - Kotak: 1% (0.5% for switch)
+
+      Safety:
+      - Muthoot: NBFC branch vault
+      - Kotak: Bank-grade vault (stricter standards)
+
+      Track Record:
+      - Muthoot: Rs 27.5L penalties, customer complaints
+      - Kotak: Zero violations, zero penalties
+
+      Customer Reviews:
+      - Muthoot: 2.19/5 on MouthShut
+      - Kotak: 4.2/5 overall
+
+      Branches:
+      - Muthoot: 5,500 (more in rural)
+      - Kotak: 1,600 (urban focused)
+
+      Summary:
+      Muthoot has more branches, especially rural.
+      Kotak has lower rates and bank-level safety.
+      Your choice depends on location and priorities.
+    category: competitor
+    language: en
+    keywords: ["Muthoot", "vs Muthoot", "Muthoot compare", "Muthoot rate"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["Muthoot", "vs Muthoot", "Muthoot better"]
+
+  - id: comp_muthoot_002_hi
+    title: "Kotak vs Muthoot (Hindi)"
+    content: |
+      Kotak aur Muthoot Finance ki tulna.
+
+      Byaaj Dar:
+      - Muthoot: 12% se 24% saalana
+      - Kotak: 9.5% se 11.5% saalana
+      - Bachat: Kotak mein 40-50% kam
+
+      Cost Example (Rs 5 lakh, 12 mahine):
+      - Muthoot 18% pe: Rs 90,000 byaaj
+      - Kotak 10% pe: Rs 50,000 byaaj
+      - Aap Bachate Hain: Rs 40,000
+
+      Safety:
+      - Muthoot: NBFC branch vault
+      - Kotak: Bank-grade vault (strict standards)
+
+      Track Record:
+      - Muthoot: Rs 27.5L penalties
+      - Kotak: Zero violations
+
+      Customer Reviews:
+      - Muthoot: 2.19/5
+      - Kotak: 4.2/5
+
+      Summary:
+      Muthoot ki zyada branches hain, rural mein bhi.
+      Kotak mein kam rate aur bank-level safety.
+      Aapki priority pe depend karta hai.
+    category: competitor
+    language: hi
+    keywords: ["Muthoot", "vs Muthoot", "tulna"]
+    segment_relevance: ["P1", "P2"]
+
+  # =============================================================================
+  # VS MANAPPURAM
+  # =============================================================================
+  - id: comp_manappuram_001
+    title: "Kotak vs Manappuram Finance Comparison"
+    content: |
+      Detailed comparison: Kotak vs Manappuram Finance.
+
+      Interest Rate Comparison:
+      - Manappuram: 14% to 26% per annum
+      - Kotak: 9.5% to 11.5% per annum
+      - Savings: Up to 50% lower at Kotak
+
+      Cost Example (Rs 5 lakh loan, 12 months):
+      - Manappuram at 21%: Rs 1,05,000 interest
+      - Kotak at 10%: Rs 50,000 interest
+      - You Save: Rs 55,000
+
+      Recent Issues:
+      - Manappuram subsidiary Asirvad banned by RBI (Oct 2024)
+      - Digital platform complaints
+      - Payment stuck for days
+
+      Digital Experience:
+      - Manappuram app: Login issues, payment failures reported
+      - Kotak 811: 20 million users, proven reliability
+
+      South India Focus:
+      - Manappuram strong in Kerala, Tamil Nadu
+      - Kotak present in all metros and Tier-2 cities
+
+      Customer Feedback:
+      - Manappuram: Mixed reviews on service
+      - Kotak: Better relationship management
+
+      Summary:
+      Manappuram dominant in South.
+      Kotak offers significant savings and bank security.
+      Switch can save Rs 50,000+ annually.
+    category: competitor
+    language: en
+    keywords: ["Manappuram", "vs Manappuram", "compare Manappuram"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["Manappuram", "vs Manappuram"]
+
+  # =============================================================================
+  # VS IIFL
+  # =============================================================================
+  - id: comp_iifl_001
+    title: "Kotak vs IIFL Finance Comparison"
+    content: |
+      Detailed comparison: Kotak vs IIFL Finance.
+
+      Important Note:
+      IIFL Finance was banned by RBI for 6 months (March-September 2024) due to compliance violations in gold loan business.
+
+      What Happened at IIFL:
+      - RBI found "material supervisory concerns"
+      - Inadequate due diligence
+      - LTV limit violations
+      - 6 lakh customers affected
+      - New gold loans stopped for 6 months
+
+      Interest Rate:
+      - IIFL: 11% to 24% per annum
+      - Kotak: 9.5% to 11.5% per annum
+
+      Current Status:
+      - IIFL has resumed operations after remediation
+      - But regulatory concerns remain in market
+
+      Why This Matters:
+      - Service disruption risk
+      - Customers couldn't access services for months
+      - Uncertainty about gold safety
+
+      Kotak Comparison:
+      - Zero RBI violations ever
+      - Zero service disruptions
+      - Bank-grade compliance from day one
+
+      Summary:
+      IIFL has recovered but the ban raised questions.
+      Kotak offers peace of mind with clean track record.
+      Consider risk of regulatory action when choosing.
+    category: competitor
+    language: en
+    keywords: ["IIFL", "vs IIFL", "IIFL ban", "IIFL issue"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["IIFL", "vs IIFL", "IIFL ban", "IIFL problem"]
+
+  # =============================================================================
+  # WHY SWITCH
+  # =============================================================================
+  - id: comp_why_switch_001
+    title: "Why Switch from NBFC to Kotak"
+    content: |
+      Top 5 reasons to switch your gold loan from NBFC to Kotak.
+
+      1. Save 40-50% on Interest
+      - NBFC average: 18-24%
+      - Kotak: 9.5-11.5%
+      - Rs 5 lakh loan = Rs 40,000-60,000 annual savings
+
+      2. Bank Security vs NBFC Risk
+      - RBI-regulated bank vaults
+      - Full insurance included
+      - Zero violation track record
+      - No ban risk (unlike IIFL)
+
+      3. Better Digital Experience
+      - Kotak 811: 20M users, proven
+      - NBFC apps: Payment issues, crashes
+      - Track everything on reliable app
+
+      4. Relationship Banking
+      - Dedicated relationship manager
+      - Priority service for Kotak customers
+      - All banking in one place
+
+      5. Zero Hassle Switch
+      - Bridge loan (no cash needed)
+      - Insured transit
+      - Single visit process
+      - Cashback for switching
+
+      Real Customer Savings:
+      - Rs 3L loan: Save ~Rs 24,000/year
+      - Rs 5L loan: Save ~Rs 40,000/year
+      - Rs 10L loan: Save ~Rs 85,000/year
+
+      That's real money - every month, every year.
+    category: competitor
+    language: en
+    keywords: ["switch", "why switch", "NBFC to bank", "reasons"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["why switch", "should I switch", "reasons to switch"]

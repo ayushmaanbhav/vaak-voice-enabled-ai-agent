@@ -1,0 +1,35 @@
+# turn-rs configuration for voice agent (SSH tunnel compatible)
+# Run with: /home/vscode/goldloan-study/turn-rs/target/release/turn-server --config=config/turn-server.toml
+
+[server]
+port-range = "49152..65535"
+max-threads = 4
+realm = "voice-agent"
+
+# UDP interface - port 5174 (adjacent to Vite 5173 for VS Code auto-forwarding)
+[[server.interfaces]]
+transport = "udp"
+listen = "0.0.0.0:5174"
+external = "127.0.0.1:5174"  # Use localhost since browser reaches us via SSH tunnel
+idle-timeout = 60
+mtu = 1500
+
+# TCP interface - required for SSH tunnel compatibility
+[[server.interfaces]]
+transport = "tcp"
+listen = "0.0.0.0:5174"
+external = "127.0.0.1:5174"  # Use localhost since browser reaches us via SSH tunnel
+idle-timeout = 60
+
+[log]
+level = "debug"
+
+[auth]
+enable-hooks-auth = false
+
+# REST API style authentication (more compatible with WebRTC libraries)
+static-auth-secret = "voice-agent-shared-secret"
+
+# Static credentials for voice agent (fallback)
+[auth.static-credentials]
+voice-agent = "voice-agent-secret"

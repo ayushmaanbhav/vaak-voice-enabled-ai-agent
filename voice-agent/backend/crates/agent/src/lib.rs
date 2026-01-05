@@ -27,6 +27,8 @@ pub mod traits;
 pub mod fsm_adapter;
 // Phase 5: Dialogue State Tracking (DST)
 pub mod dst;
+// Phase 10: Lead Scoring for Sales Conversion
+pub mod lead_scoring;
 
 // P1-2 FIX: Re-export intent module from text_processing for backward compatibility
 pub mod intent {
@@ -69,6 +71,11 @@ pub use fsm_adapter::{create_fsm_adapter, StageManagerAdapter};
 pub use dst::{
     ChangeSource, DialogueStateTracker, DstConfig, GoldLoanDialogueState, GoldPurity, SlotExtractor,
     SlotValue, StateChange, UrgencyLevel,
+};
+// Phase 10: Export Lead Scoring types
+pub use lead_scoring::{
+    EscalationTrigger, LeadClassification, LeadQualification, LeadRecommendation, LeadScore,
+    LeadScoringConfig, LeadScoringEngine, LeadSignals, ScoreBreakdown, ScoreWeights, TrustLevel,
 };
 
 // Re-export transport types for convenience

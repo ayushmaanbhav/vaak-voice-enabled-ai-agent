@@ -1,0 +1,293 @@
+# Customer Segment-Specific Knowledge Base
+# Tailored messaging for P1-P5 segments
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # P1: HIGH-VALUE SWITCHERS (MSME OWNERS)
+  # =============================================================================
+  - id: seg_p1_pitch_001
+    title: "P1 High-Value MSME Owner Pitch"
+    segment: P1
+    content: |
+      For MSME business owners with Rs 5 lakh+ gold loans.
+
+      Key Pain Points:
+      - High interest eating into working capital
+      - Need flexible access to funds
+      - Value time - can't visit branch repeatedly
+      - Want relationship, not just transaction
+
+      Kotak Value Proposition:
+      - Rate: 9.5% starting (vs 18-24% at NBFCs)
+      - Savings: Rs 40,000-80,000 annually on Rs 5-10 lakh loan
+      - Top-up facility up to 75% LTV
+      - Overdraft option - use what you need
+      - Dedicated relationship manager
+
+      Pitch Approach:
+      "As a business owner, you understand numbers. Let me show you the math.
+
+      Your current loan: Rs ___ at ___% = Rs ___ annual interest
+      Kotak loan: Rs ___ at 9.5% = Rs ___ annual interest
+      Annual savings: Rs ___
+
+      That's working capital freed up for your business growth.
+
+      Plus, with our overdraft facility, you only pay interest on what you use.
+
+      Would you like me to calculate your exact savings?"
+
+      Messaging Theme: Business Growth, Smart Money Management
+    category: segment
+    language: en
+    keywords: ["MSME", "business", "owner", "high value", "working capital"]
+    segment_relevance: ["P1"]
+
+  - id: seg_p1_persona_001
+    title: "P1 Persona: Rajesh - Manufacturing Business Owner"
+    segment: P1
+    content: |
+      P1 Segment Persona: Rajesh
+
+      Profile:
+      - Age: 42 years
+      - Occupation: Manufacturing business owner
+      - Location: Pune
+      - Current loan: Rs 25 lakh with Muthoot at 18%
+      - Annual interest: Rs 4.5 lakh
+      - Kotak relationship: Savings + Current account
+
+      Pain Points:
+      - "Interest is killing my margins"
+      - "I need flexible access, not fixed EMI"
+      - "Too busy to keep visiting branch"
+      - "App payment sometimes fails"
+
+      Motivations:
+      - Save money on interest
+      - Get relationship banking
+      - Digital convenience
+      - Business growth focus
+
+      Kotak Solution:
+      - Rate: 9.5% (save Rs 2.1 lakh annually)
+      - Overdraft facility for flexible use
+      - Single branch visit for switch
+      - Kotak 811 for seamless digital
+
+      Winning Message:
+      "Your business is growing. Your gold loan rate shouldn't hold you back. Save Rs 2.1 lakh annually - that's real money for business expansion."
+    category: segment
+    language: en
+    keywords: ["P1", "MSME", "business", "Rajesh", "persona"]
+    segment_relevance: ["P1"]
+
+  # =============================================================================
+  # P2: TRUST SEEKERS
+  # =============================================================================
+  - id: seg_p2_pitch_001
+    title: "P2 Trust-Seeker Pitch"
+    segment: P2
+    content: |
+      For customers worried about gold safety and lender reliability.
+
+      Key Pain Points:
+      - "Is my gold safe with NBFC?"
+      - "I saw news about gold loan company issues"
+      - "What if they auction my gold unfairly?"
+      - "I don't trust the digital systems"
+
+      Kotak Value Proposition:
+      - Bank-grade vaults (RBI regulated)
+      - Full insurance coverage
+      - Zero RBI violations (unlike NBFCs)
+      - Transparent auction process (30-day notice)
+      - 24/7 security with CCTV
+
+      Pitch Approach:
+      "Your gold isn't just valuable - it's often emotionally precious. Family heirlooms deserve bank protection.
+
+      Unlike some NBFCs that have faced issues:
+      - IIFL was banned by RBI for 6 months
+      - Muthoot paid penalties
+      - Some branches had zero security guards
+
+      At Kotak:
+      - Your gold in RBI-regulated bank vaults
+      - Full insurance from day one
+      - You can track your gold status anytime
+      - We've had ZERO cases of gold loss. Ever.
+
+      Would you like to visit our branch and see the vault security?"
+
+      Messaging Theme: Safety, Security, Peace of Mind
+    category: segment
+    language: en
+    keywords: ["trust", "safety", "security", "vault", "protection"]
+    segment_relevance: ["P2"]
+
+  - id: seg_p2_persona_001
+    title: "P2 Persona: Sunita - Trust-Conscious Homemaker"
+    segment: P2
+    content: |
+      P2 Segment Persona: Sunita
+
+      Profile:
+      - Age: 38 years
+      - Occupation: Homemaker / Small business
+      - Location: Mumbai suburbs
+      - Current loan: Rs 5 lakh with local gold finance
+      - Concern: Saw IIFL ban news, worried about safety
+
+      Pain Points:
+      - "I'm scared after reading about gold loan problems"
+      - "What if they lose my mother's gold bangles?"
+      - "The local finance guy is nice but is it safe?"
+      - "I don't understand auction process"
+
+      Motivations:
+      - Peace of mind about gold safety
+      - Clear and transparent process
+      - Bank trust (vs unknown NBFC)
+      - Fair treatment if any issues
+
+      Kotak Solution:
+      - RBI-regulated bank vaults
+      - Full insurance included
+      - Video recorded valuation
+      - 30-day notice before any auction
+      - Rs 3,000 cashback for switching
+
+      Winning Message:
+      "Your mother's bangles are safe in bank vaults, not NBFC branches. Full insurance, 24/7 security, and you can check status anytime. Safety meets savings - that's Kotak Gold Loan."
+    category: segment
+    language: en
+    keywords: ["P2", "trust", "safety", "Sunita", "persona"]
+    segment_relevance: ["P2"]
+
+  # =============================================================================
+  # P3: WOMEN ENTREPRENEURS (SHAKTI)
+  # =============================================================================
+  - id: seg_p3_pitch_001
+    title: "P3 Women Entrepreneur Shakti Pitch"
+    segment: P3
+    content: |
+      For women entrepreneurs and homemakers seeking dignified credit.
+
+      Key Pain Points:
+      - "They don't treat women with respect"
+      - "I feel judged for taking gold loan"
+      - "Need husband as guarantor everywhere"
+      - "Branch staff not helpful to women"
+
+      Kotak Shakti Value Proposition:
+      - 0.5% lower rate (9.0% starting)
+      - Zero processing fee for first-time women
+      - Free gold ornament insurance
+      - Women-priority service counters
+      - No husband/father guarantor needed
+      - Female relationship managers available
+
+      Pitch Approach:
+      "At Kotak Shakti, we celebrate women's financial independence.
+
+      Your gold, your decision, your loan. No permission needed.
+
+      Special for women:
+      - Lowest rate at 9%
+      - Zero processing fee
+      - Priority service at branches
+      - Female staff available
+
+      27 lakh women have trusted Kotak. Your gold is your power - use it to grow your business.
+
+      Would you like to know more about Shakti Gold benefits?"
+
+      Messaging Theme: Empowerment, Dignity, Independence
+    category: segment
+    language: en
+    keywords: ["women", "shakti", "mahila", "lady", "entrepreneur"]
+    segment_relevance: ["P3"]
+
+  # =============================================================================
+  # P4: YOUNG PROFESSIONALS
+  # =============================================================================
+  - id: seg_p4_pitch_001
+    title: "P4 Young Professional Pitch"
+    segment: P4
+    content: |
+      For young professionals (21-35) who want digital-first experience.
+
+      Key Pain Points:
+      - "I hate branch visits"
+      - "Want everything on app"
+      - "Need money fast, not in days"
+      - "Gold is sitting idle anyway"
+
+      Kotak Value Proposition:
+      - Pre-approved on Kotak 811 app
+      - Minimal branch visit (just for gold deposit)
+      - 30-minute approval and disbursal
+      - Track everything on app
+      - Rs 500 instant cashback
+
+      Pitch Approach:
+      "You're digital native. Why should your gold loan be old-school?
+
+      With Kotak:
+      - Check eligibility on app in 2 minutes
+      - Pre-approved offer waiting for you
+      - Visit branch once, 30 minutes done
+      - Track loan, pay EMI, all on Kotak 811
+
+      Turn your idle gold into instant opportunity. 15 clicks. 2 hours. Done.
+
+      Open Kotak 811 app and check your pre-approved amount?"
+
+      Messaging Theme: Speed, Digital, No Hassle
+    category: segment
+    language: en
+    keywords: ["young", "digital", "app", "fast", "millennial"]
+    segment_relevance: ["P4"]
+
+  # =============================================================================
+  # P5: AGRICULTURAL BORROWERS
+  # =============================================================================
+  - id: seg_p5_pitch_001
+    title: "P5 Farmer/Agricultural Pitch"
+    segment: P5
+    content: |
+      For farmers needing credit aligned with harvest cycles.
+
+      Key Pain Points:
+      - "Fixed EMI doesn't match my income cycle"
+      - "Need money for seeds, repay after harvest"
+      - "Interest rates too high for farming"
+      - "Local moneylender is only option"
+
+      Kotak Agricultural Value Proposition:
+      - Lowest rate: 8.5% (Priority Sector)
+      - Harvest-aligned repayment
+      - 6-month moratorium option
+      - Zero processing fee
+      - BC agents in rural areas
+
+      Pitch Approach:
+      "Farming income comes with harvest, not every month. Your gold loan should understand that.
+
+      Kotak Agricultural Gold Loan:
+      - Pay only interest during crop season
+      - Full repayment after you sell your harvest
+      - Lowest rate at 8.5%
+      - No monthly EMI pressure
+
+      Use for seeds, fertilizer, equipment. Repay when your hard work pays off.
+
+      Would you like me to explain the harvest-aligned repayment?"
+
+      Messaging Theme: Flexibility, Low Cost, Farmer Support
+    category: segment
+    language: en
+    keywords: ["farmer", "kisan", "agriculture", "harvest", "rural"]
+    segment_relevance: ["P5"]

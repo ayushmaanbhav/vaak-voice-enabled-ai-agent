@@ -31,6 +31,9 @@ use voice_agent_text_processing::translation::{
 
 use crate::conversation::{Conversation, ConversationConfig, ConversationEvent, EndReason};
 use crate::dst::{DialogueStateTracker, DstConfig};
+use crate::lead_scoring::{
+    EscalationTrigger, LeadRecommendation, LeadScore, LeadScoringEngine,
+};
 use crate::memory::{
     AgenticMemory, AgenticMemoryConfig, ConversationTurn, TurnRole,
 };
@@ -217,6 +220,18 @@ pub enum AgentEvent {
     Conversation(ConversationEvent),
     /// Error
     Error(String),
+    /// Lead score updated (Phase 10)
+    LeadScoreUpdated {
+        score: u32,
+        qualification: String,
+        classification: String,
+        conversion_probability: f32,
+    },
+    /// Escalation triggered (Phase 10)
+    EscalationTriggered {
+        trigger: String,
+        recommendation: String,
+    },
 }
 
 /// Prefetch cache entry
@@ -263,6 +278,9 @@ pub struct GoldLoanAgent {
     agentic_memory: AgenticMemory,
     /// Phase 5: Dialogue State Tracker for slot-based state management
     dialogue_state: RwLock<DialogueStateTracker>,
+    /// Phase 10: Lead Scoring Engine for sales conversion optimization
+    /// Tracks signals, calculates MQL/SQL, triggers auto-escalation
+    lead_scoring: RwLock<LeadScoringEngine>,
 }
 
 impl GoldLoanAgent {
@@ -383,6 +401,9 @@ impl GoldLoanAgent {
         // Extract DST config before moving config into struct
         let dst_config = config.dst_config.clone();
 
+        // Phase 10: Initialize lead scoring engine
+        let lead_scoring = LeadScoringEngine::new();
+
         Self {
             config,
             conversation,
@@ -400,6 +421,7 @@ impl GoldLoanAgent {
             speculative,
             agentic_memory,
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(dst_config)),
+            lead_scoring: RwLock::new(lead_scoring),
         }
     }
 
@@ -485,6 +507,9 @@ impl GoldLoanAgent {
             None
         };
 
+        // Phase 10: Initialize lead scoring engine
+        let lead_scoring = LeadScoringEngine::new();
+
         Self {
             config: config.clone(),
             conversation,
@@ -502,6 +527,7 @@ impl GoldLoanAgent {
             speculative,
             agentic_memory,
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
+            lead_scoring: RwLock::new(lead_scoring),
         }
     }
 
@@ -552,6 +578,9 @@ impl GoldLoanAgent {
         // P0 FIX: Initialize persuasion engine for objection handling
         let persuasion = PersuasionEngine::new();
 
+        // Phase 10: Initialize lead scoring engine
+        let lead_scoring = LeadScoringEngine::new();
+
         Self {
             config: config.clone(),
             conversation,
@@ -569,6 +598,7 @@ impl GoldLoanAgent {
             speculative: None, // P1-2 FIX: No speculative without LLM
             agentic_memory,
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
+            lead_scoring: RwLock::new(lead_scoring),
         }
     }
 
@@ -898,6 +928,49 @@ impl GoldLoanAgent {
             }
         }
 
+        // Phase 10: Update lead scoring engine with detected signals
+        {
+            let mut lead_scoring = self.lead_scoring.write();
+
+            // Update urgency signals from user input (detects "urgent", "jaldi", "abhi", etc.)
+            lead_scoring.update_urgency(user_input);
+
+            // Convert intent slots to HashMap<String, String> for lead scoring
+            let slot_values: std::collections::HashMap<String, String> = intent
+                .slots
+                .iter()
+                .filter_map(|(k, v)| v.value.as_ref().map(|val| (k.clone(), val.clone())))
+                .collect();
+
+            // Update signals based on detected intent
+            lead_scoring.update_from_intent(&intent.intent, &slot_values);
+
+            // Update trust level based on engagement (positive signal if providing info)
+            if !slot_values.is_empty() {
+                lead_scoring.update_trust(true);
+            }
+
+            // Check for high-value loan amount that requires escalation
+            if let Some(amount_str) = slot_values.get("loan_amount").or(slot_values.get("amount")) {
+                if let Ok(amount) = amount_str.replace(",", "").parse::<f64>() {
+                    if let Some(_trigger) = lead_scoring.check_high_value_loan(amount) {
+                        tracing::info!(
+                            amount = amount,
+                            "High-value loan detected, escalation may be triggered"
+                        );
+                        // The trigger will be included in calculate_score() results
+                    }
+                }
+            }
+
+            tracing::debug!(
+                engagement_turns = lead_scoring.signals().engagement_turns,
+                has_urgency = lead_scoring.signals().has_urgency_signal,
+                provided_contact = lead_scoring.signals().provided_contact_info,
+                "Lead scoring signals updated"
+            );
+        }
+
         // Forward conversation events
         let _ = self
             .event_tx
@@ -986,6 +1059,68 @@ impl GoldLoanAgent {
                 archival_count = stats.archival_count,
                 "Agentic memory high watermark exceeded"
             );
+        }
+
+        // Phase 10: Calculate lead score and emit events
+        let lead_score = {
+            let mut lead_scoring = self.lead_scoring.write();
+            lead_scoring.calculate_score()
+        };
+
+        // Emit lead score update event
+        let _ = self.event_tx.send(AgentEvent::LeadScoreUpdated {
+            score: lead_score.total,
+            qualification: format!("{:?}", lead_score.qualification),
+            classification: format!("{:?}", lead_score.classification),
+            conversion_probability: lead_score.conversion_probability,
+        });
+
+        tracing::info!(
+            score = lead_score.total,
+            qualification = ?lead_score.qualification,
+            classification = ?lead_score.classification,
+            conversion_prob = lead_score.conversion_probability,
+            recommendation = ?lead_score.recommendation,
+            "Lead score calculated"
+        );
+
+        // Check for escalation triggers and emit events
+        for trigger in &lead_score.escalation_triggers {
+            let trigger_str = match trigger {
+                EscalationTrigger::ExcessiveObjections { count, threshold } => {
+                    format!("ExcessiveObjections: {} objections (threshold: {})", count, threshold)
+                }
+                EscalationTrigger::ConversationStalled { turns, threshold } => {
+                    format!("ConversationStalled: {} turns (threshold: {})", turns, threshold)
+                }
+                EscalationTrigger::HighValueLoan { amount, threshold } => {
+                    format!("HighValueLoan: ₹{:.0} (threshold: ₹{:.0})", amount, threshold)
+                }
+                EscalationTrigger::CustomerFrustration => "CustomerFrustration".to_string(),
+                EscalationTrigger::CustomerRequested => "CustomerRequested".to_string(),
+                EscalationTrigger::ComplexQuery => "ComplexQuery".to_string(),
+                EscalationTrigger::ComplianceSensitive => "ComplianceSensitive".to_string(),
+            };
+
+            let recommendation_str = match &lead_score.recommendation {
+                LeadRecommendation::ContinueConversation => "ContinueConversation".to_string(),
+                LeadRecommendation::PushForAppointment => "PushForAppointment".to_string(),
+                LeadRecommendation::OfferCallback => "OfferCallback".to_string(),
+                LeadRecommendation::EscalateNow { reason } => format!("EscalateNow: {}", reason),
+                LeadRecommendation::SendFollowUp => "SendFollowUp".to_string(),
+                LeadRecommendation::LowPriority => "LowPriority".to_string(),
+            };
+
+            tracing::warn!(
+                trigger = %trigger_str,
+                recommendation = %recommendation_str,
+                "Escalation trigger detected"
+            );
+
+            let _ = self.event_tx.send(AgentEvent::EscalationTriggered {
+                trigger: trigger_str,
+                recommendation: recommendation_str,
+            });
         }
 
         // Emit response event
@@ -1194,8 +1329,11 @@ impl GoldLoanAgent {
             }
         }
 
-        // Add memory context
-        let context = self.conversation.get_context();
+        // Add memory context with query-based archival retrieval
+        // Phase 10: Use get_context_for_query to include relevant archival memories
+        let stage = self.conversation.stage();
+        let context_budget = stage.context_budget_tokens();
+        let context = self.conversation.get_context_for_query(english_input, context_budget);
         if !context.is_empty() {
             builder = builder.with_context(&context);
         }
@@ -1558,8 +1696,11 @@ impl GoldLoanAgent {
             }
         }
 
-        // Add context from memory
-        let context = self.conversation.get_context();
+        // Add context from memory with query-based archival retrieval
+        // Phase 10: Use get_context_for_query to include relevant archival memories
+        let stage = self.conversation.stage();
+        let context_budget = stage.context_budget_tokens();
+        let context = self.conversation.get_context_for_query(user_input, context_budget);
         if !context.is_empty() {
             builder = builder.with_context(&context);
         }
@@ -2012,6 +2153,65 @@ impl GoldLoanAgent {
     /// P4 FIX: Get personalization engine reference
     pub fn personalization_engine(&self) -> &PersonalizationEngine {
         &self.personalization
+    }
+
+    /// Phase 10: Get current lead score
+    ///
+    /// Calculates and returns the current lead score based on collected signals.
+    /// This includes qualification level (Cold/Warm/Hot/Qualified), MQL/SQL classification,
+    /// conversion probability, and any active escalation triggers.
+    pub fn get_lead_score(&self) -> LeadScore {
+        let mut lead_scoring = self.lead_scoring.write();
+        lead_scoring.calculate_score()
+    }
+
+    /// Phase 10: Get lead signals (read-only)
+    ///
+    /// Returns a snapshot of the current lead signals for inspection.
+    /// Useful for debugging and monitoring lead qualification progress.
+    pub fn get_lead_signals(&self) -> crate::lead_scoring::LeadSignals {
+        self.lead_scoring.read().signals().clone()
+    }
+
+    /// Phase 10: Check if escalation is needed
+    ///
+    /// Returns true if any escalation triggers are active.
+    /// Use get_lead_score() to get the specific triggers.
+    pub fn needs_escalation(&self) -> bool {
+        let score = self.get_lead_score();
+        !score.escalation_triggers.is_empty()
+    }
+
+    /// Phase 10: Get lead recommendation
+    ///
+    /// Returns the recommended next action based on lead score.
+    pub fn get_lead_recommendation(&self) -> LeadRecommendation {
+        self.get_lead_score().recommendation
+    }
+
+    /// Phase 10: Mark conversation as stalled (no meaningful progress)
+    ///
+    /// Call this when the agent detects the conversation is not progressing.
+    /// After max_stalled_turns (default: 5), an escalation trigger is raised.
+    pub fn mark_conversation_stalled(&self) {
+        let mut lead_scoring = self.lead_scoring.write();
+        lead_scoring.mark_stalled();
+    }
+
+    /// Phase 10: Reset stall counter (progress made)
+    ///
+    /// Call this when meaningful progress is detected in the conversation.
+    pub fn reset_stall_counter(&self) {
+        let mut lead_scoring = self.lead_scoring.write();
+        lead_scoring.reset_stall();
+    }
+
+    /// Phase 10: Reset lead scoring engine
+    ///
+    /// Resets all signals and score history. Use when starting a new conversation.
+    pub fn reset_lead_scoring(&self) {
+        let mut lead_scoring = self.lead_scoring.write();
+        lead_scoring.reset();
     }
 
     /// End conversation

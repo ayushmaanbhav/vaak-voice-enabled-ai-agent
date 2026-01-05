@@ -10,6 +10,11 @@ use voice_agent_rag::VectorStore;
 use voice_agent_tools::ToolRegistry;
 // P2 FIX: Text processing pipeline for grammar, PII, compliance
 use voice_agent_text_processing::{TextProcessingConfig, TextProcessingPipeline, TextSimplifier};
+// Deterministic phonetic error correction
+use voice_agent_text_processing::grammar::PhoneticCorrector;
+// Translation
+use voice_agent_text_processing::translation::{TranslationConfig, create_translator};
+use voice_agent_core::Translator;
 // P2 FIX: Audit logging for RBI compliance
 use voice_agent_persistence::{AuditLog, AuditLogger};
 
@@ -34,6 +39,10 @@ pub struct AppState {
     pub text_processing: Arc<TextProcessingPipeline>,
     /// P2 FIX: Text simplifier for TTS output (numbers, abbreviations)
     pub text_simplifier: Arc<TextSimplifier>,
+    /// Deterministic phonetic corrector for ASR errors
+    pub phonetic_corrector: Arc<PhoneticCorrector>,
+    /// Translator for language conversion
+    pub translator: Arc<dyn Translator>,
     /// P2 FIX: Audit logger for RBI compliance (wrapped in Arc for Clone)
     pub audit_logger: Option<Arc<AuditLogger>>,
     /// Environment name for config reload
@@ -41,17 +50,22 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// P2 FIX: Create default text processing components
-    fn create_text_processing() -> (Arc<TextProcessingPipeline>, Arc<TextSimplifier>) {
+    /// Create default text processing components, phonetic corrector, and translator
+    fn create_text_processing() -> (Arc<TextProcessingPipeline>, Arc<TextSimplifier>, Arc<PhoneticCorrector>, Arc<dyn Translator>) {
         let text_config = TextProcessingConfig::default();
         let text_processing = Arc::new(TextProcessingPipeline::new(text_config, None));
         let text_simplifier = Arc::new(TextSimplifier::default_config());
-        (text_processing, text_simplifier)
+        // Deterministic phonetic corrector for gold loan domain
+        let phonetic_corrector = Arc::new(PhoneticCorrector::gold_loan());
+        tracing::info!("Initialized deterministic phonetic corrector for gold_loan domain");
+        // Translator for language conversion
+        let translator = create_translator(&TranslationConfig::default());
+        (text_processing, text_simplifier, phonetic_corrector, translator)
     }
 
     /// Create new application state with in-memory session store
     pub fn new(config: Settings) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
@@ -61,6 +75,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env: None,
         }
@@ -68,7 +84,7 @@ impl AppState {
 
     /// P4 FIX: Create new application state with domain config
     pub fn with_domain_config(config: Settings, domain_config: DomainConfigManager) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(domain_config),
@@ -78,6 +94,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env: None,
         }
@@ -85,7 +103,7 @@ impl AppState {
 
     /// Create new application state with environment name for reload support
     pub fn with_env(config: Settings, env: Option<String>) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
@@ -95,6 +113,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env,
         }
@@ -102,7 +122,7 @@ impl AppState {
 
     /// P2-3 FIX: Create application state with custom session store (e.g., ScyllaDB)
     pub fn with_session_store(config: Settings, store: Arc<dyn SessionStore>) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
@@ -112,6 +132,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env: None,
         }
@@ -123,7 +145,7 @@ impl AppState {
         store: Arc<dyn SessionStore>,
         domain_config: DomainConfigManager,
     ) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(domain_config),
@@ -133,6 +155,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env: None,
         }
@@ -152,7 +176,7 @@ impl AppState {
         sms_service: Arc<dyn voice_agent_persistence::SmsService>,
         gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService>,
     ) -> Self {
-        let (text_processing, text_simplifier) = Self::create_text_processing();
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
 
         // P2-1 FIX: Extract gold loan config for tools (rates, LTV, etc.)
         let gold_loan_config = domain_config.gold_loan();
@@ -174,6 +198,8 @@ impl AppState {
             vector_store: None,
             text_processing,
             text_simplifier,
+            phonetic_corrector,
+            translator,
             audit_logger: None,
             env: None,
         }

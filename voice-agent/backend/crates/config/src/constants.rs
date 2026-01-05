@@ -76,8 +76,8 @@ pub mod endpoints {
     /// Ollama LLM endpoint
     pub const OLLAMA_DEFAULT: &str = "http://localhost:11434";
 
-    /// Qdrant vector store endpoint
-    pub const QDRANT_DEFAULT: &str = "http://localhost:6333";
+    /// Qdrant vector store endpoint (REST API port - gRPC has h2 issues)
+    pub const QDRANT_DEFAULT: &str = "http://127.0.0.1:6333";
 
     /// OpenAI API endpoint
     pub const OPENAI_DEFAULT: &str = "https://api.openai.com/v1";

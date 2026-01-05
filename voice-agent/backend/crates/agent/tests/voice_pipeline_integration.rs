@@ -741,10 +741,11 @@ async fn test_tool_registry_integration() {
     let config = IntegrationConfig::with_stubs();
     let registry = create_registry_with_integrations(config);
 
-    // P1 FIX: Updated to 8 tools after P0 additions (GetGoldPrice, EscalateToHuman, SendSms)
+    // Phase 6: Updated to 10 tools after Phase 6 additions (DocumentChecklist, CompetitorComparison)
     // Original 5: check_eligibility, calculate_savings, capture_lead, schedule_appointment, find_branches
-    // Added 3: get_gold_price, escalate_to_human, send_sms
-    assert_eq!(registry.len(), 8);
+    // P0 added 3: get_gold_price, escalate_to_human, send_sms
+    // Phase 6 added 2: get_document_checklist, compare_lenders
+    assert_eq!(registry.len(), 10);
 
     // Test executing each tool type
     let eligibility_result = registry

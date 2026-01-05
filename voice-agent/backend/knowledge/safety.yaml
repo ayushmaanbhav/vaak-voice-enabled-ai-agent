@@ -1,0 +1,239 @@
+# Safety, Compliance, and Regulations Knowledge Base
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # BANK VS NBFC TRUST
+  # =============================================================================
+  - id: safety_bank_vs_nbfc_001
+    title: "Why Bank is Safer Than NBFC for Gold Loan"
+    content: |
+      Understanding the difference between bank and NBFC gold loans.
+
+      Bank (Kotak) Advantages:
+
+      Regulatory:
+      - RBI directly regulates banks
+      - Stricter compliance requirements
+      - Higher capital requirements
+      - Regular RBI inspections
+
+      Security:
+      - Bank-grade vaults (mandatory standards)
+      - Higher insurance requirements
+      - Audited quarterly
+
+      Trust:
+      - Banks cannot close suddenly
+      - Deposit insurance protection
+      - Government oversight
+
+      NBFC Concerns:
+
+      Recent Issues:
+      - IIFL banned by RBI for 6 months (2024)
+      - Asirvad Microfinance banned (2024)
+      - Muthoot paid Rs 27.5 lakh penalties
+      - Manappuram faced violations
+
+      RBI Found (September 2024 Circular):
+      - Third-party valuation without customer
+      - Cash disbursement above limits
+      - Inadequate LTV monitoring
+      - Opaque auction practices
+      - 11 major deficiencies industry-wide
+
+      Bottom Line:
+      Your gold is safer in RBI-regulated bank vault than NBFC branch storage.
+    category: safety
+    language: en
+    keywords: ["bank", "NBFC", "safe", "RBI", "regulated", "trust"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["bank vs NBFC", "safer", "RBI", "trust", "regulated"]
+
+  # =============================================================================
+  # KOTAK COMPLIANCE
+  # =============================================================================
+  - id: safety_kotak_compliance_001
+    title: "Kotak Compliance Track Record"
+    content: |
+      Kotak Mahindra Bank's gold loan compliance record.
+
+      Our Track Record:
+      - ZERO RBI violations in gold loan business
+      - ZERO gold loan specific penalties
+      - ZERO customer complaints to Banking Ombudsman upheld
+      - 40+ years of trusted banking
+
+      Already Compliant With:
+      - September 2024 RBI Circular (11 deficiencies fixed)
+      - June 2025 RBI Directions (April 2026 deadline)
+      - New tiered LTV requirements
+      - Customer presence at valuation
+      - Transparent auction process
+
+      Our Standards (Exceeding RBI Requirements):
+
+      | Requirement | RBI Minimum | Kotak Standard |
+      |-------------|-------------|----------------|
+      | Gold Return | 7 days | 5 days |
+      | Auction Notice | 30 days | 45 days |
+      | LTV Limit | 75% | 70% internal |
+      | Cash Disbursal | Rs 20,000 | ZERO |
+
+      External Validation:
+      - Clean audit reports
+      - High credit ratings (AAA)
+      - ISO certified processes
+
+      When you bank with Kotak, you bank with compliance built-in.
+    category: safety
+    language: en
+    keywords: ["compliance", "RBI", "violations", "track record", "safe"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["compliance", "violations", "RBI", "penalty", "safe"]
+
+  # =============================================================================
+  # VAULT SECURITY
+  # =============================================================================
+  - id: safety_vault_001
+    title: "Gold Vault Security at Kotak"
+    content: |
+      How we protect your gold in our vaults.
+
+      Physical Security:
+      - Bank-grade strong room (not just branch safe)
+      - 12-inch thick reinforced walls
+      - Time-locked vault doors
+      - Multiple access points with biometric
+      - 24/7 armed security guards
+
+      Electronic Security:
+      - CCTV recording (90-day retention)
+      - Motion sensors
+      - Alarm systems connected to police
+      - Access logging for every entry
+
+      Personnel Security:
+      - Background verified staff only
+      - Dual custody (2 people for access)
+      - Regular rotation of vault staff
+      - Surprise audits
+
+      Insurance:
+      - 100% gold value insured
+      - Covers: theft, fire, flood, earthquake
+      - No extra charge to you
+      - Claim processed within 30 days
+
+      Your Gold's Journey:
+      1. Received at branch counter (photographed)
+      2. Sealed in tamper-proof pouch
+      3. Transferred to vault same day
+      4. Stored in individual locker
+      5. Verified when you collect
+
+      We treat your gold like we treat bank's cash - with utmost security.
+    category: safety
+    language: en
+    keywords: ["vault", "security", "safe", "protection", "insurance"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["vault", "security", "storage", "protect", "insurance"]
+
+  # =============================================================================
+  # RBI REGULATIONS
+  # =============================================================================
+  - id: safety_rbi_rules_001
+    title: "RBI Gold Loan Regulations Explained"
+    content: |
+      Understanding RBI rules that protect gold loan customers.
+
+      Key RBI Protections:
+
+      LTV Cap (Loan-to-Value):
+      - Maximum 75% of gold value
+      - Prevents over-lending
+      - Kotak uses conservative 70%
+
+      Cash Disbursement:
+      - RBI limit: Rs 20,000 cash
+      - Kotak policy: ZERO cash (all bank transfer)
+      - Protects against misuse
+
+      Customer Presence:
+      - Valuation must be done with customer present
+      - You watch the entire process
+      - No third-party valuation allowed
+
+      Auction Process:
+      - Minimum 30-day notice required
+      - Must be at market rate
+      - Surplus returned to customer
+      - Kotak gives 45-day notice
+
+      Gold Return:
+      - Must return within 7 days of request
+      - Kotak target: 5 days
+      - Rs 5,000/day penalty if delayed
+
+      New 2025 Rules (From April 2026):
+      - Tiered LTV based on tenure
+      - 12-month cap for bullet loans
+      - Enhanced documentation
+
+      Kotak is already compliant with 2026 rules today.
+    category: safety
+    language: en
+    keywords: ["RBI", "regulation", "rules", "protection", "LTV"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["RBI", "rules", "regulation", "law", "protection"]
+
+  # =============================================================================
+  # INDUSTRY ISSUES CONTEXT
+  # =============================================================================
+  - id: safety_industry_issues_001
+    title: "Gold Loan Industry Issues (Why Switch to Bank)"
+    content: |
+      Recent issues in the gold loan industry that concern customers.
+
+      IIFL Finance (March 2024):
+      - RBI banned new gold loan business for 6 months
+      - Found: Inadequate due diligence, LTV violations
+      - 6 lakh customers affected
+      - Services disrupted for months
+
+      Muthoot Finance:
+      - Rs 27.5 lakh penalties (2020-2025)
+      - Customer complaints about aggressive recovery
+      - 2.19/5 rating on MouthShut
+      - "Manager laughed at my complaint"
+
+      Manappuram Finance:
+      - Subsidiary Asirvad banned by RBI (Oct 2024)
+      - Digital platform issues (payments stuck)
+      - Rs 75,000 customer payment lost for 10 days
+
+      RBI September 2024 Findings (Industry-Wide):
+      1. Third-party valuation without customer
+      2. Cash disbursement exceeding limits
+      3. LTV monitoring gaps
+      4. Opaque auction processes
+      5. Evergreening of NPAs
+      6. Inadequate gold storage
+      7. 11 total deficiencies
+
+      Customer Impact:
+      - Gold auctioned with 1-day notice
+      - Hidden charges discovered late
+      - App payments failed, penalty charged
+      - Difficulty getting gold back
+
+      Why Kotak is Different:
+      - Zero violations (we had none of these issues)
+      - Bank-grade compliance from day one
+      - RBI-regulated with stricter oversight
+    category: safety
+    language: en
+    keywords: ["IIFL", "Muthoot", "issues", "problems", "ban", "penalty"]
+    segment_relevance: ["P2"]
+    intent_triggers: ["IIFL issue", "Muthoot problem", "ban", "industry"]

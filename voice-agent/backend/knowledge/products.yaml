@@ -1,0 +1,235 @@
+# Kotak Gold Loan Products Knowledge Base
+# Optimized for RAG with small LLMs (Qwen2.5:1.5B)
+# Each document: 100-300 words, clear keywords, segment tags
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # STANDARD GOLD LOAN
+  # =============================================================================
+  - id: prod_standard_001
+    title: "Kotak Gold Loan - Standard Product Overview"
+    content: |
+      Kotak Gold Loan is a secured loan where you pledge your gold jewelry as collateral.
+
+      Key Features:
+      - Interest Rate: 9.5% to 11.5% per annum (among lowest in market)
+      - Loan Amount: Rs 25,000 to Rs 2 crore
+      - Loan-to-Value (LTV): Up to 75% of gold value
+      - Tenure: 3 months to 36 months
+      - Processing Fee: 1% of loan amount
+      - Disbursal: Within 30 minutes of approval
+
+      Benefits:
+      - Zero foreclosure charges - repay early without penalty
+      - Flexible repayment options - EMI, bullet, or overdraft
+      - Bank-grade vault security with full insurance
+      - Digital tracking through Kotak app
+
+      Perfect for business working capital, emergencies, education, or medical needs.
+    category: product
+    language: en
+    keywords: ["gold loan", "kotak", "interest rate", "features", "benefits", "standard"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["gold loan", "product", "features", "loan amount", "tenure"]
+
+  - id: prod_standard_002_hi
+    title: "Kotak Gold Loan - Hindi Overview"
+    content: |
+      Kotak Gold Loan ek secured loan hai jisme aap apne sone ke gehne collateral ke roop mein rakhte hain.
+
+      Mukhya Visheshatayen:
+      - Byaaj Dar: 9.5% se 11.5% saalana (market mein sabse kam)
+      - Loan Amount: Rs 25,000 se Rs 2 crore tak
+      - LTV: Gold value ka 75% tak
+      - Tenure: 3 mahine se 36 mahine
+      - Processing Fee: Loan amount ka 1%
+      - Disbursement: Approval ke 30 minute mein
+
+      Fayde:
+      - Zero foreclosure charges - jaldi repay karein bina penalty ke
+      - Flexible repayment - EMI, bullet, ya overdraft
+      - Bank-grade vault security aur full insurance
+      - Kotak app se digital tracking
+
+      Business working capital, emergency, education, ya medical needs ke liye perfect.
+    category: product
+    language: hi
+    keywords: ["gold loan", "kotak", "byaaj", "sona", "gehne", "loan"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["gold loan", "sona", "gehne", "loan"]
+
+  # =============================================================================
+  # SHAKTI GOLD - WOMEN ENTREPRENEURS
+  # =============================================================================
+  - id: prod_shakti_001
+    title: "Kotak Shakti Gold - Special for Women"
+    content: |
+      Kotak Shakti Gold is our exclusive gold loan program designed for women entrepreneurs and homemakers.
+
+      Special Benefits for Women:
+      - Lower Interest Rate: Starting at 9.0% (0.5% lower than standard)
+      - Zero Processing Fee for first-time women borrowers
+      - Free Gold Ornament Insurance included
+      - Women-priority service at branches
+      - Dedicated women relationship managers available
+
+      Eligibility:
+      - Women aged 21-65 years
+      - Valid ID and address proof
+      - Gold jewelry of 18K purity or above
+
+      Why Shakti Gold?
+      - Empowering women entrepreneurs with affordable credit
+      - Dignified service experience
+      - Flexible EMI aligned with business cycles
+      - Quick approval without husband/father as guarantor
+
+      Join 27 lakh women empowered by Kotak. Your gold, your power, your growth.
+    category: product
+    language: en
+    keywords: ["shakti", "women", "mahila", "lady", "entrepreneur", "special rate", "insurance"]
+    segment_relevance: ["P3"]
+    intent_triggers: ["women", "shakti", "mahila", "lady", "special for women"]
+
+  - id: prod_shakti_002_hi
+    title: "Kotak Shakti Gold - Mahilaaon ke liye"
+    content: |
+      Kotak Shakti Gold hamara exclusive gold loan program hai jo mahila entrepreneurs aur homemakers ke liye design kiya gaya hai.
+
+      Mahilaaon ke liye vishesh fayde:
+      - Kam Byaaj Dar: 9.0% se shuru (standard se 0.5% kam)
+      - Pehli baar mahila borrowers ke liye Zero Processing Fee
+      - Free Gold Ornament Insurance
+      - Branch mein mahilaaon ko priority service
+      - Mahila relationship managers available
+
+      Patrta:
+      - 21-65 saal ki mahilayein
+      - Valid ID aur address proof
+      - 18K ya usse zyada purity ka sona
+
+      Shakti Gold kyun?
+      - Mahila entrepreneurs ko affordable credit
+      - Samman ke saath service
+      - Business cycle ke hisaab se flexible EMI
+      - Pati/pita ki guarantee ke bina quick approval
+
+      27 lakh mahilaaon ke saath judein. Aapka sona, aapki taakat, aapki tarakki.
+    category: product
+    language: hi
+    keywords: ["shakti", "mahila", "auraton", "ladies", "special", "kam byaaj"]
+    segment_relevance: ["P3"]
+    intent_triggers: ["mahila", "auraton", "ladies", "shakti"]
+
+  # =============================================================================
+  # BULLET REPAYMENT
+  # =============================================================================
+  - id: prod_bullet_001
+    title: "Kotak Gold Loan - Bullet Repayment Option"
+    content: |
+      Kotak Gold Loan Bullet Repayment is ideal for business owners with seasonal income.
+
+      How It Works:
+      - Pay only monthly interest during the loan tenure
+      - Repay full principal at the end of tenure
+      - Lower monthly outflow compared to EMI
+
+      Best For:
+      - MSME owners with seasonal business
+      - Traders who need working capital
+      - Farmers awaiting harvest income
+      - Professionals expecting lump sum payments
+
+      Features:
+      - Interest Rate: 10% to 12% per annum
+      - Tenure: 3 to 12 months
+      - No prepayment penalty
+      - Can convert to EMI anytime
+
+      Example: Rs 5 lakh loan at 10%
+      - Monthly interest payment: Rs 4,167
+      - Principal repaid at end: Rs 5 lakh
+      - Total cost for 12 months: Rs 50,000 interest
+
+      Manage cash flow better with bullet repayment.
+    category: product
+    language: en
+    keywords: ["bullet", "interest only", "principal end", "seasonal", "MSME", "business"]
+    segment_relevance: ["P1", "P5"]
+    intent_triggers: ["bullet", "interest only", "seasonal", "end payment", "principal later"]
+
+  # =============================================================================
+  # GOLD OVERDRAFT
+  # =============================================================================
+  - id: prod_overdraft_001
+    title: "Kotak Gold Overdraft - Pay Interest on Used Amount"
+    content: |
+      Kotak Gold Overdraft is a revolving credit facility against your pledged gold.
+
+      Key Advantage:
+      - Pay interest ONLY on the amount you actually use
+      - Withdraw and repay anytime within your limit
+      - No fixed EMI - complete flexibility
+
+      How It Works:
+      - Pledge your gold and get approved limit (e.g., Rs 10 lakh)
+      - Withdraw as needed (e.g., Rs 3 lakh today, Rs 2 lakh next month)
+      - Pay interest only on withdrawn amount
+      - Repay anytime, re-withdraw as needed
+
+      Features:
+      - Interest Rate: 10.5% to 12.5% per annum
+      - Limit: Based on gold value (up to 75% LTV)
+      - Tenure: 12 months, renewable
+      - Daily interest calculation
+
+      Best For:
+      - Businesses with variable working capital needs
+      - High-value customers (Rs 5 lakh+ loan)
+      - Those who want standby credit facility
+
+      Smart money management - use only what you need.
+    category: product
+    language: en
+    keywords: ["overdraft", "OD", "revolving", "used amount", "flexible", "high value"]
+    segment_relevance: ["P1"]
+    intent_triggers: ["overdraft", "OD", "revolving", "used amount only", "flexible withdrawal"]
+
+  # =============================================================================
+  # AGRICULTURAL GOLD LOAN
+  # =============================================================================
+  - id: prod_agri_001
+    title: "Kotak Agricultural Gold Loan"
+    content: |
+      Kotak Agricultural Gold Loan is designed for farmers with harvest-aligned repayment.
+
+      Special Features for Farmers:
+      - Lowest Interest Rate: 8.5% per annum
+      - Harvest-Aligned EMI: Pay after your crop is sold
+      - Moratorium Period: Up to 6 months interest-only
+      - Zero Processing Fee for agricultural use
+
+      Eligibility:
+      - Farmers with agricultural income
+      - Valid Kisan Credit Card or land documents
+      - Gold jewelry of 18K or above
+
+      Use Cases:
+      - Seed and fertilizer purchase
+      - Equipment and machinery
+      - Farm labor payment
+      - Bridge funding before harvest
+
+      Benefits:
+      - No income proof required beyond farm documents
+      - Flexible tenure: 3 to 24 months
+      - No prepayment penalty
+      - Priority Sector Lending (PSL) benefits
+
+      Support your farm with credit that understands agricultural cycles.
+    category: product
+    language: en
+    keywords: ["agriculture", "farmer", "kisan", "harvest", "crop", "PSL", "rural"]
+    segment_relevance: ["P5"]
+    intent_triggers: ["farmer", "kisan", "agriculture", "harvest", "crop", "kheti"]

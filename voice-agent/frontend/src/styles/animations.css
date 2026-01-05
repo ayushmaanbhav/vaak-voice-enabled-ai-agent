@@ -1,0 +1,479 @@
+/* Voice Agent Animations - Cool creative animations for voice interactions */
+
+/* ============================================
+   PULSE RINGS - Expanding rings from center
+   ============================================ */
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes pulseRingRecording {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    opacity: 0.7;
+    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+/* ============================================
+   WAVE ANIMATION - Sound wave effect
+   ============================================ */
+@keyframes soundWave {
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 32px;
+  }
+}
+
+@keyframes soundWaveSmall {
+  0%, 100% {
+    height: 4px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+/* ============================================
+   ORBIT ANIMATION - Processing spinner
+   ============================================ */
+@keyframes orbit {
+  0% {
+    transform: rotate(0deg) translateX(24px) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(24px) rotate(-360deg);
+  }
+}
+
+@keyframes orbitReverse {
+  0% {
+    transform: rotate(360deg) translateX(32px) rotate(-360deg);
+  }
+  100% {
+    transform: rotate(0deg) translateX(32px) rotate(0deg);
+  }
+}
+
+/* ============================================
+   GLOW PULSE - Soft glow animation
+   ============================================ */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4),
+                0 0 40px rgba(59, 130, 246, 0.2),
+                0 0 60px rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.6),
+                0 0 60px rgba(59, 130, 246, 0.4),
+                0 0 90px rgba(59, 130, 246, 0.2);
+  }
+}
+
+@keyframes glowPulseRecording {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5),
+                0 0 40px rgba(239, 68, 68, 0.3),
+                0 0 60px rgba(239, 68, 68, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.8),
+                0 0 80px rgba(239, 68, 68, 0.5),
+                0 0 120px rgba(239, 68, 68, 0.3);
+  }
+}
+
+@keyframes glowPulseProcessing {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.5),
+                0 0 40px rgba(251, 191, 36, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(251, 191, 36, 0.7),
+                0 0 70px rgba(251, 191, 36, 0.4);
+  }
+}
+
+@keyframes glowPulsePlaying {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(74, 222, 128, 0.5),
+                0 0 40px rgba(74, 222, 128, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(74, 222, 128, 0.7),
+                0 0 70px rgba(74, 222, 128, 0.4);
+  }
+}
+
+/* ============================================
+   BOUNCE ANIMATION - Dots loader
+   ============================================ */
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   TYPEWRITER - Text reveal effect
+   ============================================ */
+@keyframes typewriter {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blinkCursor {
+  0%, 100% {
+    border-right-color: transparent;
+  }
+  50% {
+    border-right-color: #60a5fa;
+  }
+}
+
+/* ============================================
+   RIPPLE - Touch feedback effect
+   ============================================ */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   SHAKE - Error/discard feedback
+   ============================================ */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-5px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+/* ============================================
+   FLOAT - Gentle floating motion
+   ============================================ */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* ============================================
+   SPIN - Rotating loader
+   ============================================ */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinReverse {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ============================================
+   FADE SLIDE - Message appearance
+   ============================================ */
+@keyframes fadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeSlideLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeSlideRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   MORPH - Shape transformation
+   ============================================ */
+@keyframes morphCircle {
+  0%, 100% {
+    border-radius: 50%;
+  }
+  50% {
+    border-radius: 30%;
+  }
+}
+
+/* ============================================
+   PROGRESS BAR - Loading indicator
+   ============================================ */
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* ============================================
+   WAVE BAR - SVG waveform animation
+   ============================================ */
+@keyframes waveBar {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.4);
+  }
+}
+
+/* ============================================
+   VOICE BARS - Animated equalizer
+   ============================================ */
+@keyframes voiceBar1 {
+  0%, 100% { height: 20%; }
+  50% { height: 80%; }
+}
+
+@keyframes voiceBar2 {
+  0%, 100% { height: 40%; }
+  50% { height: 100%; }
+}
+
+@keyframes voiceBar3 {
+  0%, 100% { height: 60%; }
+  50% { height: 30%; }
+}
+
+@keyframes voiceBar4 {
+  0%, 100% { height: 30%; }
+  50% { height: 90%; }
+}
+
+@keyframes voiceBar5 {
+  0%, 100% { height: 50%; }
+  50% { height: 70%; }
+}
+
+/* ============================================
+   PARTICLE EXPLOSION - Celebration effect
+   ============================================ */
+@keyframes particle1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(30px, -50px) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes particle2 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-30px, -40px) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes particle3 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(40px, 20px) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes particle4 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-40px, 30px) scale(0);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   STATUS DOT ANIMATIONS
+   ============================================ */
+@keyframes statusPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+@keyframes statusBreathe {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   COUNTDOWN POP - Number countdown animation
+   ============================================ */
+@keyframes countdownPop {
+  0% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(0.9);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+.animate-pulse-ring {
+  animation: pulseRing 1.5s ease-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+.animate-bounce {
+  animation: bounce 1.4s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fadeSlideUp 0.3s ease-out;
+}

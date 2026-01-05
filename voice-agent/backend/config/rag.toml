@@ -1,0 +1,220 @@
+# RAG Configuration for Gold Loan Voice Agent
+# Optimized for small LLMs (Qwen2.5:1.5B, Qwen2.5:3B)
+# Based on SMALL_MODEL_AGENT_RESEARCH.md recommendations
+
+[embedding]
+# Model: e5-small-v2 (multilingual) - optimal for Hindi/English
+model = "intfloat/multilingual-e5-small"
+dimensions = 384
+# Alternative for better accuracy (more compute):
+# model = "intfloat/multilingual-e5-base"
+# dimensions = 768
+
+# Batch embedding for efficiency
+batch_size = 32
+# Cache embeddings to avoid recomputation
+cache_enabled = true
+cache_ttl_seconds = 3600
+
+[vector_store]
+# Qdrant configuration
+type = "qdrant"
+collection = "gold_loan_knowledge"
+host = "localhost"
+port = 6333
+
+# Vector similarity settings
+distance = "cosine"
+
+# HNSW index parameters (balanced for speed + accuracy)
+[vector_store.hnsw]
+m = 16                    # Connections per layer
+ef_construct = 100        # Construction index quality
+full_scan_threshold = 10  # Use full scan for small queries
+
+[retrieval]
+# Hybrid search settings
+hybrid = true
+semantic_weight = 0.6     # 60% semantic, 40% keyword
+keyword_weight = 0.4
+
+# Initial retrieval
+initial_limit = 20        # Fetch 20 candidates
+min_score = 0.35          # Minimum relevance threshold
+
+# Semantic search
+[retrieval.semantic]
+top_k = 15               # Top 15 from semantic
+use_score_filter = true
+
+# Keyword/BM25 search (Tantivy)
+[retrieval.keyword]
+index_path = "data/tantivy/gold_loan"
+language = "hindi"        # Stemming for Hindi
+boost_keywords = true     # Boost keyword matches
+
+# Query expansion for Hindi/Hinglish
+[retrieval.expansion]
+enabled = true
+synonyms = [
+    ["rate", "byaaj", "interest", "dar"],
+    ["gold", "sona", "gehne", "jewelry"],
+    ["loan", "karj", "rin", "udhaar"],
+    ["safe", "surakshit", "secure"],
+    ["branch", "shakha", "office"],
+    ["women", "mahila", "auraton", "ladies"],
+    ["farmer", "kisan", "agriculture"],
+    ["switch", "transfer", "badalna"],
+]
+
+[agentic]
+# Agentic RAG settings
+enabled = true
+max_iterations = 2        # Max 2 query refinements (latency budget)
+coverage_threshold = 0.7  # Stop if 70%+ coverage
+
+# Sufficiency check (use small model for speed)
+sufficiency_model = "qwen2.5:1.5b"
+sufficiency_max_tokens = 50
+
+# Query rewriting
+rewrite_enabled = true
+rewrite_model = "qwen2.5:1.5b"
+
+[reranking]
+# Cross-encoder reranking
+enabled = true
+model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Fast, good accuracy
+# Alternative for better accuracy:
+# model = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+top_k = 5                 # Final docs to LLM
+
+# Batch reranking for efficiency
+batch_size = 16
+
+[context_sizing]
+# Stage-aware context budgets (for small LLM efficiency)
+
+[context_sizing.greeting]
+max_tokens = 150
+max_documents = 1
+strategy = "minimal"
+
+[context_sizing.discovery]
+max_tokens = 400
+max_documents = 2
+strategy = "exploratory"
+
+[context_sizing.pitch]
+max_tokens = 800
+max_documents = 3
+strategy = "comprehensive"
+
+[context_sizing.objection]
+max_tokens = 600
+max_documents = 2
+strategy = "targeted"
+
+[context_sizing.closing]
+max_tokens = 300
+max_documents = 1
+strategy = "action_focused"
+
+[context_sizing.default]
+max_tokens = 500
+max_documents = 2
+strategy = "balanced"
+
+[intent_routing]
+# Fast intent classification for routing
+enabled = true
+model = "rule_based"      # Use rule-based first (fastest)
+fallback_model = "qwen2.5:1.5b"
+
+# Intent to document type mapping
+[intent_routing.mapping]
+faq = ["faq"]
+product = ["product", "rate"]
+rate = ["rate", "product"]
+competitor = ["competitor", "switching"]
+objection = ["objection"]
+process = ["process", "eligibility"]
+eligibility = ["eligibility", "process"]
+switching = ["switching", "competitor"]
+safety = ["safety"]
+branch = ["branch"]
+segment = ["segment"]
+
+# Rule-based intent detection patterns
+[intent_routing.patterns]
+rate = ["rate", "interest", "byaaj", "percent", "kitna", "cost"]
+competitor = ["Muthoot", "Manappuram", "IIFL", "compare", "vs", "better"]
+objection = ["expensive", "hassle", "trust", "safe", "worried", "don't want"]
+eligibility = ["eligible", "qualify", "can I", "age", "documents"]
+process = ["how to", "apply", "process", "steps", "time"]
+safety = ["safe", "secure", "vault", "insurance", "protect"]
+branch = ["branch", "near", "location", "address", "city"]
+switching = ["switch", "transfer", "move", "change lender"]
+segment = ["women", "farmer", "business", "MSME", "young"]
+
+[timing]
+# Timing strategy for RAG
+default = "sequential"
+
+[timing.adaptive]
+enabled = true
+simple_query_mode = "sequential"
+complex_query_mode = "prefetch_async"
+
+# Complexity detection
+[timing.complexity]
+complex_keywords = ["compare", "vs", "difference", "why", "how much", "calculate"]
+question_is_complex = true
+max_simple_length = 20
+
+[caching]
+# Query result caching
+enabled = true
+semantic_cache = true
+similarity_threshold = 0.92  # High similarity = cache hit
+max_cache_size = 1000
+ttl_seconds = 1800           # 30 minutes
+
+# Embedding cache
+embedding_cache = true
+embedding_cache_size = 5000
+
+[knowledge_loading]
+# Knowledge base configuration
+knowledge_dir = "knowledge"
+watch_for_changes = true
+reload_interval_seconds = 300  # Check for updates every 5 min
+
+# Document processing
+max_document_length = 1500    # Truncate long docs
+chunk_overlap = 50            # Overlap for chunked docs
+
+[metrics]
+# RAG performance metrics
+enabled = true
+log_queries = true
+log_latency = true
+log_coverage = true
+
+# Latency thresholds (milliseconds)
+[metrics.latency_thresholds]
+simple_query_target = 100
+complex_query_target = 300
+max_acceptable = 500
+
+[experiments]
+# A/B testing configurations
+
+[experiments.semantic_weight]
+enabled = false
+variants = [
+    { name = "balanced", semantic_weight = 0.6 },
+    { name = "high_semantic", semantic_weight = 0.8 },
+]
+traffic_split = [50, 50]
+metric = "relevance_score"

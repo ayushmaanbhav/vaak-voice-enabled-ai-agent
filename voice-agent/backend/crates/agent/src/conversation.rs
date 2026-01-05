@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 
 use crate::intent::{DetectedIntent, IntentDetector};
-use crate::memory::MemoryConfig;
+use crate::memory::{AgenticMemory, AgenticMemoryConfig, MemoryConfig};
 use crate::memory_legacy::{ConversationMemory, MemoryEntry};
 use crate::stage::{ConversationStage, StageManager, TransitionReason};
 use crate::AgentError;
@@ -293,8 +293,10 @@ pub struct Conversation {
     state: Mutex<ConversationState>,
     /// Stage manager
     stage_manager: Arc<StageManager>,
-    /// Memory
+    /// Memory (legacy)
     memory: Arc<ConversationMemory>,
+    /// Phase 10: Agentic memory for archival retrieval
+    agentic_memory: Arc<AgenticMemory>,
     /// Intent detector
     intent_detector: Arc<IntentDetector>,
     /// Event sender
@@ -309,15 +311,20 @@ impl Conversation {
     /// Create a new conversation
     pub fn new(session_id: impl Into<String>, config: ConversationConfig) -> Self {
         let (event_tx, _) = broadcast::channel(100);
+        let session_id_str = session_id.into();
+
+        // Phase 10: Create agentic memory with session ID for archival retrieval
+        let agentic_config = AgenticMemoryConfig::default();
 
         Self {
-            session_id: session_id.into(),
+            session_id: session_id_str.clone(),
             config: config.clone(),
             start_time: Instant::now(),
             last_activity: Mutex::new(Instant::now()),
             state: Mutex::new(ConversationState::Active),
             stage_manager: Arc::new(StageManager::new()),
             memory: Arc::new(ConversationMemory::new(config.memory)),
+            agentic_memory: Arc::new(AgenticMemory::new(agentic_config, session_id_str)),
             intent_detector: Arc::new(IntentDetector::new()),
             event_tx,
             turn_count: Mutex::new(0),
@@ -600,6 +607,20 @@ impl Conversation {
     /// Get memory context
     pub fn get_context(&self) -> String {
         self.memory.get_context()
+    }
+
+    /// Get memory context with query-based archival retrieval
+    ///
+    /// Phase 10: Enhanced context that includes relevant archival memories
+    /// based on the user's query. This implements Anthropic-style selective
+    /// context injection for better response quality.
+    pub fn get_context_for_query(&self, query: &str, max_tokens: usize) -> String {
+        self.agentic_memory.get_context_for_query(query, max_tokens)
+    }
+
+    /// Get access to agentic memory for archival operations
+    pub fn agentic_memory(&self) -> &Arc<AgenticMemory> {
+        &self.agentic_memory
     }
 
     /// Get recent messages for LLM

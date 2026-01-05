@@ -213,6 +213,10 @@ pub fn create_default_registry() -> ToolRegistry {
     registry.register(crate::gold_loan::EscalateToHumanTool::new());
     registry.register(crate::gold_loan::SendSmsTool::new());
 
+    // Phase 6: Additional gold loan tools
+    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::gold_loan::CompetitorComparisonTool::new());
+
     registry
 }
 
@@ -244,6 +248,12 @@ pub fn create_registry_with_config(
     registry.register(crate::gold_loan::GetGoldPriceTool::new());
     registry.register(crate::gold_loan::EscalateToHumanTool::new());
     registry.register(crate::gold_loan::SendSmsTool::new());
+
+    // Phase 6: Additional gold loan tools with config
+    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::gold_loan::CompetitorComparisonTool::with_config(
+        gold_loan_config.clone(),
+    ));
 
     tracing::info!(
         kotak_rate = gold_loan_config.kotak_interest_rate,
@@ -443,6 +453,10 @@ pub fn create_registry_with_integrations(config: IntegrationConfig) -> ToolRegis
     registry.register(crate::gold_loan::EscalateToHumanTool::new());
     registry.register(crate::gold_loan::SendSmsTool::new());
 
+    // Phase 6: Additional gold loan tools
+    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::gold_loan::CompetitorComparisonTool::new());
+
     registry
 }
 
@@ -550,7 +564,7 @@ pub fn create_registry_with_persistence(config: FullIntegrationConfig) -> ToolRe
         gold_loan_config.clone(),
     ));
     registry.register(crate::gold_loan::SavingsCalculatorTool::with_config(
-        gold_loan_config,
+        gold_loan_config.clone(),
     ));
     registry.register(crate::gold_loan::BranchLocatorTool::new());
 
@@ -588,6 +602,12 @@ pub fn create_registry_with_persistence(config: FullIntegrationConfig) -> ToolRe
     } else {
         registry.register(crate::gold_loan::SendSmsTool::new());
     }
+
+    // Phase 6: Additional gold loan tools with config support
+    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::gold_loan::CompetitorComparisonTool::with_config(
+        gold_loan_config,
+    ));
 
     tracing::info!(
         tools = registry.len(),
@@ -657,8 +677,8 @@ mod tests {
         let config = IntegrationConfig::with_stubs();
         let registry = create_registry_with_integrations(config);
 
-        // P0 FIX: Should have all 8 tools (5 original + 3 P0 tools)
-        assert_eq!(registry.len(), 8);
+        // Phase 6: Should have all 10 tools (8 original + 2 Phase 6 tools)
+        assert_eq!(registry.len(), 10);
         assert!(registry.has("check_eligibility"));
         assert!(registry.has("calculate_savings"));
         assert!(registry.has("capture_lead"));
@@ -668,6 +688,9 @@ mod tests {
         assert!(registry.has("get_gold_price"));
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
+        // Phase 6: New tools
+        assert!(registry.has("get_document_checklist"));
+        assert!(registry.has("compare_lenders"));
     }
 
     #[test]
@@ -675,22 +698,25 @@ mod tests {
         let config = IntegrationConfig::default();
         let registry = create_registry_with_integrations(config);
 
-        // P0 FIX: Should still have all 8 tools (just without integrations)
-        assert_eq!(registry.len(), 8);
+        // Phase 6: Should still have all 10 tools (just without integrations)
+        assert_eq!(registry.len(), 10);
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
         // P0 FIX: Verify new tools are registered
         assert!(registry.has("get_gold_price"));
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
+        // Phase 6: New tools
+        assert!(registry.has("get_document_checklist"));
+        assert!(registry.has("compare_lenders"));
     }
 
     #[test]
     fn test_default_registry_has_all_tools() {
         let registry = create_default_registry();
 
-        // P0 FIX: Default registry should have all 8 tools
-        assert_eq!(registry.len(), 8);
+        // Phase 6: Registry should have all 10 tools (8 original + 2 new)
+        assert_eq!(registry.len(), 10);
         assert!(registry.has("check_eligibility"));
         assert!(registry.has("calculate_savings"));
         assert!(registry.has("capture_lead"));
@@ -699,5 +725,8 @@ mod tests {
         assert!(registry.has("get_gold_price"));
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
+        // Phase 6: New tools
+        assert!(registry.has("get_document_checklist"));
+        assert!(registry.has("compare_lenders"));
     }
 }

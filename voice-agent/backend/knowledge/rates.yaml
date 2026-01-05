@@ -1,0 +1,182 @@
+# Interest Rates and Pricing Knowledge Base
+# Optimized for small LLM RAG
+
+version: "1.0"
+documents:
+  # =============================================================================
+  # INTEREST RATE OVERVIEW
+  # =============================================================================
+  - id: rate_overview_001
+    title: "Kotak Gold Loan Interest Rates"
+    content: |
+      Kotak Gold Loan offers some of the lowest interest rates in the market.
+
+      Current Interest Rates (per annum):
+      - Standard: 9.5% to 11.5%
+      - Shakti Gold (Women): 9.0% to 11.0%
+      - Agricultural: 8.5% to 10.5%
+      - Bullet/Overdraft: 10.0% to 12.5%
+
+      Rate Tiers (Higher loans get better rates):
+      - Up to Rs 1 lakh: 11.5%
+      - Rs 1-5 lakh: 10.5%
+      - Above Rs 5 lakh: 9.5%
+
+      Factors Affecting Your Rate:
+      - Loan amount (higher = lower rate)
+      - Existing Kotak relationship
+      - Repayment track record
+      - Gold purity and quality
+
+      Compare and Save:
+      - Muthoot: 12% to 24%
+      - Manappuram: 14% to 26%
+      - IIFL: 11% to 24%
+      - Kotak: 9.5% to 11.5% (Save 40-50%)
+
+      Note: Rates subject to change. Final rate confirmed at branch.
+    category: rate
+    language: en
+    keywords: ["interest rate", "byaaj", "percent", "rate", "pricing", "low rate"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["rate", "interest", "byaaj", "percent", "kitna", "how much"]
+
+  - id: rate_overview_002_hi
+    title: "Kotak Gold Loan Byaaj Dar"
+    content: |
+      Kotak Gold Loan market mein sabse kam byaaj dar offer karta hai.
+
+      Byaaj Dar (saalana):
+      - Standard: 9.5% se 11.5%
+      - Shakti Gold (Mahilaaon ke liye): 9.0% se 11.0%
+      - Agricultural: 8.5% se 10.5%
+      - Bullet/Overdraft: 10.0% se 12.5%
+
+      Amount ke hisaab se rate:
+      - Rs 1 lakh tak: 11.5%
+      - Rs 1-5 lakh: 10.5%
+      - Rs 5 lakh se zyada: 9.5%
+
+      Rate kam kaise milega:
+      - Zyada loan amount lein
+      - Existing Kotak customer ho
+      - Achha repayment record ho
+      - Pure gold ho
+
+      Comparison:
+      - Muthoot: 12% se 24%
+      - Manappuram: 14% se 26%
+      - Kotak: 9.5% se 11.5% (40-50% bachat)
+
+      Note: Final rate branch mein confirm hogi.
+    category: rate
+    language: hi
+    keywords: ["byaaj", "dar", "percent", "rate", "kitna"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["byaaj", "rate", "kitna percent", "interest kitna"]
+
+  # =============================================================================
+  # PROCESSING FEES
+  # =============================================================================
+  - id: rate_fees_001
+    title: "Kotak Gold Loan Fees and Charges"
+    content: |
+      Transparent pricing with no hidden charges at Kotak.
+
+      Standard Fees:
+      - Processing Fee: 1% of loan amount (min Rs 500, max Rs 25,000)
+      - Valuation Charges: FREE
+      - Documentation Charges: FREE
+      - Stamp Duty: As per state (usually minimal)
+
+      Special Offers:
+      - Balance Transfer: 0.5% processing fee (50% discount)
+      - First-time Women (Shakti): ZERO processing fee
+      - Existing Kotak Customers: 0.5% processing fee
+
+      Zero Penalty Charges:
+      - Foreclosure/Prepayment: ZERO (repay early without penalty)
+      - Part-payment: ZERO (reduce principal anytime)
+      - Conversion Fee: ZERO (switch from bullet to EMI free)
+
+      What You Will NEVER Pay:
+      - Hidden charges
+      - Vault/storage fees
+      - Annual maintenance charges
+      - Inspection fees
+
+      Total transparency - what you see is what you pay.
+    category: rate
+    language: en
+    keywords: ["fees", "charges", "processing", "hidden", "penalty", "prepayment"]
+    segment_relevance: ["P1", "P2", "P3", "P4", "P5"]
+    intent_triggers: ["fee", "charge", "processing", "penalty", "hidden", "extra"]
+
+  # =============================================================================
+  # SAVINGS CALCULATOR
+  # =============================================================================
+  - id: rate_savings_001
+    title: "How Much You Save with Kotak Gold Loan"
+    content: |
+      Real savings when you switch to Kotak from NBFCs.
+
+      Example 1: Rs 5 Lakh Loan for 12 months
+      | Lender | Rate | Annual Interest | Total Cost |
+      |--------|------|-----------------|------------|
+      | Muthoot | 18% | Rs 90,000 | Rs 95,000 |
+      | Manappuram | 21% | Rs 1,05,000 | Rs 1,10,000 |
+      | Kotak | 10% | Rs 50,000 | Rs 52,500 |
+
+      YOUR SAVINGS: Rs 40,000 to Rs 57,500 per year!
+
+      Example 2: Rs 10 Lakh Loan for 12 months
+      | Lender | Rate | Annual Interest |
+      |--------|------|-----------------|
+      | NBFC Average | 18% | Rs 1,80,000 |
+      | Kotak | 9.5% | Rs 95,000 |
+
+      YOUR SAVINGS: Rs 85,000 per year!
+
+      Monthly Savings:
+      - Rs 5 lakh loan: Save Rs 3,300 to Rs 4,800 per month
+      - Rs 10 lakh loan: Save Rs 7,000+ per month
+
+      That's real money back in your pocket every month.
+    category: rate
+    language: en
+    keywords: ["savings", "save", "comparison", "calculate", "how much", "benefit"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["save", "savings", "how much", "calculate", "compare", "benefit"]
+
+  - id: rate_savings_002_hi
+    title: "Kotak se Kitni Bachat Hogi"
+    content: |
+      NBFC se Kotak mein switch karne par real savings.
+
+      Example: Rs 5 Lakh Loan 12 mahine ke liye
+      | Lender | Rate | Saalana Byaaj |
+      |--------|------|---------------|
+      | Muthoot | 18% | Rs 90,000 |
+      | Manappuram | 21% | Rs 1,05,000 |
+      | Kotak | 10% | Rs 50,000 |
+
+      AAPKI BACHAT: Rs 40,000 se Rs 55,000 saal mein!
+
+      Example: Rs 10 Lakh Loan
+      | Lender | Rate | Saalana Byaaj |
+      |--------|------|---------------|
+      | NBFC Average | 18% | Rs 1,80,000 |
+      | Kotak | 9.5% | Rs 95,000 |
+
+      AAPKI BACHAT: Rs 85,000 saal mein!
+
+      Mahine ki Bachat:
+      - Rs 5 lakh loan: Rs 3,300-4,800 per month
+      - Rs 10 lakh loan: Rs 7,000+ per month
+
+      Yeh paisa aapki jeb mein rahega har mahine.
+    category: rate
+    language: hi
+    keywords: ["bachat", "save", "kitna", "comparison", "benefit", "savings"]
+    segment_relevance: ["P1", "P2"]
+    intent_triggers: ["bachat", "kitna bachega", "compare", "fayda"]

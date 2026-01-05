@@ -1,12 +1,26 @@
 import { useState, useEffect } from 'react'
-import { CustomerSelect } from './components/CustomerSelect'
 import { MicButton } from './components/MicButton'
 import { Transcript } from './components/Transcript'
 import { useVoiceAgent } from './hooks/useVoiceAgent'
+import SimplePTT from './pages/SimplePTT'
 
 // Kotak brand colors
 const KOTAK_RED = '#ED1C24'
-const KOTAK_DARK = '#1a1a2e'
+
+// Simple hash-based router
+function useHashRoute() {
+  const [route, setRoute] = useState(window.location.hash.slice(1) || '/')
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setRoute(window.location.hash.slice(1) || '/')
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  return route
+}
 
 interface Customer {
   id: string
@@ -29,6 +43,18 @@ const LANGUAGES = {
 }
 
 function App() {
+  const route = useHashRoute()
+
+  // Render SimplePTT for /simple route
+  if (route === '/simple') {
+    return <SimplePTT />
+  }
+
+  // Render main app for all other routes
+  return <MainApp />
+}
+
+function MainApp() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [selectedLanguage, setSelectedLanguage] = useState('hi')
@@ -93,6 +119,7 @@ function App() {
           <span style={styles.logoText}>KOTAK</span>
           <span style={styles.logoSubtext}>Gold Loan Voice Agent</span>
         </div>
+        <a href="#/simple" style={styles.simpleModeLink}>Simple Mode →</a>
       </header>
 
       <main style={styles.main}>
@@ -220,6 +247,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '1rem 2rem',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  simpleModeLink: {
+    color: '#fff',
+    textDecoration: 'none',
+    fontSize: '0.9rem',
+    opacity: 0.9,
+    padding: '0.5rem 1rem',
+    background: 'rgba(255,255,255,0.15)',
+    borderRadius: '6px',
+    transition: 'background 0.2s',
   },
   logo: {
     display: 'flex',

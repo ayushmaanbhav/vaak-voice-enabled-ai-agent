@@ -108,7 +108,16 @@ impl VectorStore {
     ///
     /// P0 FIX: Now uses api_key from config for authenticated Qdrant connections.
     pub async fn new(config: VectorStoreConfig) -> Result<Self, RagError> {
-        let mut builder = Qdrant::from_url(&config.endpoint);
+        // Use gRPC port (6334) for qdrant-client
+        let grpc_endpoint = config.endpoint.replace(":6333", ":6334");
+        tracing::info!("Connecting to Qdrant at {}", grpc_endpoint);
+
+        let mut builder = Qdrant::from_url(&grpc_endpoint)
+            // Skip version check to avoid connection issues
+            .skip_compatibility_check()
+            // Increase timeouts for slower connections
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10));
 
         // P0 FIX: Apply API key if configured
         if let Some(ref api_key) = config.api_key {

@@ -329,10 +329,16 @@ async fn convert_to_pcm_f32(audio_bytes: &[u8], format: &str) -> Result<Vec<f32>
 /// Convert WebM/Opus to PCM f32 using ffmpeg
 async fn convert_webm_to_pcm_f32(webm_bytes: &[u8]) -> Result<Vec<f32>, String> {
     use tokio::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    // Create temp file for input
-    let input_path = format!("/tmp/ptt_input_{}.webm", std::process::id());
-    let output_path = format!("/tmp/ptt_output_{}.raw", std::process::id());
+    // Create unique temp file names using timestamp + random component
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let unique_id = format!("{}_{}", std::process::id(), timestamp);
+    let input_path = format!("/tmp/ptt_input_{}.webm", unique_id);
+    let output_path = format!("/tmp/ptt_output_{}.raw", unique_id);
 
     // Write input file
     tokio::fs::write(&input_path, webm_bytes)
@@ -469,6 +475,226 @@ fn format_fallback_response(user_text: &str, language: &str) -> String {
     } else {
         format!("You said: '{}'. Please try again in a moment.", user_text)
     }
+}
+
+/// Language-specific greeting messages
+fn get_greeting(language: &str) -> (&'static str, &'static str) {
+    // Returns (greeting in target language, English translation)
+    match language.to_lowercase().as_str() {
+        "en" | "english" => (
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        "hi" | "hindi" => (
+            "नमस्ते! मैं आपका कोटक गोल्ड लोन सहायक हूं। आज मैं आपकी कैसे मदद कर सकता हूं?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        "ta" | "tamil" => (
+            "வணக்கம்! நான் உங்கள் கோடக் கோல்ட் லோன் உதவியாளர். இன்று நான் உங்களுக்கு எப்படி உதவ முடியும்?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        "te" | "telugu" => (
+            "నమస్కారం! నేను మీ కోటక్ గోల్డ్ లోన్ అసిస్టెంట్. ఈ రోజు నేను మీకు ఎలా సహాయం చేయగలను?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        "kn" | "kannada" => (
+            "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಕೋಟಕ್ ಗೋಲ್ಡ್ ಲೋನ್ ಸಹಾಯಕ. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        "ml" | "malayalam" => (
+            "നമസ്കാരം! ഞാൻ നിങ്ങളുടെ കോട്ടക് ഗോൾഡ് ലോൺ അസിസ്റ്റന്റ് ആണ്. ഇന്ന് ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കാം?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+        _ => (
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?",
+            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
+        ),
+    }
+}
+
+/// Request for greeting
+#[derive(Debug, Deserialize)]
+pub struct GreetingRequest {
+    /// Language code (hi, en, ta, etc.)
+    pub language: String,
+}
+
+/// Response with greeting
+#[derive(Debug, Serialize)]
+pub struct GreetingResponse {
+    /// Greeting text in the requested language
+    pub greeting: String,
+    /// English translation of the greeting
+    pub greeting_english: String,
+    /// Language code
+    pub language: String,
+}
+
+/// Get language-specific greeting
+pub async fn get_greeting_handler(
+    Json(request): Json<GreetingRequest>,
+) -> impl IntoResponse {
+    let (greeting, greeting_english) = get_greeting(&request.language);
+
+    (
+        StatusCode::OK,
+        Json(GreetingResponse {
+            greeting: greeting.to_string(),
+            greeting_english: greeting_english.to_string(),
+            language: request.language,
+        }),
+    )
+}
+
+/// Request for translating messages
+#[derive(Debug, Deserialize)]
+pub struct TranslateRequest {
+    /// Messages to translate
+    pub messages: Vec<TranslateMessage>,
+    /// Target language code (hi, en, ta, etc.)
+    pub target_language: String,
+    /// Source language code (optional, auto-detect if not provided)
+    pub source_language: Option<String>,
+}
+
+/// A single message to translate
+#[derive(Debug, Deserialize)]
+pub struct TranslateMessage {
+    /// Message ID (for correlation in response)
+    pub id: String,
+    /// Text to translate
+    pub text: String,
+    /// Role (user or assistant)
+    pub role: String,
+}
+
+/// Response with translated messages
+#[derive(Debug, Serialize)]
+pub struct TranslateResponse {
+    /// Translated messages
+    pub messages: Vec<TranslatedMessage>,
+    /// Target language code
+    pub target_language: String,
+    /// Source language code
+    pub source_language: String,
+}
+
+/// A translated message
+#[derive(Debug, Serialize)]
+pub struct TranslatedMessage {
+    /// Message ID (matches request)
+    pub id: String,
+    /// Translated text
+    pub text: String,
+    /// Original text (for reference)
+    pub original: String,
+    /// Role (user or assistant)
+    pub role: String,
+}
+
+/// Translate messages to a target language
+pub async fn translate_handler(
+    State(state): State<AppState>,
+    Json(request): Json<TranslateRequest>,
+) -> impl IntoResponse {
+    use voice_agent_core::Language;
+
+    let source_lang_str = request.source_language.clone().unwrap_or_else(|| "en".to_string());
+
+    tracing::info!(
+        "Translate request: {} messages, {} -> {}",
+        request.messages.len(),
+        source_lang_str,
+        request.target_language
+    );
+
+    // If source and target are the same, just return the original messages
+    if source_lang_str == request.target_language {
+        let messages: Vec<TranslatedMessage> = request.messages
+            .into_iter()
+            .map(|m| TranslatedMessage {
+                id: m.id,
+                text: m.text.clone(),
+                original: m.text,
+                role: m.role,
+            })
+            .collect();
+
+        return (
+            StatusCode::OK,
+            Json(TranslateResponse {
+                messages,
+                target_language: request.target_language,
+                source_language: source_lang_str,
+            }),
+        );
+    }
+
+    // Parse language codes to Language enum
+    let source_lang = match Language::from_str_loose(&source_lang_str) {
+        Some(lang) => lang,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(TranslateResponse {
+                    messages: vec![],
+                    target_language: request.target_language,
+                    source_language: source_lang_str,
+                }),
+            );
+        }
+    };
+
+    let target_lang = match Language::from_str_loose(&request.target_language) {
+        Some(lang) => lang,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(TranslateResponse {
+                    messages: vec![],
+                    target_language: request.target_language,
+                    source_language: source_lang_str,
+                }),
+            );
+        }
+    };
+
+    // Translate each message
+    let mut translated_messages = Vec::new();
+
+    for msg in request.messages {
+        let translated_text = match state.translator.translate(
+            &msg.text,
+            source_lang,
+            target_lang,
+        ).await {
+            Ok(text) => text,
+            Err(e) => {
+                tracing::warn!(
+                    "Translation failed for message {}: {}. Using original.",
+                    msg.id, e
+                );
+                // Fallback to original text
+                msg.text.clone()
+            }
+        };
+
+        translated_messages.push(TranslatedMessage {
+            id: msg.id,
+            text: translated_text,
+            original: msg.text,
+            role: msg.role,
+        });
+    }
+
+    (
+        StatusCode::OK,
+        Json(TranslateResponse {
+            messages: translated_messages,
+            target_language: request.target_language,
+            source_language: source_lang_str,
+        }),
+    )
 }
 
 /// Health check for PTT service
