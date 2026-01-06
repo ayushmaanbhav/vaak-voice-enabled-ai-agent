@@ -9,6 +9,8 @@ use tokio::sync::broadcast;
 use voice_agent_llm::{LlmFactory, Message, PromptBuilder, Role, SpeculativeExecutor};
 // P1 FIX: Use LanguageModel trait from core for proper abstraction
 use voice_agent_core::LanguageModel;
+// P8 FIX: Import AgentDomainView for config-driven domain abstraction
+use voice_agent_config::domain::AgentDomainView;
 // P0-2 FIX: Import ToolDefinition and FinishReason for LLM tool calling
 use voice_agent_core::{FinishReason, ToolDefinition};
 use voice_agent_tools::{ToolExecutor, ToolRegistry};
@@ -85,6 +87,8 @@ pub struct GoldLoanAgent {
     /// Phase 10: Lead Scoring Engine for sales conversion optimization
     /// Tracks signals, calculates MQL/SQL, triggers auto-escalation
     lead_scoring: RwLock<LeadScoringEngine>,
+    /// P8 FIX: Domain view for config-driven values (optional for backward compat)
+    domain_view: Option<Arc<AgentDomainView>>,
 }
 
 impl GoldLoanAgent {
@@ -237,6 +241,7 @@ impl GoldLoanAgent {
             speculative,
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(dst_config)),
             lead_scoring: RwLock::new(lead_scoring),
+            domain_view: None,
         }
     }
 
@@ -347,6 +352,7 @@ impl GoldLoanAgent {
             speculative,
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
             lead_scoring: RwLock::new(lead_scoring),
+            domain_view: None,
         }
     }
 
@@ -415,6 +421,7 @@ impl GoldLoanAgent {
             speculative: None, // P1-2 FIX: No speculative without LLM
             dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
             lead_scoring: RwLock::new(lead_scoring),
+            domain_view: None,
         }
     }
 
@@ -456,6 +463,17 @@ impl GoldLoanAgent {
     pub fn with_translator(mut self, translator: Arc<dyn Translator>) -> Self {
         self.translator = Some(translator);
         self
+    }
+
+    /// P8 FIX: Set domain view for config-driven values
+    pub fn with_domain_view(mut self, view: Arc<AgentDomainView>) -> Self {
+        self.domain_view = Some(view);
+        self
+    }
+
+    /// P8 FIX: Get domain view if available
+    pub fn domain_view(&self) -> Option<&Arc<AgentDomainView>> {
+        self.domain_view.as_ref()
     }
 
     /// P5 FIX: Get user's configured language
