@@ -1,24 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 500">
   <defs>
     <!-- RGB Gradient Animation for VAAK -->
     <linearGradient id="rgbGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%">
         <animate attributeName="stop-color" values="#ff0080;#00ffff;#ffff00;#ff0080" dur="3s" repeatCount="indefinite"/>
       </stop>
-      <stop offset="33%">
+      <stop offset="50%">
         <animate attributeName="stop-color" values="#00ffff;#ffff00;#ff0080;#00ffff" dur="3s" repeatCount="indefinite"/>
       </stop>
-      <stop offset="66%">
-        <animate attributeName="stop-color" values="#ffff00;#ff0080;#00ffff;#ffff00" dur="3s" repeatCount="indefinite"/>
-      </stop>
       <stop offset="100%">
-        <animate attributeName="stop-color" values="#ff0080;#00ffff;#ffff00;#ff0080" dur="3s" repeatCount="indefinite"/>
+        <animate attributeName="stop-color" values="#ffff00;#ff0080;#00ffff;#ffff00" dur="3s" repeatCount="indefinite"/>
       </stop>
     </linearGradient>
 
     <!-- Glow filter -->
     <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feGaussianBlur stdDeviation="3" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
@@ -27,154 +24,143 @@
   </defs>
 
   <!-- Dark background -->
-  <rect width="500" height="500" fill="#0a0a12"/>
+  <rect width="600" height="500" fill="#0a0a12"/>
 
-  <!-- Rotating taglines group -->
-  <g transform="translate(250,250)">
-    <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="30s" repeatCount="indefinite" additive="sum"/>
+  <!-- Rotating egg-shaped taglines group -->
+  <g transform="translate(300,250)">
+    <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="25s" repeatCount="indefinite" additive="sum"/>
 
-    <!-- Tagline 1: Air-Gapped (0°) -->
-    <g transform="rotate(0)">
-      <text x="0" y="-85" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#06b6d4" letter-spacing="1" opacity="0.9">
+    <!-- Taglines positioned tangentially (rotated 90° to read along circle) -->
+    <!-- Right side = larger (egg bulge), Top/Bottom = smaller -->
+
+    <!-- 0° (TOP - smallest) -->
+    <g transform="rotate(0) translate(0,-95)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="7" fill="#06b6d4" letter-spacing="1" opacity="0.7">
         AIR-GAPPED
-        <animate attributeName="font-size" values="9;11;9" dur="30s" repeatCount="indefinite" keyTimes="0;0.25;0.5" calcMode="spline" keySplines="0.4 0 0.6 1;0.4 0 0.6 1"/>
       </text>
     </g>
 
-    <!-- Tagline 2: Memory-Safe (22.5°) -->
-    <g transform="rotate(22.5)">
-      <text x="0" y="-90" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#8b5cf6" letter-spacing="1" opacity="0.85">
+    <!-- 22.5° -->
+    <g transform="rotate(22.5) translate(0,-100)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#8b5cf6" letter-spacing="1" opacity="0.75">
         MEMORY-SAFE
-        <animate attributeName="font-size" values="8;12;8" dur="30s" repeatCount="indefinite" begin="-28.125s"/>
       </text>
     </g>
 
-    <!-- Tagline 3: Deterministic (45°) -->
-    <g transform="rotate(45)">
-      <text x="0" y="-95" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#ec4899" letter-spacing="1" opacity="0.85">
+    <!-- 45° -->
+    <g transform="rotate(45) translate(0,-110)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#ec4899" letter-spacing="1" opacity="0.8">
         DETERMINISTIC
-        <animate attributeName="font-size" values="8;13;8" dur="30s" repeatCount="indefinite" begin="-26.25s"/>
       </text>
     </g>
 
-    <!-- Tagline 4: Real-Time (67.5°) -->
-    <g transform="rotate(67.5)">
-      <text x="0" y="-100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#f59e0b" letter-spacing="1" opacity="0.9">
+    <!-- 67.5° -->
+    <g transform="rotate(67.5) translate(0,-125)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#f59e0b" letter-spacing="1" opacity="0.9">
         REAL-TIME
-        <animate attributeName="font-size" values="8;14;8" dur="30s" repeatCount="indefinite" begin="-24.375s"/>
       </text>
     </g>
 
-    <!-- Tagline 5: Sub-500ms (90° - RIGHT - LARGEST) -->
-    <g transform="rotate(90)">
-      <text x="0" y="-105" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#10b981" letter-spacing="1" opacity="1" font-weight="600">
+    <!-- 90° (RIGHT - largest, egg bulge) -->
+    <g transform="rotate(90) translate(0,-145)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#10b981" letter-spacing="2" opacity="1" font-weight="600">
         SUB-500MS
-        <animate attributeName="font-size" values="9;15;9" dur="30s" repeatCount="indefinite" begin="-22.5s"/>
       </text>
     </g>
 
-    <!-- Tagline 6: Edge AI (112.5°) -->
-    <g transform="rotate(112.5)">
-      <text x="0" y="-100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#06b6d4" letter-spacing="1" opacity="0.9">
+    <!-- 112.5° -->
+    <g transform="rotate(112.5) translate(0,-125)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#06b6d4" letter-spacing="1" opacity="0.9">
         EDGE AI
-        <animate attributeName="font-size" values="8;14;8" dur="30s" repeatCount="indefinite" begin="-20.625s"/>
       </text>
     </g>
 
-    <!-- Tagline 7: GDPR-Ready (135°) -->
-    <g transform="rotate(135)">
-      <text x="0" y="-95" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#8b5cf6" letter-spacing="1" opacity="0.85">
+    <!-- 135° -->
+    <g transform="rotate(135) translate(0,-110)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#8b5cf6" letter-spacing="1" opacity="0.8">
         GDPR-READY
-        <animate attributeName="font-size" values="8;13;8" dur="30s" repeatCount="indefinite" begin="-18.75s"/>
       </text>
     </g>
 
-    <!-- Tagline 8: Data Sovereign (157.5°) -->
-    <g transform="rotate(157.5)">
-      <text x="0" y="-90" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#ec4899" letter-spacing="1" opacity="0.85">
+    <!-- 157.5° -->
+    <g transform="rotate(157.5) translate(0,-100)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#ec4899" letter-spacing="1" opacity="0.75">
         DATA SOVEREIGN
-        <animate attributeName="font-size" values="8;12;8" dur="30s" repeatCount="indefinite" begin="-16.875s"/>
       </text>
     </g>
 
-    <!-- Tagline 9: Compliant (180°) -->
-    <g transform="rotate(180)">
-      <text x="0" y="-85" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#f59e0b" letter-spacing="1" opacity="0.9">
+    <!-- 180° (BOTTOM - smallest) -->
+    <g transform="rotate(180) translate(0,-95)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="7" fill="#f59e0b" letter-spacing="1" opacity="0.7">
         COMPLIANT
-        <animate attributeName="font-size" values="9;11;9" dur="30s" repeatCount="indefinite" begin="-15s"/>
       </text>
     </g>
 
-    <!-- Tagline 10: Distributed (202.5°) -->
-    <g transform="rotate(202.5)">
-      <text x="0" y="-90" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#10b981" letter-spacing="1" opacity="0.85">
+    <!-- 202.5° -->
+    <g transform="rotate(202.5) translate(0,-100)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#10b981" letter-spacing="1" opacity="0.75">
         DISTRIBUTED
-        <animate attributeName="font-size" values="8;12;8" dur="30s" repeatCount="indefinite" begin="-13.125s"/>
       </text>
     </g>
 
-    <!-- Tagline 11: Scalable (225°) -->
-    <g transform="rotate(225)">
-      <text x="0" y="-95" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#06b6d4" letter-spacing="1" opacity="0.85">
+    <!-- 225° -->
+    <g transform="rotate(225) translate(0,-110)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#06b6d4" letter-spacing="1" opacity="0.8">
         SCALABLE
-        <animate attributeName="font-size" values="8;13;8" dur="30s" repeatCount="indefinite" begin="-11.25s"/>
       </text>
     </g>
 
-    <!-- Tagline 12: Enterprise (247.5°) -->
-    <g transform="rotate(247.5)">
-      <text x="0" y="-100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#8b5cf6" letter-spacing="1" opacity="0.9">
+    <!-- 247.5° -->
+    <g transform="rotate(247.5) translate(0,-125)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#8b5cf6" letter-spacing="1" opacity="0.9">
         ENTERPRISE
-        <animate attributeName="font-size" values="8;14;8" dur="30s" repeatCount="indefinite" begin="-9.375s"/>
       </text>
     </g>
 
-    <!-- Tagline 13: 22 Languages (270° - LEFT - LARGEST) -->
-    <g transform="rotate(270)">
-      <text x="0" y="-105" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#ec4899" letter-spacing="1" opacity="1" font-weight="600">
+    <!-- 270° (LEFT - largest, egg bulge) -->
+    <g transform="rotate(270) translate(0,-145)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#ec4899" letter-spacing="2" opacity="1" font-weight="600">
         22 LANGUAGES
-        <animate attributeName="font-size" values="9;15;9" dur="30s" repeatCount="indefinite" begin="-7.5s"/>
       </text>
     </g>
 
-    <!-- Tagline 14: Multilingual (292.5°) -->
-    <g transform="rotate(292.5)">
-      <text x="0" y="-100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#f59e0b" letter-spacing="1" opacity="0.9">
+    <!-- 292.5° -->
+    <g transform="rotate(292.5) translate(0,-125)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#f59e0b" letter-spacing="1" opacity="0.9">
         MULTILINGUAL
-        <animate attributeName="font-size" values="8;14;8" dur="30s" repeatCount="indefinite" begin="-5.625s"/>
       </text>
     </g>
 
-    <!-- Tagline 15: Sales (315°) -->
-    <g transform="rotate(315)">
-      <text x="0" y="-95" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#10b981" letter-spacing="1" opacity="0.85">
+    <!-- 315° -->
+    <g transform="rotate(315) translate(0,-110)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#10b981" letter-spacing="1" opacity="0.8">
         SALES
-        <animate attributeName="font-size" values="8;13;8" dur="30s" repeatCount="indefinite" begin="-3.75s"/>
       </text>
     </g>
 
-    <!-- Tagline 16: Support (337.5°) -->
-    <g transform="rotate(337.5)">
-      <text x="0" y="-90" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#06b6d4" letter-spacing="1" opacity="0.85">
+    <!-- 337.5° -->
+    <g transform="rotate(337.5) translate(0,-100)">
+      <text transform="rotate(90)" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#06b6d4" letter-spacing="1" opacity="0.75">
         SUPPORT
-        <animate attributeName="font-size" values="8;12;8" dur="30s" repeatCount="indefinite" begin="-1.875s"/>
       </text>
     </g>
   </g>
 
+  <!-- Subtle egg-shaped guide (ellipse) -->
+  <ellipse cx="300" cy="250" rx="145" ry="95" fill="none" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="3,6" opacity="0.5">
+    <animateTransform attributeName="transform" type="rotate" from="0 300 250" to="360 300 250" dur="25s" repeatCount="indefinite"/>
+  </ellipse>
+
   <!-- Center VAAK text with RGB animation -->
-  <text x="250" y="260" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="56" font-weight="800" fill="url(#rgbGradient)" filter="url(#glow)" letter-spacing="6">
+  <text x="300" y="260" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="52" font-weight="800" fill="url(#rgbGradient)" filter="url(#glow)" letter-spacing="5">
     VAAK
   </text>
 
   <!-- Sanskrit subtitle -->
-  <text x="250" y="285" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" fill="#64748b" letter-spacing="4">
+  <text x="300" y="285" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#64748b" letter-spacing="3">
     वाक्
   </text>
 
-  <!-- Inner subtle ring -->
-  <circle cx="250" cy="250" r="60" fill="none" stroke="#1e293b" stroke-width="1"/>
-
-  <!-- Outer boundary ring -->
-  <circle cx="250" cy="250" r="120" fill="none" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,4"/>
+  <!-- Inner ring -->
+  <circle cx="300" cy="250" r="55" fill="none" stroke="#1e293b" stroke-width="0.5"/>
 </svg>
