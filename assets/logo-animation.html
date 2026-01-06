@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAAK - Animated Logo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+        }
+
+        /* Animated background grid */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        /* Floating particles */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(0, 255, 136, 0.6);
+            border-radius: 50%;
+            animation: float 15s infinite;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 2s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 4s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 3s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.5s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 3.5s; }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+            10% { opacity: 1; transform: translateY(90vh) scale(1); }
+            90% { opacity: 1; }
+            100% {
+                transform: translateY(-10vh) scale(0.5);
+                opacity: 0;
+            }
+        }
+
+        /* Main logo */
+        .logo-wrapper {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 120px;
+            font-weight: 800;
+            letter-spacing: 15px;
+            background: linear-gradient(
+                135deg,
+                #00ff88 0%,
+                #00d4ff 25%,
+                #a855f7 50%,
+                #00d4ff 75%,
+                #00ff88 100%
+            );
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 4s ease infinite, logoGlow 2s ease-in-out infinite alternate;
+            filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.3));
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes logoGlow {
+            0% { filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.3)); }
+            100% { filter: drop-shadow(0 0 40px rgba(0, 212, 255, 0.5)); }
+        }
+
+        .sanskrit {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: -10px;
+            letter-spacing: 8px;
+            animation: fadeInUp 1s ease 0.5s both;
+        }
+
+        /* Sound wave visualization */
+        .sound-wave {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            height: 60px;
+            margin: 30px 0;
+        }
+
+        .wave-bar {
+            width: 6px;
+            background: linear-gradient(180deg, #00ff88, #00d4ff);
+            border-radius: 3px;
+            animation: wave 1.2s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(1) { animation-delay: 0s; height: 20px; }
+        .wave-bar:nth-child(2) { animation-delay: 0.1s; height: 35px; }
+        .wave-bar:nth-child(3) { animation-delay: 0.2s; height: 50px; }
+        .wave-bar:nth-child(4) { animation-delay: 0.3s; height: 40px; }
+        .wave-bar:nth-child(5) { animation-delay: 0.4s; height: 55px; }
+        .wave-bar:nth-child(6) { animation-delay: 0.5s; height: 45px; }
+        .wave-bar:nth-child(7) { animation-delay: 0.6s; height: 60px; }
+        .wave-bar:nth-child(8) { animation-delay: 0.7s; height: 45px; }
+        .wave-bar:nth-child(9) { animation-delay: 0.8s; height: 55px; }
+        .wave-bar:nth-child(10) { animation-delay: 0.9s; height: 40px; }
+        .wave-bar:nth-child(11) { animation-delay: 1.0s; height: 50px; }
+        .wave-bar:nth-child(12) { animation-delay: 1.1s; height: 35px; }
+        .wave-bar:nth-child(13) { animation-delay: 1.2s; height: 20px; }
+
+        @keyframes wave {
+            0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+            50% { transform: scaleY(1); opacity: 1; }
+        }
+
+        /* Tagline */
+        .tagline {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 25px;
+            animation: fadeInUp 1s ease 1s both;
+        }
+
+        /* Rotating keywords */
+        .keywords-container {
+            height: 40px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .keywords {
+            animation: rotateKeywords 12s ease-in-out infinite;
+        }
+
+        .keyword-line {
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .keyword {
+            padding: 8px 16px;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 20px;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.8);
+            background: rgba(0, 255, 136, 0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        .keyword.highlight {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 212, 255, 0.2));
+            border-color: rgba(0, 212, 255, 0.5);
+            color: #00ff88;
+        }
+
+        @keyframes rotateKeywords {
+            0%, 20% { transform: translateY(0); }
+            25%, 45% { transform: translateY(-40px); }
+            50%, 70% { transform: translateY(-80px); }
+            75%, 95% { transform: translateY(-120px); }
+            100% { transform: translateY(-160px); }
+        }
+
+        /* Security shield icon */
+        .shield-ring {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border: 2px solid rgba(0, 255, 136, 0.1);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        .shield-ring:nth-child(2) {
+            width: 350px;
+            height: 350px;
+            animation-delay: 0.5s;
+            border-color: rgba(0, 212, 255, 0.1);
+        }
+
+        .shield-ring:nth-child(3) {
+            width: 400px;
+            height: 400px;
+            animation-delay: 1s;
+            border-color: rgba(168, 85, 247, 0.1);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+        }
+
+        /* Bottom taglines */
+        .bottom-taglines {
+            margin-top: 30px;
+        }
+
+        .tagline-row {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            font-size: 11px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.5);
+            animation: fadeInUp 1s ease both;
+        }
+
+        .tag:nth-child(1) { animation-delay: 1.5s; }
+        .tag:nth-child(2) { animation-delay: 1.7s; }
+        .tag:nth-child(3) { animation-delay: 1.9s; }
+        .tag:nth-child(4) { animation-delay: 2.1s; }
+        .tag:nth-child(5) { animation-delay: 2.3s; }
+
+        .tag.glow {
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+
+        @keyframes fadeInUp {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scanning line effect */
+        .scan-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ff88, transparent);
+            animation: scan 4s linear infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        /* Circuit lines */
+        .circuit {
+            position: absolute;
+            width: 100px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.3), transparent);
+        }
+
+        .circuit-1 { top: 20%; left: 5%; transform: rotate(45deg); }
+        .circuit-2 { top: 80%; right: 5%; transform: rotate(-45deg); }
+        .circuit-3 { top: 50%; left: 2%; transform: rotate(0deg); }
+        .circuit-4 { top: 50%; right: 2%; transform: rotate(0deg); }
+
+        /* Final tagline */
+        .final-tagline {
+            margin-top: 40px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.4);
+            font-style: italic;
+            animation: fadeInUp 1s ease 3s both;
+        }
+
+        .final-tagline span {
+            color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div class="scan-line"></div>
+
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <div class="circuit circuit-1"></div>
+    <div class="circuit circuit-2"></div>
+    <div class="circuit circuit-3"></div>
+    <div class="circuit circuit-4"></div>
+
+    <div class="container">
+        <div class="shield-ring"></div>
+        <div class="shield-ring"></div>
+        <div class="shield-ring"></div>
+
+        <div class="logo-wrapper">
+            <div class="logo">VAAK</div>
+            <div class="sanskrit">वाक्</div>
+        </div>
+
+        <div class="sound-wave">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+        </div>
+
+        <div class="tagline">Voice-Activated Autonomous Knowledge System</div>
+
+        <div class="keywords-container">
+            <div class="keywords">
+                <div class="keyword-line">
+                    <span class="keyword highlight">Air-Gapped</span>
+                    <span class="keyword">Memory-Safe</span>
+                    <span class="keyword highlight">Deterministic</span>
+                </div>
+                <div class="keyword-line">
+                    <span class="keyword">Sales</span>
+                    <span class="keyword highlight">Support</span>
+                    <span class="keyword">Discovery</span>
+                    <span class="keyword highlight">CRM</span>
+                </div>
+                <div class="keyword-line">
+                    <span class="keyword highlight">GDPR-Ready</span>
+                    <span class="keyword">Data Sovereign</span>
+                    <span class="keyword highlight">Compliant</span>
+                </div>
+                <div class="keyword-line">
+                    <span class="keyword">Real-Time</span>
+                    <span class="keyword highlight">Sub-500ms</span>
+                    <span class="keyword">Edge AI</span>
+                </div>
+                <div class="keyword-line">
+                    <span class="keyword highlight">22 Languages</span>
+                    <span class="keyword">Enterprise</span>
+                    <span class="keyword highlight">Distributed</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-taglines">
+            <div class="tagline-row">
+                <span class="tag glow">Scalable</span>
+                <span class="tag">Open Architecture</span>
+                <span class="tag glow">Rust-Native</span>
+            </div>
+            <div class="tagline-row">
+                <span class="tag">Domain-Agnostic</span>
+                <span class="tag glow">Zero Cloud Dependencies</span>
+            </div>
+        </div>
+
+        <div class="final-tagline">
+            <span>Where Speech Becomes Intelligence</span>
+        </div>
+    </div>
+</body>
+</html>
