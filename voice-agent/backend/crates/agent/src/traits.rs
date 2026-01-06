@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc};
 use voice_agent_core::Language;
 
-use crate::agent::AgentEvent;
+use crate::agent_config::AgentEvent;
 use crate::conversation::EndReason;
 use crate::stage::ConversationStage;
 use crate::AgentError;

@@ -1,6 +1,6 @@
-//! Gold Loan Domain Tools
+//! Gold Loan Tool Implementations
 //!
-//! Specific tools for the gold loan voice agent.
+//! MCP-compatible tools for the gold loan voice agent.
 
 use crate::integrations::{
     Appointment, AppointmentPurpose, AppointmentStatus, CalendarIntegration, CrmIntegration,
@@ -8,188 +8,14 @@ use crate::integrations::{
 };
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
-use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use voice_agent_config::GoldLoanConfig;
 
 use crate::mcp::{InputSchema, PropertySchema, Tool, ToolError, ToolOutput, ToolSchema};
 
-/// P0 FIX: Calculate EMI using the standard amortization formula
-///
-/// EMI = P × r × (1 + r)^n / [(1 + r)^n - 1]
-///
-/// Where:
-/// - P = Principal loan amount
-/// - r = Monthly interest rate (annual_rate / 12 / 100)
-/// - n = Number of months (tenure)
-///
-/// Note: Gold loans often use simple interest schemes where only interest
-/// is paid monthly, but this function provides true EMI for accurate comparison.
-pub fn calculate_emi(principal: f64, annual_rate_percent: f64, tenure_months: i64) -> f64 {
-    if tenure_months <= 0 || principal <= 0.0 {
-        return 0.0;
-    }
-
-    let monthly_rate = annual_rate_percent / 100.0 / 12.0;
-
-    // Handle edge case of 0% interest
-    if monthly_rate <= 0.0 {
-        return principal / tenure_months as f64;
-    }
-
-    let n = tenure_months as f64;
-    let one_plus_r_n = (1.0 + monthly_rate).powf(n);
-
-    // EMI formula: P * r * (1+r)^n / [(1+r)^n - 1]
-    principal * monthly_rate * one_plus_r_n / (one_plus_r_n - 1.0)
-}
-
-/// Calculate total interest paid over the loan tenure
-pub fn calculate_total_interest(
-    principal: f64,
-    annual_rate_percent: f64,
-    tenure_months: i64,
-) -> f64 {
-    let emi = calculate_emi(principal, annual_rate_percent, tenure_months);
-    let total_paid = emi * tenure_months as f64;
-    total_paid - principal
-}
-
-/// P0 FIX: Branch data structure for JSON loading
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BranchData {
-    pub branch_id: String,
-    pub name: String,
-    pub city: String,
-    pub area: String,
-    pub address: String,
-    #[serde(default)]
-    pub pincode: String,
-    pub phone: String,
-    pub gold_loan_available: bool,
-    pub timing: String,
-    #[serde(default)]
-    pub facilities: Vec<String>,
-}
-
-/// Branch data file structure
-#[derive(Debug, Deserialize)]
-struct BranchDataFile {
-    branches: Vec<BranchData>,
-}
-
-/// P0 FIX: Global branch data loaded from JSON
-static BRANCH_DATA: Lazy<RwLock<Vec<BranchData>>> = Lazy::new(|| {
-    // Try to load from default paths
-    let default_paths = [
-        "data/branches.json",
-        "../data/branches.json",
-        "../../data/branches.json",
-        "./branches.json",
-    ];
-
-    for path in &default_paths {
-        if let Ok(data) = load_branches_from_file(path) {
-            tracing::info!("Loaded {} branches from {}", data.len(), path);
-            return RwLock::new(data);
-        }
-    }
-
-    // Fall back to embedded default data
-    tracing::warn!("Could not load branches from file, using embedded defaults");
-    RwLock::new(get_default_branches())
-});
-
-/// Load branches from a JSON file
-pub fn load_branches_from_file<P: AsRef<Path>>(path: P) -> Result<Vec<BranchData>, std::io::Error> {
-    let content = std::fs::read_to_string(path)?;
-    let file: BranchDataFile = serde_json::from_str(&content)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    Ok(file.branches)
-}
-
-/// Reload branches from a file (for runtime updates)
-pub fn reload_branches<P: AsRef<Path>>(path: P) -> Result<usize, std::io::Error> {
-    let branches = load_branches_from_file(path)?;
-    let count = branches.len();
-    *BRANCH_DATA.write().unwrap() = branches;
-    Ok(count)
-}
-
-/// Get all loaded branches
-pub fn get_branches() -> Vec<BranchData> {
-    BRANCH_DATA.read().unwrap().clone()
-}
-
-/// Get default embedded branches (fallback)
-fn get_default_branches() -> Vec<BranchData> {
-    vec![
-        BranchData {
-            branch_id: "KMBL001".to_string(),
-            name: "Kotak Mahindra Bank - Andheri West".to_string(),
-            city: "Mumbai".to_string(),
-            area: "Andheri West".to_string(),
-            address: "Ground Floor, Kora Kendra, S.V. Road, Andheri West, Mumbai - 400058"
-                .to_string(),
-            pincode: "400058".to_string(),
-            phone: "022-66006060".to_string(),
-            gold_loan_available: true,
-            timing: "10:00 AM - 5:00 PM (Mon-Sat)".to_string(),
-            facilities: vec![
-                "Gold Valuation".to_string(),
-                "Same Day Disbursement".to_string(),
-            ],
-        },
-        BranchData {
-            branch_id: "KMBL101".to_string(),
-            name: "Kotak Mahindra Bank - Connaught Place".to_string(),
-            city: "Delhi".to_string(),
-            area: "Connaught Place".to_string(),
-            address: "M-Block, Connaught Place, New Delhi - 110001".to_string(),
-            pincode: "110001".to_string(),
-            phone: "011-66006060".to_string(),
-            gold_loan_available: true,
-            timing: "10:00 AM - 5:00 PM (Mon-Sat)".to_string(),
-            facilities: vec![
-                "Gold Valuation".to_string(),
-                "Same Day Disbursement".to_string(),
-            ],
-        },
-        BranchData {
-            branch_id: "KMBL201".to_string(),
-            name: "Kotak Mahindra Bank - MG Road".to_string(),
-            city: "Bangalore".to_string(),
-            area: "MG Road".to_string(),
-            address: "Church Street, MG Road, Bangalore - 560001".to_string(),
-            pincode: "560001".to_string(),
-            phone: "080-66006060".to_string(),
-            gold_loan_available: true,
-            timing: "10:00 AM - 5:00 PM (Mon-Sat)".to_string(),
-            facilities: vec![
-                "Gold Valuation".to_string(),
-                "Same Day Disbursement".to_string(),
-            ],
-        },
-        BranchData {
-            branch_id: "KMBL301".to_string(),
-            name: "Kotak Mahindra Bank - T Nagar".to_string(),
-            city: "Chennai".to_string(),
-            area: "T Nagar".to_string(),
-            address: "Usman Road, T Nagar, Chennai - 600017".to_string(),
-            pincode: "600017".to_string(),
-            phone: "044-66006060".to_string(),
-            gold_loan_available: true,
-            timing: "10:00 AM - 5:00 PM (Mon-Sat)".to_string(),
-            facilities: vec![
-                "Gold Valuation".to_string(),
-                "Same Day Disbursement".to_string(),
-            ],
-        },
-    ]
-}
+use super::branches::{get_branches, BranchData};
+use super::utils::{calculate_emi, calculate_total_interest};
 
 /// Check eligibility tool
 pub struct EligibilityCheckTool {
@@ -267,7 +93,6 @@ impl Tool for EligibilityCheckTool {
         let available_loan = max_loan - existing_loan;
 
         // P2 FIX: Use tiered interest rates based on loan amount
-        // Higher loan amounts get better rates
         let interest_rate = self.config.get_tiered_rate(available_loan.max(0.0));
 
         let result = json!({
@@ -279,7 +104,6 @@ impl Tool for EligibilityCheckTool {
             "ltv_percent": self.config.ltv_percent,
             "interest_rate_percent": interest_rate,
             "processing_fee_percent": self.config.processing_fee_percent,
-            // P2 FIX: Include rate tier info for transparency
             "rate_tier": if available_loan <= 100000.0 {
                 "Standard"
             } else if available_loan <= 500000.0 {
@@ -378,7 +202,6 @@ impl Tool for SavingsCalculatorTool {
             .and_then(|v| v.as_f64())
             .ok_or_else(|| ToolError::invalid_params("current_loan_amount is required"))?;
 
-        // Get current rate - either from input or infer from lender
         let current_lender = input
             .get("current_lender")
             .and_then(|v| v.as_str())
@@ -394,29 +217,21 @@ impl Tool for SavingsCalculatorTool {
             .and_then(|v| v.as_i64())
             .ok_or_else(|| ToolError::invalid_params("remaining_tenure_months is required"))?;
 
-        // P2 FIX: Use tiered rate based on loan amount
-        // Higher loan amounts qualify for better rates
         let kotak_rate = self.config.get_tiered_rate(loan_amount);
 
-        // P0 FIX: Calculate proper EMI using amortization formula
-        // This provides accurate monthly payment comparison (principal + interest)
         let current_emi = calculate_emi(loan_amount, current_rate, tenure_months);
         let kotak_emi = calculate_emi(loan_amount, kotak_rate, tenure_months);
         let emi_savings = current_emi - kotak_emi;
 
-        // Also provide simple interest for gold loan comparison
-        // (Many gold loans only charge interest monthly, principal at end)
         let current_monthly_interest = loan_amount * (current_rate / 100.0 / 12.0);
         let kotak_monthly_interest = loan_amount * (kotak_rate / 100.0 / 12.0);
         let monthly_interest_savings = current_monthly_interest - kotak_monthly_interest;
 
-        // Total savings over tenure
         let total_emi_savings = emi_savings * tenure_months as f64;
         let total_interest_savings =
             calculate_total_interest(loan_amount, current_rate, tenure_months)
                 - calculate_total_interest(loan_amount, kotak_rate, tenure_months);
 
-        // P2 FIX: Determine rate tier for customer communication
         let rate_tier = if loan_amount <= 100000.0 {
             "Standard"
         } else if loan_amount <= 500000.0 {
@@ -430,18 +245,15 @@ impl Tool for SavingsCalculatorTool {
             "current_interest_rate_percent": current_rate,
             "kotak_interest_rate_percent": kotak_rate,
             "rate_reduction_percent": current_rate - kotak_rate,
-            // P0 FIX: EMI-based calculations (principal + interest)
             "current_emi_inr": current_emi.round(),
             "kotak_emi_inr": kotak_emi.round(),
             "monthly_emi_savings_inr": emi_savings.round(),
             "total_emi_savings_inr": total_emi_savings.round(),
-            // Interest-only calculations (for bullet repayment schemes)
             "current_monthly_interest_inr": current_monthly_interest.round(),
             "kotak_monthly_interest_inr": kotak_monthly_interest.round(),
             "monthly_interest_savings_inr": monthly_interest_savings.round(),
             "total_interest_savings_inr": total_interest_savings.round(),
             "tenure_months": tenure_months,
-            // P2 FIX: Include tier info for transparency
             "rate_tier": rate_tier,
             "message": format!(
                 "By switching to Kotak at our {} rate of {}%, you can save ₹{:.0} per month on EMI (or ₹{:.0} on interest-only) and ₹{:.0} total over the remaining {} months!",
@@ -460,9 +272,7 @@ impl Default for SavingsCalculatorTool {
 }
 
 /// Lead capture tool
-/// P4 FIX: Now wired to CrmIntegration for actual lead creation
 pub struct LeadCaptureTool {
-    /// CRM integration for creating leads
     crm: Option<Arc<dyn CrmIntegration>>,
 }
 
@@ -471,7 +281,6 @@ impl LeadCaptureTool {
         Self { crm: None }
     }
 
-    /// Create with CRM integration
     pub fn with_crm(crm: Arc<dyn CrmIntegration>) -> Self {
         Self { crm: Some(crm) }
     }
@@ -540,12 +349,10 @@ impl Tool for LeadCaptureTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::invalid_params("phone_number is required"))?;
 
-        // Validate phone number
         if phone.len() != 10 || !phone.chars().all(|c| c.is_ascii_digit()) {
             return Err(ToolError::invalid_params("phone_number must be 10 digits"));
         }
 
-        // Extract optional fields
         let city = input.get("city").and_then(|v| v.as_str()).map(String::from);
         let estimated_gold = input.get("estimated_gold_weight").and_then(|v| v.as_f64());
         let notes = input
@@ -557,14 +364,12 @@ impl Tool for LeadCaptureTool {
             .and_then(|v| v.as_str())
             .unwrap_or("Medium");
 
-        // Parse interest level
         let interest_level = match interest_str.to_lowercase().as_str() {
             "high" => InterestLevel::High,
             "low" => InterestLevel::Low,
             _ => InterestLevel::Medium,
         };
 
-        // P4 FIX: Use CRM integration if available
         if let Some(ref crm) = self.crm {
             let lead = CrmLead {
                 id: None,
@@ -596,15 +401,13 @@ impl Tool for LeadCaptureTool {
                         "message": format!("Lead captured successfully! A representative will contact {} shortly.", name)
                     });
                     return Ok(ToolOutput::json(result));
-                },
+                }
                 Err(e) => {
                     tracing::warn!("CRM integration failed, falling back to local: {}", e);
-                    // Fall through to local generation
-                },
+                }
             }
         }
 
-        // Fallback: Generate lead ID locally (no CRM integration)
         let lead_id = format!("GL{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
 
         let result = json!({
@@ -625,9 +428,8 @@ impl Tool for LeadCaptureTool {
         Ok(ToolOutput::json(result))
     }
 
-    /// P5 FIX: CRM integrations may need more time
     fn timeout_secs(&self) -> u64 {
-        45 // 45 seconds for CRM operations
+        45
     }
 }
 
@@ -638,9 +440,7 @@ impl Default for LeadCaptureTool {
 }
 
 /// Appointment scheduler tool
-/// P4 FIX: Now wired to CalendarIntegration for actual scheduling
 pub struct AppointmentSchedulerTool {
-    /// Calendar integration for scheduling appointments
     calendar: Option<Arc<dyn CalendarIntegration>>,
 }
 
@@ -649,7 +449,6 @@ impl AppointmentSchedulerTool {
         Self { calendar: None }
     }
 
-    /// Create with calendar integration
     pub fn with_calendar(calendar: Arc<dyn CalendarIntegration>) -> Self {
         Self {
             calendar: Some(calendar),
@@ -745,7 +544,6 @@ impl Tool for AppointmentSchedulerTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::invalid_params("preferred_date is required"))?;
 
-        // P1 FIX: Validate date format and ensure it's not in the past
         let parsed_date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
             .or_else(|_| NaiveDate::parse_from_str(date_str, "%d-%m-%Y"))
             .or_else(|_| NaiveDate::parse_from_str(date_str, "%d/%m/%Y"))
@@ -762,7 +560,6 @@ impl Tool for AppointmentSchedulerTool {
             ));
         }
 
-        // Use standardized format
         let date = parsed_date.format("%Y-%m-%d").to_string();
 
         let time = input
@@ -775,7 +572,6 @@ impl Tool for AppointmentSchedulerTool {
             .and_then(|v| v.as_str())
             .unwrap_or("New Gold Loan");
 
-        // Parse purpose enum
         let purpose_enum = match purpose_str {
             "Gold Loan Transfer" => AppointmentPurpose::GoldLoanTransfer,
             "Top-up" => AppointmentPurpose::TopUp,
@@ -784,7 +580,6 @@ impl Tool for AppointmentSchedulerTool {
             _ => AppointmentPurpose::NewGoldLoan,
         };
 
-        // P4 FIX: Use calendar integration if available
         if let Some(ref calendar) = self.calendar {
             let appointment = Appointment {
                 id: None,
@@ -801,8 +596,6 @@ impl Tool for AppointmentSchedulerTool {
 
             match calendar.schedule_appointment(appointment).await {
                 Ok(appointment_id) => {
-                    // P0 FIX: Don't claim confirmation sent until actually sent
-                    // Try to send confirmation, but don't fail if it doesn't work
                     let confirmation_sent =
                         calendar.send_confirmation(&appointment_id).await.is_ok();
 
@@ -833,16 +626,13 @@ impl Tool for AppointmentSchedulerTool {
                         }
                     });
                     return Ok(ToolOutput::json(result));
-                },
+                }
                 Err(e) => {
                     tracing::warn!("Calendar integration failed, falling back to local: {}", e);
-                    // Fall through to local generation
-                },
+                }
             }
         }
 
-        // Fallback: Generate appointment ID locally (no calendar integration)
-        // P0 FIX: Don't claim SMS confirmation sent when we have no integration
         let appointment_id = format!(
             "APT{}",
             uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
@@ -871,9 +661,8 @@ impl Tool for AppointmentSchedulerTool {
         Ok(ToolOutput::json(result))
     }
 
-    /// P5 FIX: Calendar integrations may be slower, allow more time
     fn timeout_secs(&self) -> u64 {
-        60 // 60 seconds for appointment scheduling with external calendar
+        60
     }
 }
 
@@ -931,8 +720,7 @@ impl Tool for BranchLocatorTool {
             .and_then(|v| v.as_i64())
             .unwrap_or(5) as usize;
 
-        // Mock branch data (in production, this would query a database or API)
-        let branches = get_mock_branches(city, area, pincode, max_results);
+        let branches = filter_branches_json(city, area, pincode, max_results);
 
         let result = json!({
             "city": city,
@@ -956,17 +744,9 @@ impl Default for BranchLocatorTool {
     }
 }
 
-// =============================================================================
-// P0 FIX: Missing MCP Tools
-// =============================================================================
-
-/// P0 FIX: Get gold price tool
-///
-/// Returns current gold prices (24K, 22K, 18K) from the persistence layer.
+/// Get gold price tool
 pub struct GetGoldPriceTool {
-    /// Gold price service
     price_service: Option<Arc<dyn voice_agent_persistence::GoldPriceService>>,
-    /// Fallback base price for 24K gold (INR per gram)
     fallback_base_price: f64,
 }
 
@@ -974,7 +754,7 @@ impl GetGoldPriceTool {
     pub fn new() -> Self {
         Self {
             price_service: None,
-            fallback_base_price: 7500.0, // Default base price
+            fallback_base_price: 7500.0,
         }
     }
 
@@ -1021,7 +801,6 @@ impl Tool for GetGoldPriceTool {
         let purity = input.get("purity").and_then(|v| v.as_str());
         let weight = input.get("weight_grams").and_then(|v| v.as_f64());
 
-        // Try to get price from service
         let (price_24k, price_22k, price_18k, source) =
             if let Some(ref service) = self.price_service {
                 match service.get_current_price().await {
@@ -1033,18 +812,15 @@ impl Tool for GetGoldPriceTool {
                     ),
                     Err(e) => {
                         tracing::warn!("Failed to get gold price from service: {}", e);
-                        // Fallback to calculated prices
                         let base = self.fallback_base_price;
                         (base, base * 0.916, base * 0.75, "fallback".to_string())
-                    },
+                    }
                 }
             } else {
-                // No service, use fallback
                 let base = self.fallback_base_price;
                 (base, base * 0.916, base * 0.75, "fallback".to_string())
             };
 
-        // Build response
         let mut result = json!({
             "prices": {
                 "24K": {
@@ -1065,7 +841,6 @@ impl Tool for GetGoldPriceTool {
             "disclaimer": "Prices are indicative. Final value determined at branch during valuation."
         });
 
-        // If weight provided, calculate total values
         if let Some(w) = weight {
             let values = json!({
                 "24K": (w * price_24k).round(),
@@ -1076,7 +851,6 @@ impl Tool for GetGoldPriceTool {
             result["weight_grams"] = json!(w);
         }
 
-        // If specific purity requested, add focused message
         if let Some(p) = purity {
             let price = match p {
                 "24K" => price_24k,
@@ -1106,12 +880,8 @@ impl Default for GetGoldPriceTool {
     }
 }
 
-/// P0 FIX: Human escalation tool
-///
-/// Allows customers to escalate to a human agent when needed.
-/// Creates an escalation record for the call center to pick up.
+/// Human escalation tool
 pub struct EscalateToHumanTool {
-    /// Escalation callback (for integration with call center systems)
     on_escalate: Option<Arc<dyn Fn(String, String, String) + Send + Sync>>,
 }
 
@@ -1212,20 +982,17 @@ impl Tool for EscalateToHumanTool {
             .and_then(|v| v.as_str())
             .unwrap_or("normal");
 
-        // Generate escalation ID
         let escalation_id = format!(
             "ESC{}",
             uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
         );
 
-        // Determine estimated wait time based on priority
         let estimated_wait = match priority {
             "urgent" => "1-2 minutes",
             "high" => "2-5 minutes",
             _ => "5-10 minutes",
         };
 
-        // Call the escalation callback if registered
         if let Some(ref callback) = self.on_escalate {
             callback(
                 escalation_id.clone(),
@@ -1234,7 +1001,6 @@ impl Tool for EscalateToHumanTool {
             );
         }
 
-        // Log the escalation
         tracing::info!(
             escalation_id = %escalation_id,
             session_id = %session_id,
@@ -1253,7 +1019,7 @@ impl Tool for EscalateToHumanTool {
             "summary": summary,
             "status": "queued",
             "estimated_wait": estimated_wait,
-            "queue_position": 1, // Simplified - would be from real queue
+            "queue_position": 1,
             "created_at": Utc::now().to_rfc3339(),
             "message": format!(
                 "Your request has been escalated to a human agent. Escalation ID: {}. Estimated wait time: {}. Please hold.",
@@ -1266,7 +1032,7 @@ impl Tool for EscalateToHumanTool {
     }
 
     fn timeout_secs(&self) -> u64 {
-        10 // Escalation should be quick
+        10
     }
 }
 
@@ -1276,11 +1042,8 @@ impl Default for EscalateToHumanTool {
     }
 }
 
-/// P0 FIX: Send SMS tool
-///
-/// Sends an SMS to the customer (simulated in non-production environments).
+/// Send SMS tool
 pub struct SendSmsTool {
-    /// SMS service for sending messages
     sms_service: Option<Arc<dyn voice_agent_persistence::SmsService>>,
 }
 
@@ -1359,7 +1122,6 @@ impl Tool for SendSmsTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::invalid_params("phone_number is required"))?;
 
-        // Validate phone number
         if phone.len() != 10 || !phone.chars().all(|c| c.is_ascii_digit()) {
             return Err(ToolError::invalid_params("phone_number must be 10 digits"));
         }
@@ -1376,7 +1138,6 @@ impl Tool for SendSmsTool {
 
         let session_id = input.get("session_id").and_then(|v| v.as_str());
 
-        // Parse message type
         let msg_type = match msg_type_str {
             "appointment_confirmation" => voice_agent_persistence::SmsType::AppointmentConfirmation,
             "appointment_reminder" => voice_agent_persistence::SmsType::AppointmentReminder,
@@ -1386,51 +1147,55 @@ impl Tool for SendSmsTool {
             _ => voice_agent_persistence::SmsType::FollowUp,
         };
 
-        // Generate message text
         let message_text = match msg_type {
             voice_agent_persistence::SmsType::AppointmentConfirmation => {
-                let details = input.get("appointment_details")
+                let details = input
+                    .get("appointment_details")
                     .and_then(|v| v.as_str())
                     .unwrap_or("scheduled date and time");
                 format!(
                     "Dear {}, your Kotak Gold Loan appointment is confirmed for {}. Please bring your gold and KYC documents. For queries, call 1800-xxx-xxxx. - Kotak Mahindra Bank",
                     customer_name, details
                 )
-            },
+            }
             voice_agent_persistence::SmsType::AppointmentReminder => {
-                let details = input.get("appointment_details")
+                let details = input
+                    .get("appointment_details")
                     .and_then(|v| v.as_str())
                     .unwrap_or("tomorrow");
                 format!(
                     "Reminder: Dear {}, your Kotak Gold Loan appointment is {}. Please bring your gold and KYC documents. - Kotak Mahindra Bank",
                     customer_name, details
                 )
-            },
-            voice_agent_persistence::SmsType::FollowUp => {
-                input.get("custom_message")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!(
+            }
+            voice_agent_persistence::SmsType::FollowUp => input
+                .get("custom_message")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    format!(
                         "Dear {}, thank you for your interest in Kotak Gold Loan. Get up to 75% of gold value at competitive rates. Call 1800-xxx-xxxx or visit your nearest branch. - Kotak Mahindra Bank",
                         customer_name
-                    ))
-            },
+                    )
+                }),
             voice_agent_persistence::SmsType::Welcome => {
                 format!(
                     "Welcome to Kotak Mahindra Bank, {}! We're excited to help you with your gold loan needs. For any queries, call 1800-xxx-xxxx. - Kotak Mahindra Bank",
                     customer_name
                 )
-            },
+            }
             voice_agent_persistence::SmsType::Promotional => {
                 format!(
                     "Special Offer for {}: Get gold loan at just 10.49%* p.a. with instant disbursement! Visit your nearest Kotak branch or call 1800-xxx-xxxx. T&C apply. - Kotak Mahindra Bank",
                     customer_name
                 )
-            },
-            _ => format!("Dear {}, thank you for contacting Kotak Mahindra Bank. - Kotak Mahindra Bank", customer_name),
+            }
+            _ => format!(
+                "Dear {}, thank you for contacting Kotak Mahindra Bank. - Kotak Mahindra Bank",
+                customer_name
+            ),
         };
 
-        // Send via SMS service if available
         let (message_id, status, simulated) = if let Some(ref service) = self.sms_service {
             match service
                 .send_sms(phone, &message_text, msg_type, session_id)
@@ -1443,16 +1208,14 @@ impl Tool for SendSmsTool {
                 ),
                 Err(e) => {
                     tracing::warn!("SMS service failed: {}", e);
-                    // Generate local ID on failure
                     let id = format!(
                         "SMS{}",
                         uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
                     );
                     (id, "failed".to_string(), false)
-                },
+                }
             }
         } else {
-            // No service, generate local ID (not actually sent)
             let id = format!(
                 "SMS{}",
                 uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
@@ -1482,7 +1245,7 @@ impl Tool for SendSmsTool {
     }
 
     fn timeout_secs(&self) -> u64 {
-        30 // SMS sending might take time with external providers
+        30
     }
 }
 
@@ -1492,79 +1255,7 @@ impl Default for SendSmsTool {
     }
 }
 
-/// P0 FIX: Get branches from JSON data instead of hardcoded mock
-fn get_mock_branches(
-    city: &str,
-    area: Option<&str>,
-    pincode: Option<&str>,
-    max: usize,
-) -> Vec<Value> {
-    let city_lower = city.to_lowercase();
-    let branches = get_branches();
-
-    // Filter by city
-    let mut filtered: Vec<BranchData> = branches
-        .into_iter()
-        .filter(|b| {
-            b.city.to_lowercase().contains(&city_lower)
-                || city_lower.contains(&b.city.to_lowercase())
-        })
-        .collect();
-
-    // Filter by pincode if provided (exact match)
-    if let Some(pin) = pincode {
-        let pin_matches: Vec<BranchData> = filtered
-            .iter()
-            .filter(|b| b.pincode == pin)
-            .cloned()
-            .collect();
-        if !pin_matches.is_empty() {
-            filtered = pin_matches;
-        }
-    }
-
-    // Filter by area if provided
-    if let Some(area_str) = area {
-        let area_lower = area_str.to_lowercase();
-        let area_matches: Vec<BranchData> = filtered
-            .iter()
-            .filter(|b| b.area.to_lowercase().contains(&area_lower))
-            .cloned()
-            .collect();
-        if !area_matches.is_empty() {
-            filtered = area_matches;
-        }
-    }
-
-    // Convert to JSON Value and truncate
-    filtered.truncate(max);
-    filtered
-        .into_iter()
-        .map(|b| {
-            json!({
-                "branch_id": b.branch_id,
-                "name": b.name,
-                "city": b.city,
-                "area": b.area,
-                "address": b.address,
-                "pincode": b.pincode,
-                "phone": b.phone,
-                "gold_loan_available": b.gold_loan_available,
-                "timing": b.timing,
-                "facilities": b.facilities
-            })
-        })
-        .collect()
-}
-
-// =============================================================================
-// Phase 6: Additional Gold Loan Tools
-// =============================================================================
-
-/// Document Checklist Tool
-///
-/// Returns the list of documents required for a gold loan application.
-/// Helps customers prepare for their branch visit.
+/// Document checklist tool
 pub struct DocumentChecklistTool;
 
 impl DocumentChecklistTool {
@@ -1638,7 +1329,6 @@ impl Tool for DocumentChecklistTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // Base documents required for all gold loans
         let mut mandatory_docs = vec![
             json!({
                 "document": "Valid Photo ID",
@@ -1659,14 +1349,12 @@ impl Tool for DocumentChecklistTool {
             }),
         ];
 
-        // Add PAN for larger loans
         mandatory_docs.push(json!({
             "document": "PAN Card",
             "copies": 1,
             "notes": "Mandatory for loans above ₹50,000"
         }));
 
-        // Documents related to gold
         let gold_docs = vec![
             json!({
                 "document": "Gold Items",
@@ -1678,7 +1366,6 @@ impl Tool for DocumentChecklistTool {
             }),
         ];
 
-        // Additional documents based on loan type
         let additional_docs: Vec<Value> = match loan_type {
             "balance_transfer" => vec![
                 json!({
@@ -1694,30 +1381,23 @@ impl Tool for DocumentChecklistTool {
                     "notes": "May be obtained after approval"
                 }),
             ],
-            "top_up" => vec![
-                json!({
-                    "document": "Existing Kotak Gold Loan Details",
-                    "notes": "Loan account number for top-up"
-                }),
-            ],
-            "renewal" => vec![
-                json!({
-                    "document": "Previous Loan Details",
-                    "notes": "Loan account number for renewal"
-                }),
-            ],
+            "top_up" => vec![json!({
+                "document": "Existing Kotak Gold Loan Details",
+                "notes": "Loan account number for top-up"
+            })],
+            "renewal" => vec![json!({
+                "document": "Previous Loan Details",
+                "notes": "Loan account number for renewal"
+            })],
             _ => vec![],
         };
 
-        // Customer type specific documents
         let customer_specific: Vec<Value> = match customer_type {
-            "self_employed" | "business" => vec![
-                json!({
-                    "document": "Business Proof",
-                    "accepted": ["GST Registration", "Shop & Establishment Certificate", "Trade License"],
-                    "notes": "Any one document for business verification"
-                }),
-            ],
+            "self_employed" | "business" => vec![json!({
+                "document": "Business Proof",
+                "accepted": ["GST Registration", "Shop & Establishment Certificate", "Trade License"],
+                "notes": "Any one document for business verification"
+            })],
             "nri" => vec![
                 json!({
                     "document": "Passport with Valid Visa",
@@ -1731,7 +1411,6 @@ impl Tool for DocumentChecklistTool {
             _ => vec![],
         };
 
-        // Simplified requirements for existing customers
         let existing_customer_note = if existing_customer {
             "As an existing Kotak customer, some documents may already be on file. Please bring originals for verification."
         } else {
@@ -1770,11 +1449,8 @@ impl Default for DocumentChecklistTool {
     }
 }
 
-/// Competitor Comparison Tool
-///
-/// Compares gold loan offerings from various lenders to highlight Kotak's advantages.
+/// Competitor comparison tool
 pub struct CompetitorComparisonTool {
-    /// Domain configuration for Kotak rates
     config: Option<GoldLoanConfig>,
 }
 
@@ -1865,21 +1541,61 @@ impl Tool for CompetitorComparisonTool {
             .and_then(|v| v.as_i64())
             .unwrap_or(12);
 
-        // Competitor data (rates as of 2024)
         let competitors = vec![
-            ("muthoot", "Muthoot Finance", 12.0, 75.0, vec!["Large branch network", "Same day disbursement"]),
-            ("manappuram", "Manappuram Gold Loan", 12.0, 75.0, vec!["Quick processing", "Multiple schemes"]),
-            ("iifl", "IIFL Gold Loan", 11.0, 75.0, vec!["Online account access", "Flexible repayment"]),
-            ("hdfc", "HDFC Bank Gold Loan", 10.5, 75.0, vec!["Banking relationship benefits", "Online tracking"]),
-            ("sbi", "SBI Gold Loan", 9.85, 75.0, vec!["Low interest for PSU", "Longer tenure options"]),
-            ("federal", "Federal Bank Gold Loan", 10.49, 75.0, vec!["Quick processing", "Doorstep service"]),
-            ("icici", "ICICI Bank Gold Loan", 10.0, 75.0, vec!["Part payment facility", "Online management"]),
+            (
+                "muthoot",
+                "Muthoot Finance",
+                12.0,
+                75.0,
+                vec!["Large branch network", "Same day disbursement"],
+            ),
+            (
+                "manappuram",
+                "Manappuram Gold Loan",
+                12.0,
+                75.0,
+                vec!["Quick processing", "Multiple schemes"],
+            ),
+            (
+                "iifl",
+                "IIFL Gold Loan",
+                11.0,
+                75.0,
+                vec!["Online account access", "Flexible repayment"],
+            ),
+            (
+                "hdfc",
+                "HDFC Bank Gold Loan",
+                10.5,
+                75.0,
+                vec!["Banking relationship benefits", "Online tracking"],
+            ),
+            (
+                "sbi",
+                "SBI Gold Loan",
+                9.85,
+                75.0,
+                vec!["Low interest for PSU", "Longer tenure options"],
+            ),
+            (
+                "federal",
+                "Federal Bank Gold Loan",
+                10.49,
+                75.0,
+                vec!["Quick processing", "Doorstep service"],
+            ),
+            (
+                "icici",
+                "ICICI Bank Gold Loan",
+                10.0,
+                75.0,
+                vec!["Part payment facility", "Online management"],
+            ),
         ];
 
         let kotak_rate = self.get_kotak_rate();
         let kotak_ltv = self.get_kotak_ltv();
 
-        // Filter competitors based on input
         let selected_competitors: Vec<_> = if competitor == "all" {
             competitors.clone()
         } else {
@@ -1890,7 +1606,6 @@ impl Tool for CompetitorComparisonTool {
                 .collect()
         };
 
-        // Calculate comparison data
         let kotak_monthly_interest = loan_amount * kotak_rate / 100.0 / 12.0;
         let kotak_annual_interest = loan_amount * kotak_rate / 100.0;
 
@@ -1931,7 +1646,6 @@ impl Tool for CompetitorComparisonTool {
             }
         }
 
-        // Kotak features
         let kotak_features = vec![
             "Competitive interest rate from 10.49% p.a.",
             "Up to 75% LTV (Loan-to-Value)",
@@ -1981,250 +1695,63 @@ impl Default for CompetitorComparisonTool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Filter branches and return as JSON values for tool output
+fn filter_branches_json(
+    city: &str,
+    area: Option<&str>,
+    pincode: Option<&str>,
+    max: usize,
+) -> Vec<Value> {
+    let city_lower = city.to_lowercase();
+    let branches = get_branches();
 
-    // P0 FIX: Tests for EMI calculation
-    #[test]
-    fn test_emi_calculation_basic() {
-        // 1 lakh loan at 12% for 12 months
-        // Expected EMI ≈ 8,884.88
-        let emi = calculate_emi(100000.0, 12.0, 12);
-        assert!((emi - 8884.88).abs() < 1.0, "EMI was {}", emi);
-    }
+    let mut filtered: Vec<BranchData> = branches
+        .into_iter()
+        .filter(|b| {
+            b.city.to_lowercase().contains(&city_lower)
+                || city_lower.contains(&b.city.to_lowercase())
+        })
+        .collect();
 
-    #[test]
-    fn test_emi_calculation_zero_rate() {
-        // 0% interest = simple division
-        let emi = calculate_emi(120000.0, 0.0, 12);
-        assert!((emi - 10000.0).abs() < 0.01, "EMI was {}", emi);
-    }
-
-    #[test]
-    fn test_emi_calculation_edge_cases() {
-        // Zero principal
-        assert_eq!(calculate_emi(0.0, 12.0, 12), 0.0);
-        // Zero tenure
-        assert_eq!(calculate_emi(100000.0, 12.0, 0), 0.0);
-    }
-
-    #[test]
-    fn test_total_interest_calculation() {
-        // 1 lakh at 12% for 12 months
-        let total_interest = calculate_total_interest(100000.0, 12.0, 12);
-        // Total paid = EMI * 12 = 8884.88 * 12 = 106618.61
-        // Total interest = 106618.61 - 100000 = 6618.61
-        assert!(
-            (total_interest - 6618.61).abs() < 1.0,
-            "Interest was {}",
-            total_interest
-        );
-    }
-
-    #[test]
-    fn test_emi_vs_simple_interest() {
-        // Compare EMI with simple interest calculation
-        // For same loan: EMI is higher because it includes principal amortization
-        let loan = 100000.0;
-        let rate = 12.0;
-        let months = 12i64;
-
-        let emi = calculate_emi(loan, rate, months);
-        let simple_monthly = loan * (rate / 100.0 / 12.0); // Just interest
-
-        // EMI should be higher (includes principal repayment)
-        assert!(
-            emi > simple_monthly,
-            "EMI {} should be > simple interest {}",
-            emi,
-            simple_monthly
-        );
-    }
-
-    #[tokio::test]
-    async fn test_eligibility_check() {
-        let tool = EligibilityCheckTool::new();
-        let input = json!({
-            "gold_weight_grams": 50.0,
-            "gold_purity": "22K"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-    }
-
-    #[tokio::test]
-    async fn test_savings_calculator() {
-        let tool = SavingsCalculatorTool::new();
-        let input = json!({
-            "current_loan_amount": 100000.0,
-            "current_interest_rate": 18.0,
-            "remaining_tenure_months": 12,
-            "current_lender": "Muthoot"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-    }
-
-    #[tokio::test]
-    async fn test_lead_capture() {
-        let tool = LeadCaptureTool::new();
-        let input = json!({
-            "customer_name": "Rajesh Kumar",
-            "phone_number": "9876543210",
-            "city": "Mumbai"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-    }
-
-    #[tokio::test]
-    async fn test_branch_locator() {
-        let tool = BranchLocatorTool::new();
-        let input = json!({
-            "city": "Mumbai"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-    }
-
-    // P4 FIX: Tests for CRM/Calendar integration wiring
-
-    #[tokio::test]
-    async fn test_lead_capture_with_crm() {
-        use crate::integrations::StubCrmIntegration;
-
-        let crm = Arc::new(StubCrmIntegration::new());
-        let tool = LeadCaptureTool::with_crm(crm);
-        let input = json!({
-            "customer_name": "Rajesh Kumar",
-            "phone_number": "9876543210",
-            "city": "Mumbai",
-            "interest_level": "High"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-
-        // Parse output to verify CRM integration flag
-        let text = output
-            .content
+    if let Some(pin) = pincode {
+        let pin_matches: Vec<BranchData> = filtered
             .iter()
-            .filter_map(|c| match c {
-                crate::mcp::ContentBlock::Text { text } => Some(text.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("");
-
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(json["crm_integrated"], true);
-        assert!(json["lead_id"].as_str().unwrap().starts_with("LEAD-"));
+            .filter(|b| b.pincode == pin)
+            .cloned()
+            .collect();
+        if !pin_matches.is_empty() {
+            filtered = pin_matches;
+        }
     }
 
-    #[tokio::test]
-    async fn test_lead_capture_without_crm() {
-        let tool = LeadCaptureTool::new();
-        let input = json!({
-            "customer_name": "Rajesh Kumar",
-            "phone_number": "9876543210"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-
-        let text = output
-            .content
+    if let Some(area_str) = area {
+        let area_lower = area_str.to_lowercase();
+        let area_matches: Vec<BranchData> = filtered
             .iter()
-            .filter_map(|c| match c {
-                crate::mcp::ContentBlock::Text { text } => Some(text.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("");
-
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(json["crm_integrated"], false);
-        assert!(json["lead_id"].as_str().unwrap().starts_with("GL"));
+            .filter(|b| b.area.to_lowercase().contains(&area_lower))
+            .cloned()
+            .collect();
+        if !area_matches.is_empty() {
+            filtered = area_matches;
+        }
     }
 
-    #[tokio::test]
-    async fn test_appointment_scheduler_with_calendar() {
-        use crate::integrations::StubCalendarIntegration;
-
-        let calendar = Arc::new(StubCalendarIntegration::new());
-        let tool = AppointmentSchedulerTool::with_calendar(calendar);
-
-        // Use a future date
-        let future_date = (chrono::Utc::now() + chrono::Duration::days(7))
-            .format("%Y-%m-%d")
-            .to_string();
-
-        let input = json!({
-            "customer_name": "Rajesh Kumar",
-            "phone_number": "9876543210",
-            "branch_id": "KMBL001",
-            "preferred_date": future_date,
-            "preferred_time": "10:00 AM",
-            "purpose": "New Gold Loan"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-        assert!(!output.is_error);
-
-        let text = output
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                crate::mcp::ContentBlock::Text { text } => Some(text.clone()),
-                _ => None,
+    filtered.truncate(max);
+    filtered
+        .into_iter()
+        .map(|b| {
+            json!({
+                "branch_id": b.branch_id,
+                "name": b.name,
+                "city": b.city,
+                "area": b.area,
+                "address": b.address,
+                "pincode": b.pincode,
+                "phone": b.phone,
+                "gold_loan_available": b.gold_loan_available,
+                "timing": b.timing,
+                "facilities": b.facilities
             })
-            .collect::<Vec<_>>()
-            .join("");
-
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(json["calendar_integrated"], true);
-        assert!(json["appointment_id"].as_str().unwrap().starts_with("APT-"));
-        // P0 FIX: Verify we don't falsely claim SMS confirmation
-        assert_eq!(json["status"], "pending_confirmation");
-    }
-
-    #[tokio::test]
-    async fn test_appointment_scheduler_without_calendar() {
-        let tool = AppointmentSchedulerTool::new();
-
-        let future_date = (chrono::Utc::now() + chrono::Duration::days(7))
-            .format("%Y-%m-%d")
-            .to_string();
-
-        let input = json!({
-            "customer_name": "Rajesh Kumar",
-            "phone_number": "9876543210",
-            "branch_id": "KMBL001",
-            "preferred_date": future_date,
-            "preferred_time": "10:00 AM"
-        });
-
-        let output = tool.execute(input).await.unwrap();
-
-        let text = output
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                crate::mcp::ContentBlock::Text { text } => Some(text.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("");
-
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(json["calendar_integrated"], false);
-        assert!(json["appointment_id"].as_str().unwrap().starts_with("APT"));
-        // P0 FIX: Verify we don't falsely claim SMS confirmation
-        assert_eq!(json["confirmation_sent"], false);
-        assert_eq!(json["status"], "pending_confirmation");
-    }
+        })
+        .collect()
 }

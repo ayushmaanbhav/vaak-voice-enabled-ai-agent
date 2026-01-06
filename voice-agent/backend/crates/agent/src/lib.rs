@@ -13,6 +13,7 @@
 //! - P1-2 FIX: Intent detection moved to text_processing crate
 
 pub mod agent;
+pub mod agent_config;
 pub mod conversation;
 pub mod memory;
 // Legacy memory module for backward compatibility
@@ -57,7 +58,12 @@ pub use voice_agent_text_processing::intent::{
     DetectedIntent, Intent, IntentDetector, Slot, SlotType,
 };
 // P2 FIX: Persuasion engine exports
-pub use agent::{AgentConfig, AgentEvent, GoldLoanAgent};
+pub use agent::GoldLoanAgent;
+// P1-SRP: Export agent config types
+pub use agent_config::{
+    AgentConfig, AgentEvent, PersonaTraits, SmallModelConfig, SpeculativeDecodingConfig,
+    ToolDefaults, is_small_model,
+};
 pub use persuasion::{
     CompetitorComparison, ObjectionResponse, ObjectionType, PersuasionEngine, PersuasionScript,
     SwitchSavings, ValueProposition,

@@ -9,18 +9,14 @@ pub mod mcp;
 pub mod registry;
 
 pub use gold_loan::{
-    get_branches,
-    reload_branches,
-    AppointmentSchedulerTool,
-    BranchData,
-    BranchLocatorTool,
-    EligibilityCheckTool,
-    EscalateToHumanTool,
-    // P0 FIX: New missing MCP tools
-    GetGoldPriceTool,
-    LeadCaptureTool,
-    SavingsCalculatorTool,
-    SendSmsTool,
+    // Branch data management
+    get_branches, get_mock_branches, load_branches_from_file, reload_branches, BranchData,
+    // Utility functions
+    calculate_emi, calculate_total_interest,
+    // Tool implementations
+    AppointmentSchedulerTool, BranchLocatorTool, CompetitorComparisonTool, DocumentChecklistTool,
+    EligibilityCheckTool, EscalateToHumanTool, GetGoldPriceTool, LeadCaptureTool,
+    SavingsCalculatorTool, SendSmsTool,
 };
 pub use integrations::{
     Appointment, AppointmentPurpose, AppointmentStatus, CalendarIntegration, CrmIntegration,
