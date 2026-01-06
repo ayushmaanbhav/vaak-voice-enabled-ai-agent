@@ -3,12 +3,17 @@
 //! Each crate accesses domain configuration through a "view" that provides
 //! only the information that crate needs, in terminology appropriate for that crate.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::branches::{BranchEntry, BranchesConfig};
+use super::competitors::{CompetitorEntry as ExtCompetitorEntry, CompetitorsConfig};
 use super::objections::{ObjectionResponse, ObjectionsConfig};
 use super::prompts::PromptsConfig;
 use super::scoring::{CategoryWeights, EscalationConfig, ScoringConfig};
+use super::segments::{SegmentDefinition, SegmentsConfig};
 use super::slots::{GoalDefinition, SlotDefinition, SlotsConfig};
+use super::sms_templates::SmsTemplatesConfig;
 use super::stages::{StageDefinition, StagesConfig, TransitionTrigger};
 use super::tools::{ToolSchema, ToolsConfig};
 use super::MasterDomainConfig;
@@ -267,6 +272,44 @@ impl AgentDomainView {
     pub fn build_objection_response(&self, objection_type: &str, language: &str) -> Option<String> {
         self.config.objections.build_full_response(objection_type, language)
     }
+
+    // ====== Customer Segment Configuration ======
+
+    /// Get the full segments configuration
+    pub fn segments_config(&self) -> &SegmentsConfig {
+        &self.config.segments
+    }
+
+    /// Get a segment definition by ID
+    pub fn get_segment(&self, segment_id: &str) -> Option<&SegmentDefinition> {
+        self.config.segments.get_segment(segment_id)
+    }
+
+    /// Detect customer segments from text and signals
+    pub fn detect_segments(
+        &self,
+        text: &str,
+        language: &str,
+        numeric_values: &HashMap<String, f64>,
+        text_values: &HashMap<String, String>,
+    ) -> Vec<&str> {
+        self.config.segments.detect_segments(text, language, numeric_values, text_values)
+    }
+
+    /// Get value propositions for a segment
+    pub fn segment_value_props(&self, segment_id: &str, language: &str) -> Vec<&str> {
+        self.config.segments.get_value_props(segment_id, language)
+    }
+
+    /// Get features to highlight for a segment
+    pub fn segment_features(&self, segment_id: &str) -> Vec<&str> {
+        self.config.segments.get_features(segment_id)
+    }
+
+    /// Get the default segment ID
+    pub fn default_segment(&self) -> &str {
+        &self.config.segments.default_segment
+    }
 }
 
 /// View for the llm crate
@@ -484,6 +527,115 @@ impl ToolsDomainView {
 
     pub fn helpline(&self) -> &str {
         &self.config.brand.helpline
+    }
+
+    // ====== Branch Configuration ======
+
+    /// Get the full branches configuration
+    pub fn branches_config(&self) -> &BranchesConfig {
+        &self.config.branches
+    }
+
+    /// Get all branches
+    pub fn all_branches(&self) -> &[BranchEntry] {
+        &self.config.branches.branches
+    }
+
+    /// Find branches by city
+    pub fn find_branches_by_city(&self, city: &str) -> Vec<&BranchEntry> {
+        self.config.branches.find_by_city(city)
+    }
+
+    /// Find branches by pincode
+    pub fn find_branches_by_pincode(&self, pincode: &str) -> Vec<&BranchEntry> {
+        self.config.branches.find_by_pincode(pincode)
+    }
+
+    /// Get branch by ID
+    pub fn get_branch(&self, branch_id: &str) -> Option<&BranchEntry> {
+        self.config.branches.get_branch(branch_id)
+    }
+
+    /// Get branches with gold loan service
+    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+        self.config.branches.gold_loan_branches()
+    }
+
+    /// Get default max results for branch search
+    pub fn branch_search_max_results(&self) -> usize {
+        self.config.branches.defaults.max_results
+    }
+
+    // ====== SMS Templates Configuration ======
+
+    /// Get the full SMS templates configuration
+    pub fn sms_templates_config(&self) -> &SmsTemplatesConfig {
+        &self.config.sms_templates
+    }
+
+    /// Get SMS template by type and language
+    pub fn sms_template(&self, template_type: &str, language: &str) -> Option<&str> {
+        self.config.sms_templates.get_template(template_type, language)
+    }
+
+    /// Build SMS message from template with placeholders
+    pub fn build_sms_message(
+        &self,
+        template_type: &str,
+        language: &str,
+        placeholders: &HashMap<String, String>,
+    ) -> Option<String> {
+        self.config.sms_templates.build_message(template_type, language, placeholders)
+    }
+
+    /// Get all SMS template types
+    pub fn sms_template_types(&self) -> Vec<&str> {
+        self.config.sms_templates.template_types()
+    }
+
+    /// Check if SMS type is transactional
+    pub fn is_transactional_sms(&self, template_type: &str) -> bool {
+        self.config.sms_templates.is_transactional(template_type)
+    }
+
+    // ====== Extended Competitors Configuration ======
+
+    /// Get the full competitors configuration
+    pub fn competitors_config(&self) -> &CompetitorsConfig {
+        &self.config.competitors_config
+    }
+
+    /// Get extended competitor info by ID
+    pub fn get_competitor_extended(&self, id: &str) -> Option<&ExtCompetitorEntry> {
+        self.config.competitors_config.get_competitor(id)
+    }
+
+    /// Find competitor by name or alias
+    pub fn find_competitor_by_name(&self, name: &str) -> Option<(&str, &ExtCompetitorEntry)> {
+        self.config.competitors_config.find_by_name(name)
+    }
+
+    /// Get all NBFCs
+    pub fn nbfc_competitors(&self) -> Vec<(&str, &ExtCompetitorEntry)> {
+        self.config.competitors_config.nbfcs()
+    }
+
+    /// Get all bank competitors
+    pub fn bank_competitors(&self) -> Vec<(&str, &ExtCompetitorEntry)> {
+        self.config.competitors_config.banks()
+    }
+
+    /// Get default rate for competitor type
+    pub fn default_competitor_rate(&self, competitor_type: &str) -> f64 {
+        self.config.competitors_config.default_rate_for_type(competitor_type)
+    }
+
+    /// Get highlighted comparison points
+    pub fn highlighted_comparison_points(&self) -> Vec<(&str, &str)> {
+        self.config.competitors_config.highlighted_points()
+            .into_iter()
+            .map(|p| (p.category.as_str(), p.our_advantage.as_str()))
+            .collect()
     }
 }
 

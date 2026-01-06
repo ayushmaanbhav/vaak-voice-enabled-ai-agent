@@ -10,10 +10,14 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::ConfigError;
+use super::branches::BranchesConfig;
+use super::competitors::CompetitorsConfig;
 use super::objections::ObjectionsConfig;
 use super::prompts::PromptsConfig;
 use super::scoring::ScoringConfig;
+use super::segments::SegmentsConfig;
 use super::slots::SlotsConfig;
+use super::sms_templates::SmsTemplatesConfig;
 use super::stages::StagesConfig;
 use super::tools::ToolsConfig;
 
@@ -151,6 +155,18 @@ pub struct MasterDomainConfig {
     /// Objection handling configuration (loaded from objections.yaml)
     #[serde(skip)]
     pub objections: ObjectionsConfig,
+    /// Branch data (loaded from tools/branches.yaml)
+    #[serde(skip)]
+    pub branches: BranchesConfig,
+    /// SMS templates (loaded from tools/sms_templates.yaml)
+    #[serde(skip)]
+    pub sms_templates: SmsTemplatesConfig,
+    /// Extended competitor data (loaded from competitors.yaml)
+    #[serde(skip)]
+    pub competitors_config: CompetitorsConfig,
+    /// Customer segment definitions (loaded from segments.yaml)
+    #[serde(skip)]
+    pub segments: SegmentsConfig,
     /// Raw JSON for dynamic access
     #[serde(skip)]
     raw_config: Option<JsonValue>,
@@ -177,6 +193,10 @@ impl Default for MasterDomainConfig {
             tools: ToolsConfig::default(),
             prompts: PromptsConfig::default(),
             objections: ObjectionsConfig::default(),
+            branches: BranchesConfig::default(),
+            sms_templates: SmsTemplatesConfig::default(),
+            competitors_config: CompetitorsConfig::default(),
+            segments: SegmentsConfig::default(),
             raw_config: None,
         }
     }
@@ -342,6 +362,82 @@ impl MasterDomainConfig {
             }
         } else {
             tracing::debug!("No objections config found at {:?}", objections_path);
+        }
+
+        // 11. Load branches configuration (optional)
+        let branches_path = config_dir.join(format!("domains/{}/tools/branches.yaml", domain_id));
+        if branches_path.exists() {
+            match BranchesConfig::load(&branches_path) {
+                Ok(branches) => {
+                    tracing::info!(
+                        branches_count = branches.branches.len(),
+                        "Loaded branches configuration"
+                    );
+                    config.branches = branches;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load branches config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No branches config found at {:?}", branches_path);
+        }
+
+        // 12. Load SMS templates configuration (optional)
+        let sms_path = config_dir.join(format!("domains/{}/tools/sms_templates.yaml", domain_id));
+        if sms_path.exists() {
+            match SmsTemplatesConfig::load(&sms_path) {
+                Ok(sms) => {
+                    tracing::info!(
+                        template_types = sms.templates.len(),
+                        "Loaded SMS templates configuration"
+                    );
+                    config.sms_templates = sms;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load SMS templates config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No SMS templates config found at {:?}", sms_path);
+        }
+
+        // 13. Load competitors configuration (optional)
+        let competitors_path = config_dir.join(format!("domains/{}/competitors.yaml", domain_id));
+        if competitors_path.exists() {
+            match CompetitorsConfig::load(&competitors_path) {
+                Ok(competitors) => {
+                    tracing::info!(
+                        competitors_count = competitors.competitors.len(),
+                        "Loaded competitors configuration"
+                    );
+                    config.competitors_config = competitors;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load competitors config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No competitors config found at {:?}", competitors_path);
+        }
+
+        // 14. Load segments configuration (optional)
+        let segments_path = config_dir.join(format!("domains/{}/segments.yaml", domain_id));
+        if segments_path.exists() {
+            match SegmentsConfig::load(&segments_path) {
+                Ok(segments) => {
+                    tracing::info!(
+                        segments_count = segments.segments.len(),
+                        "Loaded segments configuration"
+                    );
+                    config.segments = segments;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load segments config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No segments config found at {:?}", segments_path);
         }
 
         tracing::info!(

@@ -1,0 +1,326 @@
+# Customer Segment Detection Configuration
+# Used by core personalization engine and agent for tailored responses
+
+segments:
+  # High-value customer segment
+  high_value:
+    display_name: "High Value Customer"
+    priority: 1  # Higher priority segments checked first
+    description: "Customers with significant gold holdings or loan amounts"
+
+    detection:
+      # Numeric thresholds (any match triggers)
+      numeric_thresholds:
+        gold_weight_grams:
+          min: 100
+        loan_amount:
+          min: 500000
+
+      # Text patterns to detect (case-insensitive)
+      text_patterns:
+        en:
+          - "lakh"
+          - "crore"
+          - "100 gram"
+          - "large amount"
+          - "significant"
+          - "premium"
+        hi:
+          - "लाख"
+          - "करोड़"
+          - "सौ ग्राम"
+          - "बड़ी रकम"
+
+    # Features to emphasize for this segment
+    features:
+      - "relationship_manager"
+      - "priority_processing"
+      - "premium_rates"
+      - "dedicated_support"
+
+    # Value propositions for this segment
+    value_props:
+      en:
+        - "Dedicated relationship manager for personalized service"
+        - "Priority processing with faster disbursement"
+        - "Premium interest rates starting from 9.5% p.a."
+        - "Exclusive lounge access at select branches"
+      hi:
+        - "व्यक्तिगत सेवा के लिए समर्पित रिलेशनशिप मैनेजर"
+        - "तेज वितरण के साथ प्राथमिकता प्रसंस्करण"
+        - "9.5% प्रति वर्ष से शुरू होने वाली प्रीमियम ब्याज दरें"
+
+  # Trust-seeker segment (worried about safety)
+  trust_seeker:
+    display_name: "Trust Seeker"
+    priority: 2
+    description: "Customers concerned about gold safety and bank trust"
+
+    detection:
+      # Current lender indicates NBFC experience
+      text_values:
+        current_lender:
+          - "muthoot"
+          - "manappuram"
+          - "iifl"
+          - "local"
+          - "jeweler"
+
+      text_patterns:
+        en:
+          - "safe"
+          - "security"
+          - "trust"
+          - "rbi"
+          - "government"
+          - "bank vault"
+          - "worried"
+          - "scared"
+        hi:
+          - "सुरक्षा"
+          - "भरोसा"
+          - "विश्वास"
+          - "सरकारी"
+          - "बैंक लॉकर"
+          - "चिंता"
+
+    features:
+      - "rbi_regulated"
+      - "bank_security"
+      - "vault_storage"
+      - "insurance"
+
+    value_props:
+      en:
+        - "RBI-regulated scheduled commercial bank"
+        - "Gold stored in secure bank vaults with 24/7 surveillance"
+        - "Full insurance coverage for your gold"
+        - "Transparent valuation process"
+      hi:
+        - "RBI द्वारा विनियमित अनुसूचित वाणिज्यिक बैंक"
+        - "24/7 निगरानी के साथ सुरक्षित बैंक वॉल्ट में सोना रखा जाता है"
+        - "आपके सोने के लिए पूर्ण बीमा कवरेज"
+
+  # Price-sensitive segment (focused on rates)
+  price_sensitive:
+    display_name: "Price Sensitive"
+    priority: 3
+    description: "Customers primarily concerned about interest rates"
+
+    detection:
+      text_patterns:
+        en:
+          - "rate"
+          - "interest"
+          - "cheap"
+          - "expensive"
+          - "save"
+          - "savings"
+          - "compare"
+          - "emi"
+          - "monthly payment"
+        hi:
+          - "ब्याज"
+          - "दर"
+          - "सस्ता"
+          - "महंगा"
+          - "बचत"
+          - "ईएमआई"
+          - "किस्त"
+
+    features:
+      - "competitive_rates"
+      - "savings_calculator"
+      - "flexible_repayment"
+      - "no_hidden_charges"
+
+    value_props:
+      en:
+        - "Competitive interest rates starting from 9.5% p.a."
+        - "Save up to ₹5,000/month compared to NBFCs"
+        - "No hidden charges - transparent pricing"
+        - "Flexible repayment options"
+      hi:
+        - "9.5% प्रति वर्ष से शुरू होने वाली प्रतिस्पर्धी ब्याज दरें"
+        - "NBFCs की तुलना में ₹5,000/माह तक की बचत"
+        - "कोई छिपे हुए शुल्क नहीं"
+
+  # Balance transfer segment
+  balance_transfer:
+    display_name: "Balance Transfer Prospect"
+    priority: 2
+    description: "Customers with existing loans at other lenders"
+
+    detection:
+      text_values:
+        has_existing_loan: ["true", "yes"]
+
+      text_patterns:
+        en:
+          - "already have"
+          - "existing loan"
+          - "current loan"
+          - "transfer"
+          - "switch"
+          - "move"
+          - "paying"
+          - "emi"
+        hi:
+          - "पहले से"
+          - "मौजूदा लोन"
+          - "ट्रांसफर"
+          - "बदलना"
+          - "चल रहा"
+
+    features:
+      - "easy_transfer"
+      - "rate_comparison"
+      - "savings_calculation"
+      - "quick_closure"
+
+    value_props:
+      en:
+        - "Easy balance transfer from any lender"
+        - "Save significantly on interest"
+        - "Quick processing - just 2 documents needed"
+        - "We handle the closure with your current lender"
+      hi:
+        - "किसी भी ऋणदाता से आसान बैलेंस ट्रांसफर"
+        - "ब्याज पर काफी बचत करें"
+        - "त्वरित प्रसंस्करण - केवल 2 दस्तावेज़ आवश्यक"
+
+  # Urgent need segment
+  urgent_need:
+    display_name: "Urgent Need"
+    priority: 1
+    description: "Customers needing immediate funds"
+
+    detection:
+      text_patterns:
+        en:
+          - "urgent"
+          - "emergency"
+          - "immediately"
+          - "today"
+          - "right now"
+          - "asap"
+          - "quick"
+          - "fast"
+          - "hospital"
+          - "medical"
+        hi:
+          - "जल्दी"
+          - "तुरंत"
+          - "आज"
+          - "अभी"
+          - "इमरजेंसी"
+          - "अस्पताल"
+
+    features:
+      - "same_day_disbursement"
+      - "minimal_documentation"
+      - "quick_valuation"
+
+    value_props:
+      en:
+        - "Same day disbursement available"
+        - "Minimal documentation required"
+        - "Gold valuation in 15 minutes"
+        - "Direct bank transfer to your account"
+      hi:
+        - "उसी दिन वितरण उपलब्ध"
+        - "न्यूनतम दस्तावेज़ आवश्यक"
+        - "15 मिनट में सोने का मूल्यांकन"
+
+  # First-time borrower segment
+  first_time:
+    display_name: "First Time Borrower"
+    priority: 4
+    description: "Customers new to gold loans"
+
+    detection:
+      text_patterns:
+        en:
+          - "first time"
+          - "never"
+          - "new to"
+          - "how does"
+          - "what is"
+          - "explain"
+          - "don't understand"
+        hi:
+          - "पहली बार"
+          - "कभी नहीं"
+          - "नया हूं"
+          - "कैसे"
+          - "क्या है"
+          - "समझाइए"
+
+    features:
+      - "step_by_step_guidance"
+      - "simple_process"
+      - "support"
+
+    value_props:
+      en:
+        - "Simple 3-step process"
+        - "Our team will guide you through everything"
+        - "No prior gold loan experience needed"
+        - "Transparent and straightforward"
+      hi:
+        - "सरल 3-चरण प्रक्रिया"
+        - "हमारी टीम आपको हर चीज़ में मार्गदर्शन करेगी"
+        - "पहले से गोल्ड लोन का अनुभव नहीं चाहिए"
+
+  # Business owner segment
+  business_owner:
+    display_name: "Business Owner"
+    priority: 3
+    description: "Customers needing funds for business"
+
+    detection:
+      text_patterns:
+        en:
+          - "business"
+          - "shop"
+          - "store"
+          - "inventory"
+          - "working capital"
+          - "supplier"
+          - "stock"
+          - "company"
+        hi:
+          - "व्यापार"
+          - "दुकान"
+          - "कारोबार"
+          - "माल"
+          - "पूंजी"
+
+    features:
+      - "business_friendly"
+      - "flexible_repayment"
+      - "higher_limits"
+
+    value_props:
+      en:
+        - "Quick working capital for your business"
+        - "Flexible repayment aligned with business cycles"
+        - "Higher loan limits for business needs"
+        - "No business plan required"
+      hi:
+        - "आपके व्यापार के लिए त्वरित कार्यशील पूंजी"
+        - "व्यापार चक्र के साथ लचीला पुनर्भुगतान"
+        - "व्यावसायिक जरूरतों के लिए उच्च ऋण सीमा"
+
+# Segment priority order (for multiple matches)
+priority_order:
+  - "urgent_need"
+  - "high_value"
+  - "balance_transfer"
+  - "trust_seeker"
+  - "price_sensitive"
+  - "business_owner"
+  - "first_time"
+
+# Default segment when no specific match
+default_segment: "first_time"

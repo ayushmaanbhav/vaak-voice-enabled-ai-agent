@@ -1,0 +1,254 @@
+# Competitor Configuration
+# Used for comparison tools and objection handling
+# Rates are indicative and may vary
+
+competitors:
+  muthoot:
+    display_name: "Muthoot Finance"
+    aliases:
+      - "muthoot"
+      - "muthut"
+      - "muthoot finance"
+      - "muthoot gold"
+    typical_rate: 12.0
+    rate_range:
+      min: 10.5
+      max: 24.0
+    ltv_percent: 75.0
+    competitor_type: "nbfc"
+    strengths:
+      - "Large branch network"
+      - "Same day disbursement"
+      - "Multiple schemes"
+    weaknesses:
+      - "Higher interest rates than banks"
+      - "Not RBI-regulated bank"
+    processing_time: "Same day"
+
+  manappuram:
+    display_name: "Manappuram Finance"
+    aliases:
+      - "manappuram"
+      - "manapuram"
+      - "manappuram gold"
+      - "mannapuram"
+    typical_rate: 12.0
+    rate_range:
+      min: 11.0
+      max: 26.0
+    ltv_percent: 75.0
+    competitor_type: "nbfc"
+    strengths:
+      - "Quick processing"
+      - "Multiple schemes"
+      - "Online gold loan"
+    weaknesses:
+      - "Higher rates compared to banks"
+      - "NBFC regulatory framework"
+    processing_time: "Same day"
+
+  iifl:
+    display_name: "IIFL Gold Loan"
+    aliases:
+      - "iifl"
+      - "iifl gold"
+      - "iifl finance"
+    typical_rate: 11.0
+    rate_range:
+      min: 9.24
+      max: 24.0
+    ltv_percent: 75.0
+    competitor_type: "nbfc"
+    strengths:
+      - "Online account access"
+      - "Flexible repayment"
+      - "Part payment facility"
+    weaknesses:
+      - "Variable rates"
+      - "NBFC status"
+    processing_time: "Same day"
+
+  hdfc:
+    display_name: "HDFC Bank Gold Loan"
+    aliases:
+      - "hdfc"
+      - "hdfc bank"
+      - "hdfc gold loan"
+    typical_rate: 10.5
+    rate_range:
+      min: 9.5
+      max: 17.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Banking relationship benefits"
+      - "Online tracking"
+      - "Large branch network"
+    weaknesses:
+      - "Longer processing time"
+      - "More documentation"
+    processing_time: "1-2 days"
+
+  sbi:
+    display_name: "SBI Gold Loan"
+    aliases:
+      - "sbi"
+      - "state bank"
+      - "sbi gold"
+      - "state bank of india"
+    typical_rate: 9.85
+    rate_range:
+      min: 8.7
+      max: 12.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Lowest interest for PSU"
+      - "Longer tenure options"
+      - "Government backing"
+    weaknesses:
+      - "Slower processing"
+      - "More paperwork"
+    processing_time: "2-3 days"
+
+  federal:
+    display_name: "Federal Bank Gold Loan"
+    aliases:
+      - "federal"
+      - "federal bank"
+      - "federal gold"
+    typical_rate: 10.49
+    rate_range:
+      min: 9.0
+      max: 13.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Quick processing"
+      - "Doorstep service"
+      - "Flexible repayment"
+    weaknesses:
+      - "Limited branch network"
+    processing_time: "Same day"
+
+  icici:
+    display_name: "ICICI Bank Gold Loan"
+    aliases:
+      - "icici"
+      - "icici bank"
+      - "icici gold"
+    typical_rate: 10.0
+    rate_range:
+      min: 9.0
+      max: 18.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Part payment facility"
+      - "Online management"
+      - "iMobile app integration"
+    weaknesses:
+      - "Processing fees may be higher"
+    processing_time: "1-2 days"
+
+  axis:
+    display_name: "Axis Bank Gold Loan"
+    aliases:
+      - "axis"
+      - "axis bank"
+      - "axis gold"
+    typical_rate: 10.25
+    rate_range:
+      min: 9.0
+      max: 16.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Online disbursement"
+      - "Flexible repayment"
+      - "Low processing fee"
+    weaknesses:
+      - "Limited gold loan branches"
+    processing_time: "1-2 days"
+
+  pnb:
+    display_name: "Punjab National Bank Gold Loan"
+    aliases:
+      - "pnb"
+      - "punjab national"
+      - "pnb gold"
+    typical_rate: 9.25
+    rate_range:
+      min: 8.5
+      max: 12.0
+    ltv_percent: 75.0
+    competitor_type: "bank"
+    strengths:
+      - "Low interest rates"
+      - "Government bank benefits"
+      - "Large branch network"
+    weaknesses:
+      - "Slower processing"
+      - "More documentation"
+    processing_time: "2-3 days"
+
+  local_jeweler:
+    display_name: "Local Jeweler/Money Lender"
+    aliases:
+      - "jeweler"
+      - "money lender"
+      - "local"
+      - "sahukar"
+      - "साहूकार"
+    typical_rate: 24.0
+    rate_range:
+      min: 18.0
+      max: 36.0
+    ltv_percent: 60.0
+    competitor_type: "informal"
+    strengths:
+      - "Immediate cash"
+      - "No documentation"
+      - "Flexible terms"
+    weaknesses:
+      - "Very high interest"
+      - "No regulation/protection"
+      - "Risk of gold loss"
+      - "No transparency"
+    processing_time: "Immediate"
+
+# Comparison talking points
+comparison_points:
+  - category: "Interest Rate"
+    our_advantage: "Starting from 9.5% p.a. vs 12-24% at NBFCs"
+    highlight: true
+
+  - category: "Regulatory Safety"
+    our_advantage: "RBI-regulated scheduled bank with strict security norms"
+    highlight: true
+
+  - category: "Loan-to-Value"
+    our_advantage: "Up to 75% of gold value (same as market)"
+    highlight: false
+
+  - category: "Processing Time"
+    our_advantage: "Same day disbursement with minimal documentation"
+    highlight: true
+
+  - category: "Gold Security"
+    our_advantage: "Stored in RBI-regulated bank vaults with 24/7 security"
+    highlight: true
+
+  - category: "Part Payment"
+    our_advantage: "Flexible part payment facility available"
+    highlight: false
+
+  - category: "Online Access"
+    our_advantage: "Full online loan management via mobile app"
+    highlight: false
+
+# Default competitor assumptions when not specified
+defaults:
+  nbfc_rate: 18.0
+  local_lender_rate: 24.0
+  bank_rate: 11.0

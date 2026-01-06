@@ -1,0 +1,105 @@
+# SMS Template Configuration
+# Templates support placeholders: {customer_name}, {date}, {time}, {branch}, {helpline}
+# Brand placeholders: {brand.bank_name}, {brand.helpline}
+# Domain placeholders: {constants.interest_rates.base_rate}
+
+templates:
+  # Appointment confirmation SMS
+  appointment_confirmation:
+    en: |
+      Dear {customer_name}, your {brand.bank_name} Gold Loan appointment is confirmed for {date} at {time}. Branch: {branch}. Please bring your gold and KYC documents. For queries, call {brand.helpline}. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, आपकी {brand.bank_name} गोल्ड लोन अपॉइंटमेंट {date} को {time} पर कन्फर्म है। शाखा: {branch}। कृपया अपना सोना और केवाईसी दस्तावेज़ लाएं। प्रश्नों के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Appointment reminder SMS (sent day before)
+  appointment_reminder:
+    en: |
+      Reminder: Dear {customer_name}, your {brand.bank_name} Gold Loan appointment is tomorrow at {time}. Branch: {branch}. Please bring your gold and KYC documents. - {brand.bank_name}
+    hi: |
+      रिमाइंडर: प्रिय {customer_name}, आपकी {brand.bank_name} गोल्ड लोन अपॉइंटमेंट कल {time} पर है। शाखा: {branch}। कृपया अपना सोना और केवाईसी दस्तावेज़ लाएं। - {brand.bank_name}
+
+  # Follow-up SMS for interested customers
+  follow_up:
+    en: |
+      Dear {customer_name}, thank you for your interest in {brand.bank_name} Gold Loan. Get up to 75% of gold value at competitive rates starting from {rate}% p.a. Call {brand.helpline} or visit your nearest branch. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, {brand.bank_name} गोल्ड लोन में आपकी रुचि के लिए धन्यवाद। {rate}% प्रति वर्ष से शुरू होने वाली प्रतिस्पर्धी दरों पर सोने के मूल्य का 75% तक प्राप्त करें। {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Welcome SMS for new customers
+  welcome:
+    en: |
+      Welcome to {brand.bank_name}, {customer_name}! We're excited to help you with your gold loan needs. For any queries, call {brand.helpline}. - {brand.bank_name}
+    hi: |
+      {brand.bank_name} में आपका स्वागत है, {customer_name}! हम आपकी गोल्ड लोन जरूरतों में मदद करने के लिए उत्साहित हैं। किसी भी प्रश्न के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Promotional SMS for campaigns
+  promotional:
+    en: |
+      Special Offer for {customer_name}: Get gold loan at just {rate}%* p.a. with instant disbursement! Visit your nearest {brand.bank_name} branch or call {brand.helpline}. T&C apply. - {brand.bank_name}
+    hi: |
+      {customer_name} के लिए विशेष ऑफर: तुरंत वितरण के साथ सिर्फ {rate}%* प्रति वर्ष पर गोल्ड लोन पाएं! अपनी निकटतम {brand.bank_name} शाखा पर जाएं या {brand.helpline} पर कॉल करें। नियम व शर्तें लागू। - {brand.bank_name}
+
+  # Lead confirmation SMS
+  lead_confirmation:
+    en: |
+      Dear {customer_name}, thank you for your inquiry about {brand.bank_name} Gold Loan. Your reference number is {lead_id}. Our representative will contact you within 24 hours. Call {brand.helpline} for immediate assistance. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, {brand.bank_name} गोल्ड लोन के बारे में आपकी पूछताछ के लिए धन्यवाद। आपका संदर्भ नंबर {lead_id} है। हमारा प्रतिनिधि 24 घंटे के भीतर आपसे संपर्क करेगा। तत्काल सहायता के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Balance transfer offer SMS
+  balance_transfer:
+    en: |
+      Dear {customer_name}, switch your gold loan to {brand.bank_name} and save up to ₹{savings}/month! Get rate as low as {rate}% p.a. Call {brand.helpline} or visit your nearest branch. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, अपना गोल्ड लोन {brand.bank_name} में ट्रांसफर करें और ₹{savings}/माह तक बचाएं! {rate}% प्रति वर्ष जितनी कम दर प्राप्त करें। {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Disbursement confirmation SMS
+  disbursement_confirmation:
+    en: |
+      Congratulations {customer_name}! Your {brand.bank_name} Gold Loan of ₹{amount} has been disbursed to your account. Loan A/C: {loan_account}. For details call {brand.helpline}. - {brand.bank_name}
+    hi: |
+      बधाई हो {customer_name}! आपका {brand.bank_name} गोल्ड लोन ₹{amount} आपके खाते में जमा कर दिया गया है। लोन खाता: {loan_account}। विवरण के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Repayment reminder SMS
+  repayment_reminder:
+    en: |
+      Dear {customer_name}, your {brand.bank_name} Gold Loan EMI of ₹{emi_amount} is due on {due_date}. Please ensure sufficient balance in your account. For queries call {brand.helpline}. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, आपकी {brand.bank_name} गोल्ड लोन EMI ₹{emi_amount} {due_date} को देय है। कृपया अपने खाते में पर्याप्त शेष सुनिश्चित करें। प्रश्नों के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+  # Gold release notification
+  gold_release:
+    en: |
+      Dear {customer_name}, your gold ornaments are ready for release. Please visit {branch} with your loan closure receipt and ID proof. For queries call {brand.helpline}. - {brand.bank_name}
+    hi: |
+      प्रिय {customer_name}, आपके सोने के आभूषण रिलीज के लिए तैयार हैं। कृपया अपनी लोन क्लोजर रसीद और आईडी प्रूफ के साथ {branch} पर जाएं। प्रश्नों के लिए {brand.helpline} पर कॉल करें। - {brand.bank_name}
+
+# SMS configuration
+config:
+  # Maximum message length (characters)
+  max_length: 160
+
+  # Character limit for Unicode messages (Hindi)
+  unicode_max_length: 70
+
+  # Default language if not specified
+  default_language: "en"
+
+  # Sender ID configuration
+  sender_id: "KOTKBK"
+
+  # Template categories for compliance
+  categories:
+    transactional:
+      - "appointment_confirmation"
+      - "appointment_reminder"
+      - "disbursement_confirmation"
+      - "repayment_reminder"
+      - "gold_release"
+    promotional:
+      - "promotional"
+      - "balance_transfer"
+    service:
+      - "welcome"
+      - "follow_up"
+      - "lead_confirmation"
