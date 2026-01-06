@@ -10,7 +10,7 @@ use std::path::Path;
 #[cfg(feature = "onnx")]
 use ndarray::Array2;
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 #[cfg(feature = "onnx")]
 use tokenizers::Tokenizer;
 
@@ -79,7 +79,7 @@ impl Default for SemanticConfig {
 /// Semantic Turn Detector using lightweight transformer
 pub struct SemanticTurnDetector {
     #[cfg(feature = "onnx")]
-    session: Session,
+    session: Mutex<Session>,
     #[cfg(feature = "onnx")]
     tokenizer: Tokenizer,
     #[allow(dead_code)] // Used by model_classify() when ONNX enabled
@@ -110,7 +110,7 @@ impl SemanticTurnDetector {
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
         Ok(Self {
-            session,
+            session: Mutex::new(session),
             tokenizer,
             config,
             prediction_cache: Mutex::new(VecDeque::with_capacity(10)),
@@ -256,28 +256,29 @@ impl SemanticTurnDetector {
         let attention = Array2::from_shape_vec((1, self.config.max_seq_len), padded_mask)
             .map_err(|e| PipelineError::TurnDetection(e.to_string()))?;
 
-        // Run inference
-        let outputs = self
-            .session
-            .run(
-                ort::inputs![
-                    "input_ids" => input_ids.view(),
-                    "attention_mask" => attention.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+        // Run inference - create tensors (ort 2.0 API)
+        let input_ids_tensor = Tensor::from_array(input_ids)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let attention_tensor = Tensor::from_array(attention)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
+        let mut session = self.session.lock();
+        let outputs = session
+            .run(ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attention_tensor,
+            ])
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
         // Extract logits [batch, num_classes]
-        let logits = outputs
+        let (_, logits_data) = outputs
             .get("logits")
             .ok_or_else(|| PipelineError::Model("Missing logits output".to_string()))?
             .try_extract_tensor::<f32>()
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
         // Softmax and argmax
-        let logits_view = logits.view();
-        let probs: Vec<f32> = logits_view.iter().map(|&x| x.exp()).collect();
+        let probs: Vec<f32> = logits_data.iter().map(|&x| x.exp()).collect();
         let sum: f32 = probs.iter().sum();
         let probs: Vec<f32> = probs.iter().map(|&x| x / sum).collect();
 

@@ -213,8 +213,12 @@ impl EnhancedDecoder {
             }
         }
 
-        // Prune beam
-        new_beam.sort_by(|a, b| b.log_prob.partial_cmp(&a.log_prob).unwrap());
+        // Prune beam (handle NaN values gracefully)
+        new_beam.sort_by(|a, b| {
+            b.log_prob
+                .partial_cmp(&a.log_prob)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         new_beam.truncate(self.config.beam_width);
 
         // Update stability
@@ -246,7 +250,8 @@ impl EnhancedDecoder {
             .map(|(i, &p)| (i as u32, p))
             .collect();
 
-        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        // Handle NaN values gracefully - they compare as equal and sort to end
+        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         indexed.truncate(k);
 
         // Convert to log probabilities

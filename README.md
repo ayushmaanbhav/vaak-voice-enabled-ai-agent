@@ -36,7 +36,7 @@ Edge AI · Sub-500ms · Distributed · Open Architecture
 [![Rust](https://img.shields.io/badge/Rust-70%25+-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary-blue?style=for-the-badge)](LICENSE)
 [![Languages](https://img.shields.io/badge/Languages-22+-green?style=for-the-badge)](docs/ARCHITECTURE_v2.md)
-[![Latency](https://img.shields.io/badge/Latency-<500ms-brightgreen?style=for-the-badge)](docs/pipeline/optimized-pipeline.md)
+[![Latency](https://img.shields.io/badge/Latency-<500ms-brightgreen?style=for-the-badge)](docs/architecture/pipeline/optimized-pipeline.md)
 
 </div>
 
@@ -1002,22 +1002,37 @@ goldloan-study/
 │   ├── ARCHITECTURE_v2.md          # High-level design
 │   ├── INDEX.md                    # Documentation index
 │   ├── rust-ecosystem.md           # Library decisions
-│   ├── pipeline/                   # Pipeline documentation
-│   ├── agent/                      # Agent framework docs
-│   └── rag/                        # RAG strategy docs
+│   ├── architecture/               # Component documentation
+│   │   ├── agent/                  # Agent framework docs
+│   │   ├── pipeline/               # Pipeline documentation
+│   │   ├── rag/                    # RAG strategy docs
+│   │   ├── personalization/        # Personalization docs
+│   │   └── interfaces/             # Interface documentation
+│   ├── deployment/                 # Deployment guides
+│   ├── experiments/                # Experiment logs
+│   └── troubleshooting/            # Issue reports & fixes
+│       ├── DEEP_DIVE_REPORT.md
+│       ├── FIX_PLAN.md
+│       └── ISSUES_SUMMARY.md
 │
-├── floneum/                        # Kalosm ML Framework (Submodule)
-├── ort/                            # ONNX Runtime Bindings (Submodule)
-├── turn-rs/                        # TURN Server (Submodule)
+├── vendor/                         # External Dependencies (Submodules)
+│   ├── floneum/                    # Kalosm ML Framework
+│   ├── ort/                        # ONNX Runtime Rust Bindings
+│   └── turn-rs/                    # TURN Server for WebRTC
 │
-├── research/                       # Research & Presentations
-│   ├── research_docs/              # Market research
-│   └── latex-presentation/         # PDF presentation
+├── case-studies/                   # Domain-Specific Research
+│   └── kotak-gold-loan/            # Kotak Gold Loan Case Study
+│       ├── research_docs/          # Market research
+│       ├── latex-presentation/     # PDF presentation
+│       └── slides/                 # Presentation slides
 │
-└── report/                         # Gap Analysis & Fix Plans
-    ├── DEEP_DIVE_REPORT.md
-    ├── FIX_PLAN.md
-    └── ISSUES_SUMMARY.md
+├── assets/                         # Branding & Media
+│   ├── vaak-logo.svg               # Project logo
+│   └── demo.mp4                    # Demo video
+│
+└── data/                           # Runtime Data
+    ├── storage/                    # Qdrant vector store
+    └── snapshots/                  # Data snapshots
 ```
 
 ---

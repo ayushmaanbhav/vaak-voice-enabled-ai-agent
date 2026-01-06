@@ -1,5 +1,5 @@
 # turn-rs configuration for voice agent (SSH tunnel compatible)
-# Run with: /home/vscode/goldloan-study/turn-rs/target/release/turn-server --config=config/turn-server.toml
+# Run with: /home/vscode/goldloan-study/vendor/turn-rs/target/release/turn-server --config=config/turn-server.toml
 
 [server]
 port-range = "49152..65535"

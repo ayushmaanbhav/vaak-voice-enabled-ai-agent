@@ -57,6 +57,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono.workspace = true
 base64 = "0.21"
 once_cell.workspace = true
+regex = "1.10"
 
 # Observability
 metrics.workspace = true

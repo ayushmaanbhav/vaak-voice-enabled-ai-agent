@@ -19,15 +19,16 @@ use axum::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
-use parking_lot::Mutex;
 use futures::stream::Stream;
 use std::convert::Infallible;
 
 use crate::state::AppState;
-use voice_agent_pipeline::stt::{IndicConformerStt, IndicConformerConfig};
 
 /// Faster-whisper HTTP service URL
 const WHISPER_SERVICE_URL: &str = "http://127.0.0.1:8091";
+
+/// Python IndicConformer STT service URL
+const PYTHON_STT_SERVICE_URL: &str = "http://127.0.0.1:8090";
 
 /// TTS HTTP service URL (IndicF5)
 const TTS_SERVICE_URL: &str = "http://127.0.0.1:8092";
@@ -82,10 +83,6 @@ pub struct PttMetrics {
     pub total_ms: u64,
 }
 
-/// Lazy-initialized IndicConformer STT instance (for Indian languages)
-static STT_INSTANCE: once_cell::sync::Lazy<Mutex<Option<IndicConformerStt>>> =
-    once_cell::sync::Lazy::new(|| Mutex::new(None));
-
 /// Check if language is English
 fn is_english(language: &str) -> bool {
     matches!(language.to_lowercase().as_str(), "en" | "english")
@@ -132,6 +129,56 @@ async fn transcribe_with_whisper(audio: &[f32], language: &str) -> Result<String
         "Faster-whisper transcribed in {:.2}s: '{}'",
         proc_time,
         if text.len() > 100 { &text[..100] } else { &text }
+    );
+
+    Ok(text)
+}
+
+/// Call Python IndicConformer STT service for Indian languages
+async fn transcribe_with_python_stt(audio: &[f32], language: &str) -> Result<String, String> {
+    // Convert f32 samples to PCM16 bytes (the Python service expects PCM16)
+    let pcm16_bytes: Vec<u8> = audio
+        .iter()
+        .flat_map(|&f| {
+            let sample = (f * 32768.0).clamp(-32768.0, 32767.0) as i16;
+            sample.to_le_bytes()
+        })
+        .collect();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/transcribe", PYTHON_STT_SERVICE_URL))
+        .header("Content-Type", "audio/pcm")
+        .header("X-Language", language)
+        .body(pcm16_bytes)
+        .timeout(std::time::Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| format!("Python STT service request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Python STT service error {}: {}", status, body));
+    }
+
+    let result: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Python STT response: {}", e))?;
+
+    let text = result["text"].as_str().unwrap_or("").to_string();
+    let confidence = result["confidence"].as_f64().unwrap_or(0.0);
+    let backend = result["backend"].as_str().unwrap_or("unknown");
+
+    // Safely truncate UTF-8 text for logging (Hindi chars are multi-byte)
+    let display_text: String = text.chars().take(100).collect();
+    tracing::info!(
+        backend = %backend,
+        confidence = %confidence,
+        text_len = text.len(),
+        "Python STT transcribed: '{}'",
+        display_text
     );
 
     Ok(text)
@@ -241,29 +288,6 @@ async fn synthesize_with_tts(text: &str, language: &str) -> Result<(String, Stri
     Ok((audio, format))
 }
 
-/// Get or initialize IndicConformer STT for Indian languages
-fn get_indicconformer_stt(language: &str) -> Result<(), String> {
-    let mut stt_guard = STT_INSTANCE.lock();
-    if stt_guard.is_none() {
-        tracing::info!("Initializing IndicConformer STT for PTT...");
-        let config = IndicConformerConfig {
-            language: language.to_string(),
-            ..Default::default()
-        };
-        let model_dir = std::path::Path::new("models/stt/indicconformer");
-        match IndicConformerStt::new(model_dir, config) {
-            Ok(stt) => {
-                *stt_guard = Some(stt);
-                tracing::info!("IndicConformer STT initialized for PTT");
-            }
-            Err(e) => {
-                return Err(format!("Failed to initialize STT: {}", e));
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Handle push-to-talk request
 pub async fn handle_ptt(
     State(state): State<AppState>,
@@ -320,32 +344,17 @@ pub async fn handle_ptt(
             }
         }
     } else {
-        // Use IndicConformer for Indian languages
-        if let Err(e) = get_indicconformer_stt(&request.language) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e })),
-            );
+        // Use Python IndicConformer STT service for Indian languages
+        match transcribe_with_python_stt(&pcm_f32, &request.language).await {
+            Ok(text) => text,
+            Err(e) => {
+                tracing::error!("Python STT service error: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": format!("STT failed: {}", e) })),
+                );
+            }
         }
-
-        let stt_guard = STT_INSTANCE.lock();
-        let stt = stt_guard.as_ref().unwrap();
-
-        // Process the audio chunks first
-        if let Err(e) = stt.process(&pcm_f32) {
-            tracing::error!("IndicConformer STT process error: {}", e);
-        }
-
-        // For PTT (complete audio), we MUST call finalize() to get the transcript
-        // process() only returns partials during streaming, but PTT sends complete audio
-        let final_result = stt.finalize();
-        tracing::debug!(
-            text_len = final_result.text.len(),
-            confidence = final_result.confidence,
-            words = final_result.words.len(),
-            "IndicConformer finalized transcript"
-        );
-        final_result.text
     };
     metrics.stt_ms = stt_start.elapsed().as_millis() as u64;
 
@@ -882,28 +891,37 @@ pub async fn translate_handler(
 
 /// Health check for PTT service
 pub async fn ptt_health() -> impl IntoResponse {
-    // Check if STT model exists
-    let model_path = std::path::Path::new("models/stt/indicconformer/assets/encoder.onnx");
-    let stt_ok = model_path.exists();
+    // Check Python STT service health
+    let client = reqwest::Client::new();
+    let stt_check = client
+        .get(format!("{}/health", PYTHON_STT_SERVICE_URL))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await;
 
-    if stt_ok {
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "status": "ok",
-                "stt_backend": "rust_indicconformer",
-                "model_path": model_path.to_string_lossy()
-            })),
-        )
-    } else {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({
-                "status": "error",
-                "error": "STT model not found",
-                "expected_path": model_path.to_string_lossy()
-            })),
-        )
+    match stt_check {
+        Ok(resp) if resp.status().is_success() => {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "ok",
+                    "stt_backend": "python_indicconformer",
+                    "stt_service": PYTHON_STT_SERVICE_URL,
+                    "backends": body.get("backends").cloned()
+                })),
+            )
+        }
+        _ => {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "error": "Python STT service not available",
+                    "stt_service": PYTHON_STT_SERVICE_URL
+                })),
+            )
+        }
     }
 }
 
@@ -997,28 +1015,14 @@ pub async fn handle_ptt_stream(
                 }
             }
         } else {
-            if let Err(e) = get_indicconformer_stt(&request.language) {
-                send_event(&tx, PttEvent::Error { message: e });
-                return;
+            // Use Python IndicConformer STT service for Indian languages
+            match transcribe_with_python_stt(&pcm_f32, &request.language).await {
+                Ok(text) => text,
+                Err(e) => {
+                    send_event(&tx, PttEvent::Error { message: format!("STT failed: {}", e) });
+                    return;
+                }
             }
-            let stt_guard = STT_INSTANCE.lock();
-            let stt = stt_guard.as_ref().unwrap();
-
-            // Process the audio chunks first
-            if let Err(e) = stt.process(&pcm_f32) {
-                tracing::error!("IndicConformer STT process error: {}", e);
-            }
-
-            // For PTT (complete audio), we MUST call finalize() to get the transcript
-            // process() only returns partials during streaming, but PTT sends complete audio
-            let final_result = stt.finalize();
-            tracing::debug!(
-                text_len = final_result.text.len(),
-                confidence = final_result.confidence,
-                words = final_result.words.len(),
-                "IndicConformer finalized transcript (streaming endpoint)"
-            );
-            final_result.text
         };
         metrics.stt_ms = stt_start.elapsed().as_millis() as u64;
 

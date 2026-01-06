@@ -519,8 +519,10 @@ mod candle_impl {
             let inputs_embeds = (inputs_embeds * self.embed_scale)?;
 
             // Simple position IDs (0..seq_len + padding_idx + 1)
+            // Clamp to max valid position to avoid index out of bounds
+            let max_pos = self.embed_positions.dim(0)? - 1;
             let position_ids: Vec<u32> = (0..seq_len)
-                .map(|i| (self.padding_idx + 1 + i) as u32)
+                .map(|i| ((self.padding_idx + 1 + i).min(max_pos)) as u32)
                 .collect();
             let position_ids = Tensor::new(position_ids.as_slice(), input_ids.device())?;
             let positions = self.embed_positions.index_select(&position_ids, 0)?;
@@ -636,8 +638,10 @@ mod candle_impl {
             let inputs_embeds = self.embed_tokens.forward(input_ids)?;
             let inputs_embeds = (inputs_embeds * self.embed_scale)?;
 
+            // Clamp to max valid position to avoid index out of bounds during generation
+            let max_pos = self.embed_positions.dim(0)? - 1;
             let positions: Vec<u32> = (0..seq_len)
-                .map(|i| (self.padding_idx + 1 + past_length + i) as u32)
+                .map(|i| ((self.padding_idx + 1 + past_length + i).min(max_pos)) as u32)
                 .collect();
             let position_ids = Tensor::new(positions.as_slice(), input_ids.device())?;
             let positions = self.embed_positions.index_select(&position_ids, 0)?;
@@ -1023,6 +1027,15 @@ mod candle_impl {
             };
 
             let input_ids = tokenizer.encode_source(text, src_code, tgt_code)?;
+
+            tracing::debug!(
+                text = %text,
+                src = %src_code,
+                tgt = %tgt_code,
+                input_ids = ?&input_ids[..input_ids.len().min(10)],
+                "Translating"
+            );
+
             let input_tensor = Tensor::new(input_ids.as_slice(), &self.device)
                 .map_err(to_translation_error)?
                 .unsqueeze(0)
@@ -1031,6 +1044,11 @@ mod candle_impl {
             let output_ids = model
                 .generate(&input_tensor, None, self.config.max_length)
                 .map_err(to_translation_error)?;
+
+            tracing::debug!(
+                output_ids = ?&output_ids[..output_ids.len().min(10)],
+                "Generated tokens"
+            );
 
             Ok(tokenizer.decode_target(&output_ids))
         }

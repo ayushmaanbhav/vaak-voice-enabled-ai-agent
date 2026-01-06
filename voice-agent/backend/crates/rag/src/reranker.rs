@@ -24,7 +24,7 @@ use std::path::Path;
 #[cfg(feature = "onnx")]
 use ndarray::Array2;
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 #[cfg(feature = "onnx")]
 use tokenizers::Tokenizer;
 
@@ -516,24 +516,30 @@ impl EarlyExitReranker {
         input_ids: &Array2<i64>,
         attention_mask: &Array2<i64>,
     ) -> Result<(f32, Option<usize>), RagError> {
-        let outputs = self
-            .session
-            .run(
-                ort::inputs![
-                    "input_ids" => input_ids.view(),
-                    "attention_mask" => attention_mask.view(),
-                ]
-                .map_err(|e| RagError::Model(e.to_string()))?,
-            )
+        // Create tensors (ort 2.0 API)
+        let input_ids_tensor = Tensor::from_array(input_ids.clone())
+            .map_err(|e| RagError::Model(e.to_string()))?;
+        let attention_mask_tensor = Tensor::from_array(attention_mask.clone())
             .map_err(|e| RagError::Model(e.to_string()))?;
 
-        let logits = outputs
+        let outputs = self
+            .session
+            .run(ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attention_mask_tensor,
+            ])
+            .map_err(|e| RagError::Model(e.to_string()))?;
+
+        let (shape, logits_data) = outputs
             .get("logits")
             .ok_or_else(|| RagError::Model("Missing logits output".to_string()))?
             .try_extract_tensor::<f32>()
             .map_err(|e| RagError::Model(e.to_string()))?;
 
-        let logits_view = logits.view();
+        // Convert to ndarray view
+        let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+        let logits_view = ndarray::ArrayViewD::from_shape(dims, logits_data)
+            .map_err(|e| RagError::Model(e.to_string()))?;
         let score = self.compute_relevance_score(&logits_view);
 
         // P2 FIX: Properly update all stats fields, not just total_docs

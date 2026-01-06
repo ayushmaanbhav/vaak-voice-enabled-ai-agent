@@ -77,7 +77,7 @@ yarn-error.log*
 
 # Build outputs (frontend)
 voice-agent/frontend/dist/
-research/kotak-gold-loan-presentation/dist/
+case-studies/kotak-gold-loan/kotak-gold-loan-presentation/dist/
 
 # Vite
 *.local

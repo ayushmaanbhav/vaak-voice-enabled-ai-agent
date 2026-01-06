@@ -212,11 +212,9 @@ impl VoiceSession {
                     },
                 }
             } else {
-                // Create energy-based fallback VAD
-                match SileroVad::simple(config.vad.clone()) {
-                    Ok(v) => Some(Arc::new(parking_lot::Mutex::new(v))),
-                    Err(_) => None,
-                }
+                // No VAD model path provided, skip VAD
+                tracing::warn!("Silero VAD enabled but no model path provided");
+                None
             }
         } else {
             None

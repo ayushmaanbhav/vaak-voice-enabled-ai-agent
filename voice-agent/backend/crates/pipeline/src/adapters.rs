@@ -26,6 +26,7 @@ use voice_agent_core::{
 
 use crate::stt::{StreamingStt, SttConfig};
 use crate::tts::{StreamingTts, TtsBackend, TtsConfig};
+use crate::PipelineError;
 
 // =============================================================================
 // SpeechToText Adapter

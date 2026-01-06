@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::stt::{StreamingStt, SttBackend, SttConfig};
+use crate::stt::{IndicConformerConfig, IndicConformerStt, StreamingStt, SttBackend, SttConfig};
 use crate::tts::{StreamingTts, TtsConfig, TtsEvent};
 use crate::turn_detection::{HybridTurnDetector, TurnDetectionConfig, TurnDetectionResult};
 use crate::vad::{SileroConfig, SileroVad, VadConfig, VadEngine, VadState, VoiceActivityDetector};

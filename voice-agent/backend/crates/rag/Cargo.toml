@@ -29,7 +29,7 @@ qdrant-client.workspace = true
 tantivy.workspace = true
 
 # ML - ONNX Runtime
-ort = { version = "2.0.0-rc.9", optional = true }
+ort = { version = "2.0.0-rc.10", optional = true }
 ndarray.workspace = true
 tokenizers.workspace = true
 

@@ -10,6 +10,7 @@ description = "Audio pipeline with VAD, STT, TTS, and turn detection"
 default = []
 onnx = ["dep:ort"]
 candle = ["dep:candle-core", "dep:candle-nn", "dep:safetensors"]
+candle-onnx = ["dep:candle-core", "dep:candle-onnx"]
 # P2-1: Audio processing (noise suppression)
 noise-suppression = ["dep:nnnoiseless"]
 
@@ -25,7 +26,7 @@ futures.workspace = true
 async-trait.workspace = true
 
 # ML - ONNX Runtime
-ort = { version = "2.0.0-rc.9", optional = true }
+ort = { version = "2.0.0-rc.10", optional = true }
 ndarray.workspace = true
 tokenizers.workspace = true
 
@@ -33,6 +34,8 @@ tokenizers.workspace = true
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 safetensors = { workspace = true, optional = true }
+# ML - Candle ONNX (pure Rust ONNX file support)
+candle-onnx = { version = "0.8", optional = true }
 
 # Audio
 rubato.workspace = true

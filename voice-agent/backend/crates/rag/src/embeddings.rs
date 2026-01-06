@@ -7,7 +7,7 @@ use std::path::Path;
 #[cfg(feature = "onnx")]
 use ndarray::Array2;
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 #[cfg(feature = "onnx")]
 use tokenizers::Tokenizer;
 
@@ -161,20 +161,25 @@ impl Embedder {
             Array2::from_shape_vec((batch_size, self.config.max_seq_len), token_type_ids)
                 .map_err(|e| RagError::Embedding(e.to_string()))?;
 
+        // Create tensors (ort 2.0 API)
+        let input_ids_tensor = Tensor::from_array(input_ids)
+            .map_err(|e| RagError::Model(e.to_string()))?;
+        let attention_mask_tensor = Tensor::from_array(attention_mask)
+            .map_err(|e| RagError::Model(e.to_string()))?;
+        let token_type_ids_tensor = Tensor::from_array(token_type_ids)
+            .map_err(|e| RagError::Model(e.to_string()))?;
+
         let outputs = self
             .session
-            .run(
-                ort::inputs![
-                    "input_ids" => input_ids.view(),
-                    "attention_mask" => attention_mask.view(),
-                    "token_type_ids" => token_type_ids.view(),
-                ]
-                .map_err(|e| RagError::Model(e.to_string()))?,
-            )
+            .run(ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attention_mask_tensor,
+                "token_type_ids" => token_type_ids_tensor,
+            ])
             .map_err(|e| RagError::Model(e.to_string()))?;
 
         // P2 FIX: Use configurable output name instead of hardcoded "last_hidden_state"
-        let last_hidden = outputs
+        let (shape, hidden_data) = outputs
             .get(&self.config.output_name)
             .ok_or_else(|| {
                 RagError::Model(format!(
@@ -185,17 +190,27 @@ impl Embedder {
             .try_extract_tensor::<f32>()
             .map_err(|e| RagError::Model(e.to_string()))?;
 
-        let hidden_view = last_hidden.view();
+        // Shape should be [batch_size, seq_len, hidden_dim]
+        let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+        let (tensor_batch, tensor_seq_len, tensor_hidden_dim) = if dims.len() == 3 {
+            (dims[0], dims[1], dims[2])
+        } else {
+            return Err(RagError::Model(format!("Unexpected tensor shape: {:?}", dims)));
+        };
 
         let mut embeddings = Vec::with_capacity(batch_size);
 
-        for i in 0..batch_size {
-            let seq_len = encodings[i].get_ids().len().min(self.config.max_seq_len);
+        for i in 0..batch_size.min(tensor_batch) {
+            let seq_len = encodings[i].get_ids().len().min(self.config.max_seq_len).min(tensor_seq_len);
             let mut embedding = vec![0.0f32; self.config.embedding_dim];
 
             for j in 0..seq_len {
-                for k in 0..self.config.embedding_dim {
-                    embedding[k] += hidden_view[[i, j, k]];
+                for k in 0..self.config.embedding_dim.min(tensor_hidden_dim) {
+                    // Index into flat array: [i, j, k] -> i * seq_len * hidden_dim + j * hidden_dim + k
+                    let idx = i * tensor_seq_len * tensor_hidden_dim + j * tensor_hidden_dim + k;
+                    if idx < hidden_data.len() {
+                        embedding[k] += hidden_data[idx];
+                    }
                 }
             }
 

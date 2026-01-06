@@ -101,7 +101,7 @@ hound = "3.5"    # WAV files
 # Internal crates
 voice-agent-core = { path = "crates/core" }
 voice-agent-config = { path = "crates/config" }
-voice-agent-pipeline = { path = "crates/pipeline" }
+voice-agent-pipeline = { path = "crates/pipeline", features = ["onnx"] }
 voice-agent-rag = { path = "crates/rag" }
 voice-agent-llm = { path = "crates/llm" }
 voice-agent-tools = { path = "crates/tools" }

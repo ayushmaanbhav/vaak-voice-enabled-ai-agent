@@ -21,13 +21,13 @@
 	path = voice-agent/backend/models/translation/indictrans2-indic-en
 	url = git@hf.co:ai4bharat/indictrans2-indic-en-dist-200M
 [submodule "floneum"]
-	path = floneum
+	path = vendor/floneum
 	url = git@github.com:floneum/floneum.git
 [submodule "ort"]
-	path = ort
+	path = vendor/ort
 	url = git@github.com:pykeio/ort.git
 [submodule "turn-rs"]
-	path = turn-rs
+	path = vendor/turn-rs
 	url = git@github.com:mycrl/turn-rs.git
 [submodule "voice-agent/backend/models/stt/hindi-quantized"]
 	path = voice-agent/backend/models/stt/hindi-quantized

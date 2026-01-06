@@ -18,9 +18,7 @@ use std::path::Path;
 use ndarray::Array3;
 
 #[cfg(feature = "onnx")]
-use ort::session::{builder::GraphOptimizationLevel, Session};
-#[cfg(feature = "onnx")]
-use ort::value::Tensor;
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 
 // Candle ONNX imports (pure Rust ONNX support)
 #[cfg(feature = "candle-onnx")]
@@ -163,18 +161,24 @@ impl IndicConformerStt {
             None
         };
 
-        // Load vocabulary
+        // Load vocabulary (per-language, 257 tokens)
         let vocab_path = assets_dir.join("vocab.json");
         let vocabulary = Self::load_vocab(&vocab_path, &config.language)?;
 
-        // Load language mask to constrain output to target language
+        // Load language mask - CRITICAL for correct decoding
+        // CTC decoder outputs 5633 joint tokens, mask filters to 257 per-language tokens
         let language_mask = Self::load_language_mask(&assets_dir, &config.language)?;
+        tracing::info!(
+            language = %config.language,
+            mask_size = language_mask.len(),
+            enabled_tokens = language_mask.iter().filter(|&&x| x).count(),
+            "IndicConformer: Loaded language mask for joint vocab filtering"
+        );
 
         // Create decoder with vocabulary and correct blank_id
-        // IndicConformer uses joint vocabulary: 22 languages × 256 tokens + 1 shared blank = 5633
-        // The blank token "|" is at position 5632 (the last token)
+        // After masking, we have 257 tokens: indices 0-255 regular + 256 blank
         let mut decoder_config = config.decoder.clone();
-        decoder_config.blank_id = 5632; // Blank token position in IndicConformer joint vocab
+        decoder_config.blank_id = 256; // Blank token at index 256 in filtered output
         let decoder = EnhancedDecoder::new(vocabulary.clone().into_tokens(), decoder_config);
 
         // Create mel filterbank
@@ -255,18 +259,24 @@ impl IndicConformerStt {
             None
         };
 
-        // Load vocabulary
+        // Load vocabulary (per-language, 257 tokens)
         let vocab_path = assets_dir.join("vocab.json");
         let vocabulary = Self::load_vocab(&vocab_path, &config.language)?;
 
-        // Load language mask to constrain output to target language
+        // Load language mask - CRITICAL for correct decoding
+        // CTC decoder outputs 5633 joint tokens, mask filters to 257 per-language tokens
         let language_mask = Self::load_language_mask(&assets_dir, &config.language)?;
+        tracing::info!(
+            language = %config.language,
+            mask_size = language_mask.len(),
+            enabled_tokens = language_mask.iter().filter(|&&x| x).count(),
+            "IndicConformer: Loaded language mask for joint vocab filtering (candle)"
+        );
 
         // Create decoder with vocabulary and correct blank_id
-        // IndicConformer uses joint vocabulary: 22 languages × 256 tokens + 1 shared blank = 5633
-        // The blank token "|" is at position 5632 (the last token)
+        // After masking, we have 257 tokens: indices 0-255 regular + 256 blank
         let mut decoder_config = config.decoder.clone();
-        decoder_config.blank_id = 5632; // Blank token position in IndicConformer joint vocab
+        decoder_config.blank_id = 256; // Blank token at index 256 in filtered output
         let decoder = EnhancedDecoder::new(vocabulary.clone().into_tokens(), decoder_config);
 
         // Create mel filterbank
@@ -363,42 +373,31 @@ impl IndicConformerStt {
             .map_err(|e| PipelineError::Model(format!("Failed to load {}: {}", path.display(), e)))
     }
 
-    fn load_vocab(path: &Path, _language: &str) -> Result<Vocabulary, PipelineError> {
+    fn load_vocab(path: &Path, language: &str) -> Result<Vocabulary, PipelineError> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| PipelineError::Io(format!("Failed to read vocab: {}", e)))?;
 
         let vocab_map: HashMap<String, Vec<String>> = serde_json::from_str(&content)
             .map_err(|e| PipelineError::Stt(format!("Failed to parse vocab: {}", e)))?;
 
-        // IndicConformer uses a JOINT vocabulary across all 22 languages.
-        // Each language has 256 unique tokens + 1 shared "|" (pipe/blank) token.
-        // Total vocab: 22 * 256 + 1 = 5633 tokens (matching language_masks.json).
-        // Language order: as, bn, brx, doi, kok, gu, hi, kn, ks, mai, ml, mr, mni, ne, or, pa, sa, sat, sd, ta, te, ur
-        const LANGUAGE_ORDER: &[&str] = &[
-            "as", "bn", "brx", "doi", "kok", "gu", "hi", "kn", "ks", "mai",
-            "ml", "mr", "mni", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur"
-        ];
+        // IndicConformer CTC decoder outputs per-language vocabulary (257 tokens)
+        // Load only the target language's tokens (indices 0-255) + blank "|" (index 256)
+        let lang_tokens = vocab_map.get(language)
+            .ok_or_else(|| PipelineError::Stt(format!("Language '{}' not found in vocab", language)))?;
 
-        let mut all_tokens = Vec::new();
-        for lang in LANGUAGE_ORDER {
-            if let Some(lang_tokens) = vocab_map.get(*lang) {
-                // Add first 256 tokens from each language (excluding the final "|" which is shared)
-                let tokens_to_add = lang_tokens.len().min(256);
-                all_tokens.extend(lang_tokens.iter().take(tokens_to_add).cloned());
-            }
-        }
-
-        // Add the shared "|" (blank/pipe) token at the end
-        all_tokens.push("|".to_string());
+        // The vocab file has the "|" blank token at the end of each language's list
+        // We need exactly 257 tokens: indices 0-255 for regular tokens, 256 for blank
+        let mut tokens: Vec<String> = lang_tokens.iter().take(256).cloned().collect();
+        tokens.push("|".to_string()); // Blank token at index 256
 
         tracing::info!(
-            joint_vocab_size = all_tokens.len(),
-            languages = LANGUAGE_ORDER.len(),
-            expected_size = 5633,
-            "IndicConformer: Loaded joint vocabulary"
+            language = %language,
+            vocab_size = tokens.len(),
+            expected_size = 257,
+            "IndicConformer: Loaded per-language vocabulary"
         );
 
-        Ok(Vocabulary::from_tokens(all_tokens))
+        Ok(Vocabulary::from_tokens(tokens))
     }
 
     /// Load language mask from language_masks.json
@@ -615,10 +614,17 @@ impl IndicConformerStt {
         // Run encoder - convert ndarray to ort Tensor
         let encoder_start = std::time::Instant::now();
         let mut encoder = self.encoder_session.lock();
+
+        // Create tensors (ort 2.0 API)
+        let mel_tensor = Tensor::from_array(mel_input)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let length_tensor = Tensor::from_array(length_input)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
         let encoder_outputs = encoder
             .run(ort::inputs![
-                "audio_signal" => Tensor::from_array(mel_input).map_err(|e| PipelineError::Model(e.to_string()))?,
-                "length" => Tensor::from_array(length_input).map_err(|e| PipelineError::Model(e.to_string()))?,
+                "audio_signal" => mel_tensor,
+                "length" => length_tensor,
             ])
             .map_err(|e| PipelineError::Model(format!("Encoder failed: {}", e)))?;
         let encoder_time = encoder_start.elapsed();
@@ -633,9 +639,13 @@ impl IndicConformerStt {
         // Run CTC decoder
         let decoder_start = std::time::Instant::now();
         let mut decoder = self.decoder_session.lock();
+
+        let encoded_tensor = Tensor::from_array(encoded.to_owned())
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
         let decoder_outputs = decoder
             .run(ort::inputs![
-                "encoder_output" => Tensor::from_array(encoded.to_owned()).map_err(|e| PipelineError::Model(e.to_string()))?,
+                "encoder_output" => encoded_tensor,
             ])
             .map_err(|e| PipelineError::Model(format!("Decoder failed: {}", e)))?;
         let decoder_time = decoder_start.elapsed();
@@ -701,10 +711,11 @@ impl IndicConformerStt {
                 // DIAGNOSTIC: Log top token for first few frames of each chunk
                 if frame_idx < 3 && frame_count % 3 == 0 {
                     let top_idx = frame_logits.iter().enumerate()
-                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                        .filter(|(_, v)| v.is_finite())
+                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                         .map(|(i, _)| i)
                         .unwrap_or(0);
-                    let top_token = self.vocabulary.get(top_idx).cloned().unwrap_or_else(|| format!("?{}", top_idx));
+                    let top_token = self.vocabulary.get_token(top_idx as u32).map(|s| s.to_string()).unwrap_or_else(|| format!("?{}", top_idx));
                     tracing::trace!(
                         chunk = frame_count,
                         frame = frame_idx,

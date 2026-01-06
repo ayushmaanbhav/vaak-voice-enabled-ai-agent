@@ -8,7 +8,7 @@ use std::path::Path;
 #[cfg(feature = "onnx")]
 use ndarray::Array2;
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 
 use super::decoder::{DecoderConfig, EnhancedDecoder};
 use super::SttBackend;
@@ -68,7 +68,7 @@ impl Default for SttConfig {
 /// Streaming STT processor
 pub struct StreamingStt {
     #[cfg(feature = "onnx")]
-    session: Session,
+    session: Mutex<Session>,
     config: SttConfig,
     decoder: EnhancedDecoder,
     /// Audio buffer for chunking
@@ -100,7 +100,7 @@ impl StreamingStt {
         let decoder = EnhancedDecoder::new(vocab, config.decoder.clone());
 
         Ok(Self {
-            session,
+            session: Mutex::new(session),
             config,
             decoder,
             audio_buffer: Mutex::new(Vec::new()),
@@ -190,32 +190,36 @@ impl StreamingStt {
         let input = Array2::from_shape_vec((1, chunk.len()), chunk.to_vec())
             .map_err(|e| PipelineError::Stt(e.to_string()))?;
 
-        let outputs = self
-            .session
-            .run(
-                ort::inputs![
-                    "audio" => input.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+        // Create tensor (ort 2.0 API)
+        let input_tensor = Tensor::from_array(input)
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
-        let logits = outputs
+        let mut session = self.session.lock();
+        let outputs = session
+            .run(ort::inputs![
+                "audio" => input_tensor,
+            ])
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
+        let (shape, logits_data) = outputs
             .get("logits")
             .ok_or_else(|| PipelineError::Model("Missing logits output".to_string()))?
             .try_extract_tensor::<f32>()
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
-        let logits_view = logits.view();
-        let shape = logits_view.shape();
+        let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
 
-        if shape.len() >= 2 {
-            let n_frames = shape[1];
-            let vocab_size = shape[2];
+        if dims.len() >= 3 {
+            let n_frames = dims[1];
+            let vocab_size = dims[2];
 
             for frame_idx in 0..n_frames {
                 let frame_logits: Vec<f32> = (0..vocab_size)
-                    .map(|v| logits_view[[0, frame_idx, v]])
+                    .map(|v| {
+                        // Index into flat array: [0, frame_idx, v] -> 0 * n_frames * vocab_size + frame_idx * vocab_size + v
+                        let idx = frame_idx * vocab_size + v;
+                        logits_data.get(idx).copied().unwrap_or(0.0)
+                    })
                     .collect();
 
                 if let Some(partial_text) = self.decoder.process_frame(&frame_logits)? {

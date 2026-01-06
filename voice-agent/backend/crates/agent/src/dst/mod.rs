@@ -30,7 +30,7 @@
 pub mod slots;
 pub mod extractor;
 
-pub use slots::{GoldLoanDialogueState, GoldPurity, SlotValue, UrgencyLevel};
+pub use slots::{GoldLoanDialogueState, GoldPurity, SlotValue, UrgencyLevel, ConversationGoal, NextBestAction};
 pub use extractor::SlotExtractor;
 
 use chrono::{DateTime, Utc};
@@ -358,6 +358,51 @@ impl DialogueStateTracker {
     /// Generate a prompt context from current state
     pub fn state_context(&self) -> String {
         self.state.to_context_string()
+    }
+
+    /// Generate full context including goal information
+    pub fn full_context(&self) -> String {
+        self.state.to_full_context_string()
+    }
+
+    /// Get current conversation goal
+    pub fn conversation_goal(&self) -> ConversationGoal {
+        self.state.conversation_goal()
+    }
+
+    /// Update goal from detected intent
+    pub fn update_goal_from_intent(&mut self, intent: &str, turn: usize) {
+        self.state.update_goal_from_intent(intent, turn);
+    }
+
+    /// Get the next best action based on current goal and slots
+    pub fn get_next_action(&self) -> NextBestAction {
+        self.state.get_next_action()
+    }
+
+    /// Check if we should proactively trigger a tool
+    pub fn should_trigger_tool(&self) -> Option<String> {
+        self.state.should_trigger_tool()
+    }
+
+    /// Get the goal context for LLM prompt injection
+    pub fn goal_context(&self) -> String {
+        self.state.goal_context()
+    }
+
+    /// Get missing required slots for current goal
+    pub fn missing_required_slots(&self) -> Vec<&'static str> {
+        self.state.missing_required_slots()
+    }
+
+    /// Get goal completion percentage
+    pub fn goal_completion(&self) -> f32 {
+        self.state.goal_completion()
+    }
+
+    /// Check if we should auto-capture lead (when we have contact info during any goal)
+    pub fn should_auto_capture_lead(&self) -> bool {
+        self.state.should_auto_capture_lead()
     }
 
     /// Reset the tracker

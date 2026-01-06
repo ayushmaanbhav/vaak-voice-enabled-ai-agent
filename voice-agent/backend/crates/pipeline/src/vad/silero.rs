@@ -15,7 +15,7 @@ use crate::PipelineError;
 use ndarray::Array2;
 
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 
 use super::{VadConfig, VadEngine, VadResult, VadState};
 
@@ -83,7 +83,7 @@ struct SileroMutableState {
 /// Silero VAD v5 implementation
 pub struct SileroVad {
     #[cfg(feature = "onnx")]
-    session: Session,
+    session: Mutex<Session>,
     config: SileroConfig,
     /// Single lock for all mutable state
     mutable: Mutex<SileroMutableState>,
@@ -109,8 +109,11 @@ impl SileroVad {
         let h_state = Array2::zeros((2, 64));
         let c_state = Array2::zeros((2, 64));
 
+        // Save chunk_size before moving config
+        let chunk_size = config.chunk_size;
+
         Ok(Self {
-            session,
+            session: Mutex::new(session),
             config,
             mutable: Mutex::new(SileroMutableState {
                 h_state,
@@ -118,7 +121,7 @@ impl SileroVad {
                 state: VadState::Silence,
                 speech_frames: 0,
                 silence_frames: 0,
-                audio_buffer: Vec::with_capacity(config.chunk_size),
+                audio_buffer: Vec::with_capacity(chunk_size),
             }),
         })
     }
@@ -206,11 +209,8 @@ impl SileroVad {
         state: &mut SileroMutableState,
         audio_chunk: &[f32],
     ) -> Result<f32, PipelineError> {
-        use ndarray::{Array1, ArrayView2};
-
         // Prepare input tensor [1, chunk_size]
-        let input = Array1::from_vec(audio_chunk.to_vec())
-            .into_shape((1, audio_chunk.len()))
+        let input = ndarray::Array2::from_shape_vec((1, audio_chunk.len()), audio_chunk.to_vec())
             .map_err(|e| PipelineError::Vad(e.to_string()))?;
 
         // Sample rate tensor [1]
@@ -219,44 +219,58 @@ impl SileroVad {
         // Run inference
         // Silero VAD v5 inputs: input, sr, h, c
         // Silero VAD v5 outputs: output, hn, cn
-        let outputs = self
-            .session
-            .run(
-                ort::inputs![
-                    "input" => input.view(),
-                    "sr" => sr.view(),
-                    "h" => state.h_state.view(),
-                    "c" => state.c_state.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+
+        // Create tensors (ort 2.0 API)
+        let input_tensor = Tensor::from_array(input)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let sr_tensor = Tensor::from_array(sr)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let h_tensor = Tensor::from_array(state.h_state.clone())
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let c_tensor = Tensor::from_array(state.c_state.clone())
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
+        let mut session = self.session.lock();
+        let outputs = session
+            .run(ort::inputs![
+                "input" => input_tensor,
+                "sr" => sr_tensor,
+                "h" => h_tensor,
+                "c" => c_tensor,
+            ])
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
         // Extract speech probability
-        let speech_prob: f32 = outputs
+        let (_, speech_data) = outputs
             .get("output")
             .ok_or_else(|| PipelineError::Model("Missing output tensor".to_string()))?
             .try_extract_tensor::<f32>()
-            .map_err(|e| PipelineError::Model(e.to_string()))?
-            .view()
-            .iter()
-            .next()
-            .copied()
-            .unwrap_or(0.0);
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let speech_prob = speech_data.first().copied().unwrap_or(0.0);
 
         // Update LSTM states
         if let Some(hn) = outputs.get("hn") {
-            let new_h: ArrayView2<f32> = hn
-                .try_extract_tensor()
+            let (shape, data) = hn
+                .try_extract_tensor::<f32>()
                 .map_err(|e| PipelineError::Model(e.to_string()))?;
-            state.h_state.assign(&new_h);
+            let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+            if dims.len() == 2 && data.len() == dims[0] * dims[1] {
+                let new_h = ndarray::ArrayView2::from_shape((dims[0], dims[1]), data)
+                    .map_err(|e| PipelineError::Model(e.to_string()))?;
+                state.h_state.assign(&new_h);
+            }
         }
 
         if let Some(cn) = outputs.get("cn") {
-            let new_c: ArrayView2<f32> = cn
-                .try_extract_tensor()
+            let (shape, data) = cn
+                .try_extract_tensor::<f32>()
                 .map_err(|e| PipelineError::Model(e.to_string()))?;
-            state.c_state.assign(&new_c);
+            let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+            if dims.len() == 2 && data.len() == dims[0] * dims[1] {
+                let new_c = ndarray::ArrayView2::from_shape((dims[0], dims[1]), data)
+                    .map_err(|e| PipelineError::Model(e.to_string()))?;
+                state.c_state.assign(&new_c);
+            }
         }
 
         Ok(speech_prob)

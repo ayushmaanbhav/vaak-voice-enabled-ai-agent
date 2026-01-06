@@ -27,27 +27,29 @@ docs/
 ├── rust-ecosystem.md                 # Library decisions
 ├── core-traits.md                    # Core trait definitions
 │
-├── pipeline/
-│   ├── audio-pipeline.md             # VAD, STT, TTS streaming
-│   └── optimized-pipeline.md         # Gap implementations, research [NEW]
+├── architecture/                     # Component documentation
+│   ├── pipeline/
+│   │   ├── audio-pipeline.md         # VAD, STT, TTS streaming
+│   │   └── optimized-pipeline.md     # Gap implementations, research
+│   ├── interfaces/
+│   │   └── mcp-tools.md              # MCP tool interface
+│   ├── agent/
+│   │   └── agent-framework.md        # Stage-based agent
+│   ├── rag/
+│   │   └── agentic-rag-strategy.md   # RAG architecture
+│   └── personalization/
+│       └── customer-profiling.md     # Customer segmentation
 │
-├── interfaces/
-│   └── mcp-tools.md                  # MCP tool interface [NEW]
-│
-├── agent/
-│   └── agent-framework.md            # Stage-based agent [NEW]
-│
-├── rag/
-│   └── agentic-rag-strategy.md       # RAG architecture
-│
-├── personalization/
-│   └── customer-profiling.md         # Customer segmentation
+├── deployment/
+│   └── scaling-strategy.md           # Production deployment
 │
 ├── experiments/
 │   └── ab-testing-framework.md       # A/B testing
 │
-└── deployment/
-    └── scaling-strategy.md           # Production deployment
+└── troubleshooting/                  # Issue reports & fixes
+    ├── DEEP_DIVE_REPORT.md
+    ├── FIX_PLAN.md
+    └── ISSUES_SUMMARY.md
 ```
 
 ---
@@ -60,7 +62,7 @@ Start with [ARCHITECTURE_v2.md](./ARCHITECTURE_v2.md) for the high-level design.
 
 ### 2. Review Gap Implementations
 
-The [optimized-pipeline.md](./pipeline/optimized-pipeline.md) documents all 9 gap implementations:
+The [optimized-pipeline.md](./architecture/pipeline/optimized-pipeline.md) documents all 9 gap implementations:
 
 | Gap | Solution | Impact |
 |-----|----------|--------|
@@ -78,10 +80,10 @@ The [optimized-pipeline.md](./pipeline/optimized-pipeline.md) documents all 9 ga
 
 | Component | Documentation |
 |-----------|---------------|
-| Audio Pipeline | [audio-pipeline.md](./pipeline/audio-pipeline.md) |
-| Tool Interface | [mcp-tools.md](./interfaces/mcp-tools.md) |
-| Agent Logic | [agent-framework.md](./agent/agent-framework.md) |
-| RAG System | [agentic-rag-strategy.md](./rag/agentic-rag-strategy.md) |
+| Audio Pipeline | [audio-pipeline.md](./architecture/pipeline/audio-pipeline.md) |
+| Tool Interface | [mcp-tools.md](./architecture/interfaces/mcp-tools.md) |
+| Agent Logic | [agent-framework.md](./architecture/agent/agent-framework.md) |
+| RAG System | [agentic-rag-strategy.md](./architecture/rag/agentic-rag-strategy.md) |
 | Rust Libraries | [rust-ecosystem.md](./rust-ecosystem.md) |
 
 ---

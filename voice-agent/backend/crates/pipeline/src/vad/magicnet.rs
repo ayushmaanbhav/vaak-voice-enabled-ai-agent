@@ -28,7 +28,7 @@ use ndarray::{Array2, Array3};
 use ndarray::Array2;
 
 #[cfg(feature = "onnx")]
-use ort::{GraphOptimizationLevel, Session};
+use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
 
 /// VAD configuration
 #[derive(Debug, Clone)]
@@ -122,7 +122,7 @@ struct VadMutableState {
 /// MagicNet-inspired Voice Activity Detector
 pub struct VoiceActivityDetector {
     #[cfg(feature = "onnx")]
-    session: Session,
+    session: Mutex<Session>,
     #[cfg(feature = "onnx")]
     mel_filterbank: MelFilterbank,
     config: VadConfig,
@@ -148,7 +148,7 @@ impl VoiceActivityDetector {
         let mel_filterbank = MelFilterbank::new(config.sample_rate, frame_samples, config.n_mels)?;
 
         Ok(Self {
-            session,
+            session: Mutex::new(session),
             mel_filterbank,
             config,
             mutable: Mutex::new(VadMutableState {
@@ -253,33 +253,37 @@ impl VoiceActivityDetector {
         let input = Array3::from_shape_vec((1, 1, self.config.n_mels), mel_features.to_vec())
             .map_err(|e| PipelineError::Vad(e.to_string()))?;
 
-        let outputs = self
-            .session
-            .run(
-                ort::inputs![
-                    "mel_input" => input.view(),
-                    "gru_state_in" => state.gru_state.view(),
-                ]
-                .map_err(|e| PipelineError::Model(e.to_string()))?,
-            )
+        // Create tensors (ort 2.0 API)
+        let input_tensor = Tensor::from_array(input)
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let gru_tensor = Tensor::from_array(state.gru_state.clone())
             .map_err(|e| PipelineError::Model(e.to_string()))?;
 
-        let speech_prob: f32 = outputs
+        let mut session = self.session.lock();
+        let outputs = session
+            .run(ort::inputs![
+                "mel_input" => input_tensor,
+                "gru_state_in" => gru_tensor,
+            ])
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+
+        let (_, speech_data) = outputs
             .get("speech_prob")
             .ok_or_else(|| PipelineError::Model("Missing speech_prob output".to_string()))?
             .try_extract_tensor::<f32>()
-            .map_err(|e| PipelineError::Model(e.to_string()))?
-            .view()
-            .iter()
-            .next()
-            .copied()
-            .unwrap_or(0.0);
+            .map_err(|e| PipelineError::Model(e.to_string()))?;
+        let speech_prob = speech_data.first().copied().unwrap_or(0.0);
 
         if let Some(new_state) = outputs.get("gru_state_out") {
-            let new_state: ArrayView2<f32> = new_state
-                .try_extract_tensor()
+            let (shape, data) = new_state
+                .try_extract_tensor::<f32>()
                 .map_err(|e| PipelineError::Model(e.to_string()))?;
-            state.gru_state.assign(&new_state);
+            let dims: Vec<usize> = shape.iter().map(|&d| d as usize).collect();
+            if dims.len() == 2 && data.len() == dims[0] * dims[1] {
+                let new_state_view = ndarray::ArrayView2::from_shape((dims[0], dims[1]), data)
+                    .map_err(|e| PipelineError::Model(e.to_string()))?;
+                state.gru_state.assign(&new_state_view);
+            }
         }
 
         Ok(speech_prob)

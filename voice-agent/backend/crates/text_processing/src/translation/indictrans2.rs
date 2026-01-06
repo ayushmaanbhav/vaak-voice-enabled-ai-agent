@@ -151,7 +151,7 @@ impl TranslationCache {
 #[cfg(feature = "onnx")]
 mod onnx_impl {
     use super::*;
-    use ort::{GraphOptimizationLevel, Session};
+    use ort::{session::builder::GraphOptimizationLevel, session::Session, value::Tensor};
     use tokenizers::Tokenizer;
 
     /// IndicTrans2 ONNX-based translator
@@ -218,16 +218,19 @@ mod onnx_impl {
             let input_array = ndarray::Array2::from_shape_vec((1, seq_len), input_ids)
                 .map_err(|e| Error::Translation(format!("Array creation failed: {}", e)))?;
 
-            // Run encoder
+            // Run encoder - create tensor (ort 2.0 API)
+            let input_tensor = Tensor::from_array(input_array)
+                .map_err(|e| Error::Translation(format!("Tensor creation failed: {}", e)))?;
+
             let encoder_outputs = self
                 .encoder
                 .run(ort::inputs![
-                    "input_ids" => input_array.view(),
+                    "input_ids" => input_tensor,
                 ])
                 .map_err(|e| Error::Translation(format!("Encoder inference failed: {}", e)))?;
 
             // Get encoder hidden states
-            let encoder_hidden = encoder_outputs
+            let (encoder_shape, encoder_data) = encoder_outputs
                 .get("last_hidden_state")
                 .ok_or_else(|| Error::Translation("Missing encoder output".to_string()))?
                 .try_extract_tensor::<f32>()
@@ -240,6 +243,19 @@ mod onnx_impl {
             let mut output_ids = vec![self.get_bos_token_id()];
             let max_length = self.config.max_seq_length.min(seq_len * 2);
 
+            // Convert encoder hidden to ndarray for reuse in decoder loop
+            let encoder_dims: Vec<usize> = encoder_shape.iter().map(|&d| d as usize).collect();
+            let encoder_hidden_array = if encoder_dims.len() == 3 {
+                ndarray::Array3::from_shape_vec(
+                    (encoder_dims[0], encoder_dims[1], encoder_dims[2]),
+                    encoder_data.to_vec(),
+                )
+                .map_err(|e| Error::Translation(format!("Encoder array creation failed: {}", e)))?
+                .into_dyn()
+            } else {
+                return Err(Error::Translation("Unexpected encoder shape".to_string()));
+            };
+
             for _ in 0..max_length {
                 let decoder_input = ndarray::Array2::from_shape_vec(
                     (1, output_ids.len()),
@@ -247,28 +263,45 @@ mod onnx_impl {
                 )
                 .map_err(|e| Error::Translation(format!("Decoder input creation failed: {}", e)))?;
 
+                // Create tensors (ort 2.0 API)
+                let decoder_input_tensor = Tensor::from_array(decoder_input)
+                    .map_err(|e| Error::Translation(format!("Tensor creation failed: {}", e)))?;
+                let encoder_hidden_tensor = Tensor::from_array(encoder_hidden_array.clone())
+                    .map_err(|e| Error::Translation(format!("Tensor creation failed: {}", e)))?;
+
                 let decoder_outputs = self
                     .decoder
                     .run(ort::inputs![
-                        "input_ids" => decoder_input.view(),
-                        "encoder_hidden_states" => encoder_hidden.view(),
+                        "input_ids" => decoder_input_tensor,
+                        "encoder_hidden_states" => encoder_hidden_tensor,
                     ])
                     .map_err(|e| Error::Translation(format!("Decoder inference failed: {}", e)))?;
 
-                let logits = decoder_outputs
+                let (logits_shape, logits_data) = decoder_outputs
                     .get("logits")
                     .ok_or_else(|| Error::Translation("Missing decoder logits".to_string()))?
                     .try_extract_tensor::<f32>()
                     .map_err(|e| Error::Translation(format!("Failed to extract logits: {}", e)))?;
 
                 // Greedy decode: take argmax of last position
-                let last_logits = logits.slice(ndarray::s![0, -1, ..]);
-                let next_token = last_logits
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                    .map(|(idx, _)| idx as i64)
-                    .unwrap_or(self.get_eos_token_id());
+                // Logits shape is [batch=1, seq_len, vocab_size]
+                let logits_dims: Vec<usize> = logits_shape.iter().map(|&d| d as usize).collect();
+                let next_token = if logits_dims.len() == 3 && logits_dims[1] > 0 {
+                    let vocab_size = logits_dims[2];
+                    let last_seq_idx = logits_dims[1] - 1;
+                    // Get logits for last position: [0, last_seq_idx, :]
+                    let start_idx = last_seq_idx * vocab_size;
+                    let end_idx = start_idx + vocab_size;
+                    let last_logits = &logits_data[start_idx..end_idx.min(logits_data.len())];
+                    last_logits
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                        .map(|(idx, _)| idx as i64)
+                        .unwrap_or(self.get_eos_token_id())
+                } else {
+                    self.get_eos_token_id()
+                };
 
                 if next_token == self.get_eos_token_id() {
                     break;
