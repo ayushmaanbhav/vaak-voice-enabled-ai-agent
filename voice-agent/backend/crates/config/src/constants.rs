@@ -71,19 +71,29 @@ pub mod gold_prices {
     pub const PURITY_14K: f64 = 0.585;
 }
 
-/// Service endpoints (defaults for local development)
+/// Service endpoints (loaded from env vars with fallback defaults)
 pub mod endpoints {
-    /// Ollama LLM endpoint
-    pub const OLLAMA_DEFAULT: &str = "http://localhost:11434";
+    use once_cell::sync::Lazy;
 
-    /// Qdrant vector store endpoint (REST API port - gRPC has h2 issues)
-    pub const QDRANT_DEFAULT: &str = "http://127.0.0.1:6333";
+    /// Ollama LLM endpoint (env: OLLAMA_URL)
+    pub static OLLAMA_DEFAULT: Lazy<String> = Lazy::new(|| {
+        std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string())
+    });
 
-    /// OpenAI API endpoint
-    pub const OPENAI_DEFAULT: &str = "https://api.openai.com/v1";
+    /// Qdrant vector store endpoint (env: QDRANT_URL)
+    pub static QDRANT_DEFAULT: Lazy<String> = Lazy::new(|| {
+        std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string())
+    });
 
-    /// Anthropic API endpoint
-    pub const ANTHROPIC_DEFAULT: &str = "https://api.anthropic.com";
+    /// OpenAI API endpoint (env: OPENAI_API_BASE)
+    pub static OPENAI_DEFAULT: Lazy<String> = Lazy::new(|| {
+        std::env::var("OPENAI_API_BASE").unwrap_or_else(|_| "https://api.openai.com/v1".to_string())
+    });
+
+    /// Anthropic API endpoint (env: ANTHROPIC_API_BASE)
+    pub static ANTHROPIC_DEFAULT: Lazy<String> = Lazy::new(|| {
+        std::env::var("ANTHROPIC_API_BASE").unwrap_or_else(|_| "https://api.anthropic.com".to_string())
+    });
 }
 
 /// Timeouts (in milliseconds unless noted)

@@ -15,9 +15,18 @@ pub struct ScyllaConfig {
 
 impl Default for ScyllaConfig {
     fn default() -> Self {
+        // Load hosts from SCYLLA_HOSTS env var (comma-separated) or use default
+        let hosts = std::env::var("SCYLLA_HOSTS")
+            .map(|s| s.split(',').map(|h| h.trim().to_string()).collect())
+            .unwrap_or_else(|_| vec!["127.0.0.1:9042".to_string()]);
+
+        // Load keyspace from SCYLLA_KEYSPACE env var or use default
+        let keyspace = std::env::var("SCYLLA_KEYSPACE")
+            .unwrap_or_else(|_| "voice_agent".to_string());
+
         Self {
-            hosts: vec!["127.0.0.1:9042".to_string()],
-            keyspace: "voice_agent".to_string(),
+            hosts,
+            keyspace,
             replication_factor: 1,
         }
     }

@@ -101,11 +101,14 @@ pub struct PersistenceConfig {
 }
 
 fn default_scylla_hosts() -> Vec<String> {
-    vec!["127.0.0.1:9042".to_string()]
+    std::env::var("SCYLLA_HOSTS")
+        .map(|s| s.split(',').map(|h| h.trim().to_string()).collect())
+        .unwrap_or_else(|_| vec!["127.0.0.1:9042".to_string()])
 }
 
 fn default_scylla_keyspace() -> String {
-    "voice_agent".to_string()
+    std::env::var("SCYLLA_KEYSPACE")
+        .unwrap_or_else(|_| "voice_agent".to_string())
 }
 
 fn default_replication_factor() -> u8 {

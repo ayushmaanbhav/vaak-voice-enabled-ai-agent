@@ -35,8 +35,10 @@ pub struct OllamaEmbeddingConfig {
 impl Default for OllamaEmbeddingConfig {
     fn default() -> Self {
         Self {
-            endpoint: "http://localhost:11434".to_string(),
-            model: "qwen3-embedding:0.6b".to_string(),
+            endpoint: std::env::var("OLLAMA_URL")
+                .unwrap_or_else(|_| "http://localhost:11434".to_string()),
+            model: std::env::var("OLLAMA_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "qwen3-embedding:0.6b".to_string()),
             embedding_dim: 1024,
         }
     }
