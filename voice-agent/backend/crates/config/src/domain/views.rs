@@ -461,6 +461,56 @@ impl LlmDomainView {
     pub fn error_template(&self, scenario: &str, language: &str) -> Option<&str> {
         self.config.prompts.error_template(scenario, language)
     }
+
+    // ====== P7 FIX: Methods migrated from DomainConfigManager ======
+
+    /// Get greeting for language (from response templates)
+    /// Falls back to English if language not found
+    pub fn get_greeting(&self, language: &str) -> String {
+        self.config.prompts.response_template("greeting", language)
+            .or_else(|| self.config.prompts.response_template("greeting", "en"))
+            .map(|template| {
+                template
+                    .replace("{agent_name}", &self.config.brand.agent_name)
+                    .replace("{bank_name}", &self.config.brand.bank_name)
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "Hello! I'm {} from {}. How can I help you today?",
+                    self.config.brand.agent_name,
+                    self.config.brand.bank_name
+                )
+            })
+    }
+
+    /// Get greeting with time-based prefix (morning/afternoon/evening)
+    pub fn get_greeting_with_time(&self, language: &str, hour: u32) -> String {
+        let time_greeting = match hour {
+            5..=11 => "Good morning",
+            12..=16 => "Good afternoon",
+            17..=20 => "Good evening",
+            _ => "Hello",
+        };
+
+        let base_greeting = self.get_greeting(language);
+        format!("{}! {}", time_greeting, base_greeting.trim_start_matches("Hello! "))
+    }
+
+    /// Get farewell message for language
+    pub fn get_farewell(&self, language: &str) -> String {
+        self.config.prompts.response_template("farewell", language)
+            .or_else(|| self.config.prompts.response_template("farewell", "en"))
+            .map(|template| {
+                template
+                    .replace("{helpline}", &self.config.brand.helpline)
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "Thank you for speaking with me! Call our helpline at {} if you have any questions.",
+                    self.config.brand.helpline
+                )
+            })
+    }
 }
 
 /// View for the tools crate
@@ -637,6 +687,53 @@ impl ToolsDomainView {
             .map(|p| (p.category.as_str(), p.our_advantage.as_str()))
             .collect()
     }
+
+    // ====== P7 FIX: Methods migrated from DomainConfigManager ======
+
+    /// Check if doorstep service is available in a city
+    pub fn doorstep_available(&self, city: &str) -> bool {
+        self.config.branches.doorstep_available(city)
+    }
+
+    /// Calculate monthly savings vs competitor
+    /// Returns savings info, or None if competitor not found
+    pub fn calculate_competitor_savings(
+        &self,
+        competitor: &str,
+        loan_amount: f64,
+    ) -> Option<MonthlySavings> {
+        // Try to get competitor rate from extended config first, then basic config
+        let their_rate = self.config.competitors_config.find_by_name(competitor)
+            .map(|(_, entry)| entry.typical_rate)
+            .or_else(|| {
+                // Fallback to basic competitor list in domain.yaml
+                self.config.get_competitor(competitor).map(|c| c.typical_rate)
+            })?;
+
+        let our_rate = self.config.get_rate_for_amount(loan_amount);
+
+        if their_rate <= our_rate {
+            // No savings if competitor is cheaper
+            return Some(MonthlySavings {
+                monthly: 0.0,
+                annual: 0.0,
+                our_rate,
+                their_rate,
+            });
+        }
+
+        // Monthly savings = loan_amount * (rate_diff / 12 / 100)
+        let rate_diff = their_rate - our_rate;
+        let monthly_savings = loan_amount * rate_diff / 12.0 / 100.0;
+        let annual_savings = monthly_savings * 12.0;
+
+        Some(MonthlySavings {
+            monthly: monthly_savings,
+            annual: annual_savings,
+            our_rate,
+            their_rate,
+        })
+    }
 }
 
 /// Simplified competitor info for tools
@@ -645,6 +742,15 @@ pub struct CompetitorInfo {
     pub name: String,
     pub rate: f64,
     pub ltv: f64,
+}
+
+/// Monthly savings calculation result
+#[derive(Debug, Clone)]
+pub struct MonthlySavings {
+    pub monthly: f64,
+    pub annual: f64,
+    pub our_rate: f64,
+    pub their_rate: f64,
 }
 
 /// Format amount in Indian style (lakhs/crores)

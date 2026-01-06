@@ -57,6 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Initialized Prometheus metrics at /metrics");
 
     // P0 FIX: Optionally initialize ScyllaDB persistence
+    // P6 FIX: Wire both legacy domain_config and new master_domain_config
     let mut state = if config.persistence.enabled {
         tracing::info!("Initializing ScyllaDB persistence layer...");
         match init_persistence(&config).await {
@@ -76,10 +77,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService> =
                     Arc::new(persistence.gold_price);
                 tracing::info!("SMS and GoldPrice services wired into tools");
-                AppState::with_full_persistence(
+                // P6 FIX: Use new method that accepts both domain configs
+                AppState::with_full_persistence_and_master(
                     config.clone(),
                     Arc::new(scylla_store),
                     domain_config,
+                    master_domain_config.clone(),
                     sms_service,
                     gold_price_service,
                 )
@@ -90,12 +93,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "Failed to initialize ScyllaDB: {}. Falling back to in-memory.",
                     e
                 );
-                AppState::with_domain_config(config.clone(), domain_config)
+                // P6 FIX: Use new method that accepts both domain configs
+                AppState::with_master_domain_config(config.clone(), domain_config, master_domain_config.clone())
             },
         }
     } else {
         tracing::info!("Persistence disabled, using in-memory session store");
-        AppState::with_domain_config(config.clone(), domain_config)
+        // P6 FIX: Use new method that accepts both domain configs
+        AppState::with_master_domain_config(config.clone(), domain_config, master_domain_config.clone())
     };
 
     // P0 FIX: Optionally initialize VectorStore for RAG

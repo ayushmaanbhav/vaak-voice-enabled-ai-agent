@@ -5,7 +5,8 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-use voice_agent_config::{load_settings, DomainConfigManager, Settings};
+use voice_agent_config::{load_settings, DomainConfigManager, MasterDomainConfig, Settings};
+use voice_agent_config::domain::{AgentDomainView, LlmDomainView, ToolsDomainView};
 use voice_agent_rag::VectorStore;
 use voice_agent_tools::ToolRegistry;
 // P2 FIX: Text processing pipeline for grammar, PII, compliance
@@ -25,8 +26,16 @@ use crate::session::{InMemorySessionStore, SessionManager, SessionStore};
 pub struct AppState {
     /// P1 FIX: Configuration wrapped in RwLock for hot-reload support
     pub config: Arc<RwLock<Settings>>,
-    /// P4 FIX: Domain configuration manager for gold loan specific config
+    /// P4 FIX: Domain configuration manager for gold loan specific config (LEGACY - to be removed in P11)
     pub domain_config: Arc<DomainConfigManager>,
+    /// P6 FIX: Hierarchical domain configuration (NEW - replaces domain_config)
+    pub master_domain_config: Arc<MasterDomainConfig>,
+    /// P6 FIX: Agent-specific view of domain config
+    pub agent_view: Arc<AgentDomainView>,
+    /// P6 FIX: LLM-specific view of domain config
+    pub llm_view: Arc<LlmDomainView>,
+    /// P6 FIX: Tools-specific view of domain config
+    pub tools_view: Arc<ToolsDomainView>,
     /// Session manager
     pub sessions: Arc<SessionManager>,
     /// Tool registry
@@ -63,12 +72,26 @@ impl AppState {
         (text_processing, text_simplifier, phonetic_corrector, translator)
     }
 
+    /// P6 FIX: Create views from MasterDomainConfig
+    fn create_views(master_config: &Arc<MasterDomainConfig>) -> (Arc<AgentDomainView>, Arc<LlmDomainView>, Arc<ToolsDomainView>) {
+        let agent_view = Arc::new(AgentDomainView::new(Arc::clone(master_config)));
+        let llm_view = Arc::new(LlmDomainView::new(Arc::clone(master_config)));
+        let tools_view = Arc::new(ToolsDomainView::new(Arc::clone(master_config)));
+        (agent_view, llm_view, tools_view)
+    }
+
     /// Create new application state with in-memory session store
     pub fn new(config: Settings) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
             session_store: Arc::new(InMemorySessionStore::new()),
@@ -82,12 +105,47 @@ impl AppState {
         }
     }
 
-    /// P4 FIX: Create new application state with domain config
+    /// P4 FIX: Create new application state with domain config (LEGACY)
+    /// P6 FIX: Also accepts MasterDomainConfig for new system
     pub fn with_domain_config(config: Settings, domain_config: DomainConfigManager) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(domain_config),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
+            sessions: Arc::new(SessionManager::new(100)),
+            tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
+            session_store: Arc::new(InMemorySessionStore::new()),
+            vector_store: None,
+            text_processing,
+            text_simplifier,
+            phonetic_corrector,
+            translator,
+            audit_logger: None,
+            env: None,
+        }
+    }
+
+    /// P6 FIX: Create new application state with both legacy and new domain config
+    pub fn with_master_domain_config(
+        config: Settings,
+        domain_config: DomainConfigManager,
+        master_domain_config: Arc<MasterDomainConfig>,
+    ) -> Self {
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
+        Self {
+            config: Arc::new(RwLock::new(config)),
+            domain_config: Arc::new(domain_config),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
             session_store: Arc::new(InMemorySessionStore::new()),
@@ -104,9 +162,15 @@ impl AppState {
     /// Create new application state with environment name for reload support
     pub fn with_env(config: Settings, env: Option<String>) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
             session_store: Arc::new(InMemorySessionStore::new()),
@@ -123,9 +187,15 @@ impl AppState {
     /// P2-3 FIX: Create application state with custom session store (e.g., ScyllaDB)
     pub fn with_session_store(config: Settings, store: Arc<dyn SessionStore>) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(DomainConfigManager::new()),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
             session_store: store,
@@ -146,9 +216,15 @@ impl AppState {
         domain_config: DomainConfigManager,
     ) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(domain_config),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(voice_agent_tools::registry::create_default_registry()),
             session_store: store,
@@ -169,6 +245,7 @@ impl AppState {
     /// gold price queries to ScyllaDB.
     ///
     /// P2-1 FIX: Also wires domain config (GoldLoanConfig) to tools for business logic.
+    /// P6 FIX: Now also accepts MasterDomainConfig for new hierarchical config system.
     pub fn with_full_persistence(
         config: Settings,
         store: Arc<dyn SessionStore>,
@@ -177,6 +254,8 @@ impl AppState {
         gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService>,
     ) -> Self {
         let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let master_domain_config = Arc::new(MasterDomainConfig::default());
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
 
         // P2-1 FIX: Extract gold loan config for tools (rates, LTV, etc.)
         let gold_loan_config = domain_config.gold_loan();
@@ -192,6 +271,52 @@ impl AppState {
         Self {
             config: Arc::new(RwLock::new(config)),
             domain_config: Arc::new(domain_config),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
+            sessions: Arc::new(SessionManager::new(100)),
+            tools: Arc::new(tools),
+            session_store: store,
+            vector_store: None,
+            text_processing,
+            text_simplifier,
+            phonetic_corrector,
+            translator,
+            audit_logger: None,
+            env: None,
+        }
+    }
+
+    /// P6 FIX: Create application state with full persistence AND master domain config
+    pub fn with_full_persistence_and_master(
+        config: Settings,
+        store: Arc<dyn SessionStore>,
+        domain_config: DomainConfigManager,
+        master_domain_config: Arc<MasterDomainConfig>,
+        sms_service: Arc<dyn voice_agent_persistence::SmsService>,
+        gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService>,
+    ) -> Self {
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
+
+        // P2-1 FIX: Extract gold loan config for tools (rates, LTV, etc.)
+        let gold_loan_config = domain_config.gold_loan();
+
+        // P1-4 FIX: Create tool registry with persistence services wired
+        let integration_config = voice_agent_tools::FullIntegrationConfig::default()
+            .with_sms_service(sms_service)
+            .with_gold_price_service(gold_price_service)
+            .with_gold_loan_config(gold_loan_config);
+        let tools = voice_agent_tools::create_registry_with_persistence(integration_config);
+
+        Self {
+            config: Arc::new(RwLock::new(config)),
+            domain_config: Arc::new(domain_config),
+            master_domain_config,
+            agent_view,
+            llm_view,
+            tools_view,
             sessions: Arc::new(SessionManager::new(100)),
             tools: Arc::new(tools),
             session_store: store,
@@ -281,9 +406,29 @@ impl AppState {
         self.config.read()
     }
 
-    /// P4 FIX: Get domain configuration manager
+    /// P4 FIX: Get domain configuration manager (LEGACY - use get_master_domain_config for new code)
     pub fn get_domain_config(&self) -> &DomainConfigManager {
         &self.domain_config
+    }
+
+    /// P6 FIX: Get master domain configuration (NEW - hierarchical config)
+    pub fn get_master_domain_config(&self) -> &Arc<MasterDomainConfig> {
+        &self.master_domain_config
+    }
+
+    /// P6 FIX: Get agent-specific view of domain config
+    pub fn get_agent_view(&self) -> &Arc<AgentDomainView> {
+        &self.agent_view
+    }
+
+    /// P6 FIX: Get LLM-specific view of domain config
+    pub fn get_llm_view(&self) -> &Arc<LlmDomainView> {
+        &self.llm_view
+    }
+
+    /// P6 FIX: Get tools-specific view of domain config
+    pub fn get_tools_view(&self) -> &Arc<ToolsDomainView> {
+        &self.tools_view
     }
 
     /// P2-3 FIX: Persist session metadata to the configured store

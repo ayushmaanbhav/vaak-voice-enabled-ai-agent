@@ -21,7 +21,7 @@ mod stages;
 mod tools;
 mod views;
 
-pub use branches::{BranchDefaults, BranchEntry, BranchesConfig, BranchesConfigError};
+pub use branches::{BranchDefaults, BranchEntry, BranchesConfig, BranchesConfigError, DoorstepServiceConfig};
 pub use competitors::{
     ComparisonPoint, CompetitorDefaults, CompetitorEntry, CompetitorsConfig,
     CompetitorsConfigError, RateRange,
@@ -46,7 +46,7 @@ pub use stages::{
     StageDefinition, StageRequirements, StagesConfig, StagesConfigError, TransitionTrigger,
 };
 pub use tools::{ToolParameter, ToolSchema, ToolsConfig, ToolsConfigError};
-pub use views::{AgentDomainView, CompetitorInfo, LlmDomainView, ToolsDomainView};
+pub use views::{AgentDomainView, CompetitorInfo, LlmDomainView, MonthlySavings, ToolsDomainView};
 
 // Re-export legacy DomainConfig for backward compatibility
 pub use crate::domain_config::{

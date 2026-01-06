@@ -14,6 +14,9 @@ pub struct BranchesConfig {
     /// Default search settings
     #[serde(default)]
     pub defaults: BranchDefaults,
+    /// Doorstep service configuration
+    #[serde(default)]
+    pub doorstep_service: DoorstepServiceConfig,
 }
 
 impl Default for BranchesConfig {
@@ -21,6 +24,7 @@ impl Default for BranchesConfig {
         Self {
             branches: Vec::new(),
             defaults: BranchDefaults::default(),
+            doorstep_service: DoorstepServiceConfig::default(),
         }
     }
 }
@@ -64,6 +68,18 @@ impl BranchesConfig {
             .iter()
             .filter(|b| b.gold_loan_available)
             .collect()
+    }
+
+    /// Check if doorstep service is available in a city
+    pub fn doorstep_available(&self, city: &str) -> bool {
+        if !self.doorstep_service.enabled {
+            return false;
+        }
+        let city_lower = city.to_lowercase();
+        self.doorstep_service
+            .available_cities
+            .iter()
+            .any(|c| c.to_lowercase() == city_lower)
     }
 }
 
@@ -115,6 +131,43 @@ impl Default for BranchDefaults {
             max_results: default_max_results(),
             sort_by: default_sort_by(),
             filter_gold_loan_only: true,
+        }
+    }
+}
+
+/// Doorstep service configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoorstepServiceConfig {
+    /// Whether doorstep service is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// List of cities where doorstep service is available
+    #[serde(default = "default_doorstep_cities")]
+    pub available_cities: Vec<String>,
+    /// Timing description for doorstep service
+    #[serde(default)]
+    pub timing: String,
+}
+
+fn default_doorstep_cities() -> Vec<String> {
+    vec![
+        "Mumbai".to_string(),
+        "Delhi".to_string(),
+        "Bangalore".to_string(),
+        "Chennai".to_string(),
+        "Hyderabad".to_string(),
+        "Pune".to_string(),
+        "Kolkata".to_string(),
+        "Ahmedabad".to_string(),
+    ]
+}
+
+impl Default for DoorstepServiceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            available_cities: default_doorstep_cities(),
+            timing: "10:00 AM - 6:00 PM".to_string(),
         }
     }
 }
