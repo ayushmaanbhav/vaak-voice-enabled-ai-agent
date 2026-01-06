@@ -1,11 +1,31 @@
 <div align="center">
 
-# 🎙️ VARTALAAP
+# 🔊 VAAK (वाक्)
 
-### **Vox · Agent · Rust · Transformer · Autonomous · Local · AI · Polyglot**
+### **Voice-Activated Autonomous Knowledge System**
 
-> A Scalable, CPU-Only, Airgapped, Deterministic, Domain-Agnostic
-> Voice/Text/Chat Agent Platform Built Entirely in Rust
+<br/>
+
+**Scalable · Memory-Safe · Real-Time · Deterministic**
+
+**Conversational AI Platform**
+
+<br/>
+
+`Sales` · `Support` · `Discovery` · `Education` · `CRM`
+
+<br/>
+
+Air-Gapped · GDPR-Ready · Data Sovereign · Compliant Architecture
+
+Edge AI · Sub-500ms · Distributed · Open Architecture
+
+22 Indian Languages · Multilingual · Enterprise-Grade
+
+<br/>
+
+> Domain-Agnostic Voice / Text / Chat Agent
+> Built with Rust · Runs on CPU · No Cloud Dependencies
 
 [![Rust](https://img.shields.io/badge/Rust-70%25+-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary-blue?style=for-the-badge)](LICENSE)
@@ -19,7 +39,7 @@
 ## 📋 Table of Contents
 
 - [Executive Summary](#-executive-summary)
-- [Why VARTALAAP?](#-why-vartalaap)
+- [Why VAAK?](#-why-vaak)
 - [Key Differentiators](#-key-differentiators)
 - [Architecture Overview](#-architecture-overview)
 - [System Components](#-system-components)
@@ -39,7 +59,7 @@
 
 ## 🎯 Executive Summary
 
-**VARTALAAP** (Sanskrit: "conversation/dialogue") is a production-grade conversational AI platform that enables enterprises to deploy intelligent voice, text, and chat agents **without cloud dependencies, without LLM API costs, and without compromising on data privacy**.
+**VAAK** (वाक् - Rigvedic Sanskrit for "Speech/Voice") is a production-grade conversational AI platform that enables enterprises to deploy intelligent voice, text, and chat agents **without cloud dependencies, without LLM API costs, and without compromising on data privacy**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -57,7 +77,7 @@
 
 ### The Problem We Solve
 
-| Challenge | Traditional AI Agents | VARTALAAP |
+| Challenge | Traditional AI Agents | VAAK |
 |-----------|----------------------|-----------|
 | **Data Privacy** | Customer data sent to cloud | All processing on-premise |
 | **LLM Costs** | $0.01-0.10 per conversation | Zero API costs after deployment |
@@ -69,7 +89,7 @@
 
 ---
 
-## 💡 Why VARTALAAP?
+## 💡 Why VAAK?
 
 ### For Business Leaders
 
@@ -84,7 +104,7 @@
                     │  ├── Cloud Infra:       ₹10-20 Lakhs    │
                     │  └── TOTAL:             ₹80-160 Lakhs   │
                     │                                         │
-                    │  VARTALAAP (Unlimited conversations):   │
+                    │  VAAK (Unlimited conversations):   │
                     │  ├── One-time Setup:    ₹15-25 Lakhs    │
                     │  ├── Hardware (3 nodes): ₹5-10 Lakhs    │
                     │  ├── Annual Maintenance: ₹5-10 Lakhs    │
@@ -109,10 +129,10 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
-│                          VARTALAAP vs. ALTERNATIVES                             │
+│                          VAAK vs. ALTERNATIVES                             │
 ├────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                │
-│                    VARTALAAP    │  Cloud APIs   │  Open Source  │  In-House   │
+│                    VAAK    │  Cloud APIs   │  Open Source  │  In-House   │
 │   ─────────────────────────────────────────────────────────────────────────   │
 │   Air-gapped Ready      ✅      │      ❌       │      ⚠️       │     ⚠️      │
 │   CPU-Only             ✅      │      N/A      │      ⚠️       │     ❌      │
@@ -207,7 +227,7 @@ graph TB
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           VARTALAAP COMPONENT ARCHITECTURE                       │
+│                           VAAK COMPONENT ARCHITECTURE                       │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
@@ -531,7 +551,7 @@ sequenceDiagram
 │  System                      Latency        Hardware                        │
 │  ─────────────────────────────────────────────────────────────────────────  │
 │                                                                             │
-│  VARTALAAP (this project)    ~450ms         8-core CPU, 32GB RAM           │
+│  VAAK (this project)    ~450ms         8-core CPU, 32GB RAM           │
 │  OpenAI Realtime API         ~300ms         Cloud (with network)           │
 │  Bland.ai                    ~800ms         Cloud                          │
 │  Retell.ai                   ~700ms         Cloud                          │
@@ -542,7 +562,7 @@ sequenceDiagram
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  LATENCY BAR CHART                                                   │   │
 │  │                                                                      │   │
-│  │  VARTALAAP        ████████████████                           450ms  │   │
+│  │  VAAK        ████████████████                           450ms  │   │
 │  │  OpenAI Realtime  ██████████                                 300ms  │   │
 │  │  Bland.ai         ██████████████████████████                 800ms  │   │
 │  │  Retell.ai        ███████████████████████                    700ms  │   │
@@ -569,7 +589,7 @@ sequenceDiagram
 
 ### Quality Metrics
 
-| Metric | VARTALAAP | Cloud Baseline |
+| Metric | VAAK | Cloud Baseline |
 |--------|-----------|----------------|
 | **Hindi STT WER** | 8-12% | 10-15% |
 | **Turn Detection F1** | 0.92 | 0.85 |
@@ -585,7 +605,7 @@ sequenceDiagram
 ```mermaid
 graph TB
     subgraph Single[Single Node Deployment]
-        SN_APP[VARTALAAP Binary]
+        SN_APP[VAAK Binary]
         SN_QD[Qdrant]
         SN_SC[ScyllaDB]
         SN_OL[Ollama]
@@ -600,9 +620,9 @@ graph TB
 graph TB
     subgraph Distributed[Distributed Deployment]
         LB[Load Balancer]
-        APP1[VARTALAAP-1]
-        APP2[VARTALAAP-2]
-        APP3[VARTALAAP-3]
+        APP1[VAAK-1]
+        APP2[VAAK-2]
+        APP3[VAAK-3]
         QD[Qdrant Cluster]
         SC[ScyllaDB Cluster]
         OL[Ollama Pool]
@@ -654,7 +674,7 @@ graph TB
 
 ### Domain Configuration (YAML-Based)
 
-VARTALAAP is **100% configurable via YAML files**. No code changes needed for:
+VAAK is **100% configurable via YAML files**. No code changes needed for:
 
 - New products/services
 - Different languages
@@ -1083,6 +1103,6 @@ This project is proprietary software. See [LICENSE](LICENSE) for details.
 
 **Built with ❤️ in Rust for the Indian Enterprise**
 
-*VARTALAAP - Where conversations happen without boundaries*
+*VAAK - Where Speech Becomes Intelligence*
 
 </div>
