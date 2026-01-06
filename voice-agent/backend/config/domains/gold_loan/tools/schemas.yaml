@@ -1,0 +1,169 @@
+# Gold Loan Domain - Tool Schemas
+# Defines LLM tool definitions in JSON Schema compatible format
+
+tools:
+  check_eligibility:
+    name: check_eligibility
+    description: "Check if customer is eligible for a gold loan based on their gold weight and purity"
+    parameters:
+      - name: gold_weight
+        type: number
+        description: "Weight of gold in grams"
+        required: true
+        min: 1.0
+        max: 10000.0
+      - name: gold_purity
+        type: string
+        description: "Purity of gold (e.g., '22K', '18K')"
+        required: false
+        enum: ["24K", "22K", "18K", "14K"]
+
+  calculate_savings:
+    name: calculate_savings
+    description: "Calculate monthly savings when switching from competitor to Kotak"
+    parameters:
+      - name: current_lender
+        type: string
+        description: "Name of current lender (e.g., 'Muthoot', 'Manappuram')"
+        required: true
+      - name: current_interest_rate
+        type: number
+        description: "Current interest rate in percentage"
+        required: false
+        min: 0.0
+        max: 50.0
+      - name: current_loan_amount
+        type: number
+        description: "Current loan amount in INR"
+        required: false
+        min: 1000.0
+        max: 100000000.0
+      - name: remaining_tenure_months
+        type: integer
+        description: "Remaining tenure in months"
+        required: false
+        min: 1
+        max: 360
+
+  find_branches:
+    name: find_branches
+    description: "Find nearby Kotak Mahindra Bank branches that offer gold loans"
+    parameters:
+      - name: city
+        type: string
+        description: "City name to search branches in"
+        required: true
+      - name: area
+        type: string
+        description: "Specific area or locality (optional)"
+        required: false
+
+  schedule_callback:
+    name: schedule_callback
+    description: "Schedule a callback from Kotak branch team"
+    parameters:
+      - name: phone
+        type: string
+        description: "Customer phone number (10 digits)"
+        required: true
+      - name: preferred_time
+        type: string
+        description: "Preferred callback time"
+        required: false
+        enum: ["morning", "afternoon", "evening"]
+
+  send_sms:
+    name: send_sms
+    description: "Send SMS with loan details or promotional information to customer"
+    parameters:
+      - name: phone
+        type: string
+        description: "Customer phone number (10 digits)"
+        required: true
+      - name: message_type
+        type: string
+        description: "Type of SMS message to send"
+        required: true
+        enum: ["eligibility_summary", "rate_comparison", "branch_info", "callback_confirmation"]
+
+  get_gold_rate:
+    name: get_gold_rate
+    description: "Get current gold rate per gram"
+    parameters:
+      - name: purity
+        type: string
+        description: "Gold purity to get rate for"
+        required: false
+        enum: ["24K", "22K", "18K"]
+
+  compare_lenders:
+    name: compare_lenders
+    description: "Compare Kotak's gold loan offering with other lenders"
+    parameters:
+      - name: competitor
+        type: string
+        description: "Competitor name to compare against"
+        required: true
+      - name: loan_amount
+        type: number
+        description: "Loan amount for comparison"
+        required: false
+        min: 10000.0
+        max: 25000000.0
+
+  capture_lead:
+    name: capture_lead
+    description: "Capture customer lead information for follow-up"
+    parameters:
+      - name: name
+        type: string
+        description: "Customer name"
+        required: true
+      - name: phone
+        type: string
+        description: "Customer phone number"
+        required: true
+      - name: city
+        type: string
+        description: "Customer city"
+        required: false
+      - name: loan_amount_interest
+        type: number
+        description: "Loan amount the customer is interested in"
+        required: false
+      - name: gold_weight
+        type: number
+        description: "Gold weight customer mentioned"
+        required: false
+      - name: current_lender
+        type: string
+        description: "Customer's current lender if any"
+        required: false
+      - name: lead_source
+        type: string
+        description: "Source of the lead"
+        required: false
+        enum: ["voice_agent", "website", "branch_referral", "existing_customer"]
+
+# Tool usage guidelines for the LLM
+usage_guidelines:
+  general: |
+    Only use tools when the customer's request requires specific calculations or data lookup.
+    For general conversation, respond naturally without tools.
+
+  eligibility: |
+    Use check_eligibility when customer asks about loan amount they can get,
+    or wants to know if they qualify for a gold loan.
+
+  savings: |
+    Use calculate_savings when customer mentions their current lender and rate,
+    or asks how much they would save by switching.
+
+  branches: |
+    Use find_branches when customer asks about branch locations or wants to visit.
+
+  callback: |
+    Use schedule_callback when customer requests a callback or wants to be contacted.
+
+  lead_capture: |
+    Use capture_lead at conversation end when customer shows interest and provides contact info.

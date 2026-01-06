@@ -1,0 +1,261 @@
+# Gold Loan Domain - Objection Handling Configuration
+# Defines objection types, detection patterns, and response templates
+
+# Objection types with detection patterns and responses
+objections:
+  safety:
+    display_name: "Safety Concerns"
+    description: "Customer worried about safety or trust"
+    # Patterns for detecting this objection (by language)
+    patterns:
+      en:
+        - "safe"
+        - "trust"
+        - "secure"
+        - "worried"
+        - "fear"
+      hi:
+        - "bharosa"
+        - "surakshit"
+        - "dar"
+        - "डर"
+        - "सुरक्षित"
+        - "भरोसा"
+    # Response components (acknowledge-reframe-evidence-CTA pattern)
+    responses:
+      en:
+        acknowledge: "I completely understand your concern about safety. It's natural to be cautious with something as valuable as gold."
+        reframe: "Actually, keeping gold at a bank is much safer than keeping it at home. Kotak has state-of-the-art vaults with 24/7 security, insurance coverage, and a 70-year track record."
+        evidence: "We have never had a single case of gold loss or theft. Your gold is insured for its full value and stored in RBI-regulated vaults."
+        call_to_action: "Would you like me to explain our security process in more detail?"
+      hi:
+        acknowledge: "मैं आपकी चिंता पूरी तरह समझता/समझती हूं। सोने जैसी कीमती चीज़ के साथ सावधान रहना स्वाभाविक है।"
+        reframe: "असल में, बैंक में सोना रखना घर में रखने से ज़्यादा सुरक्षित है। कोटक के पास अत्याधुनिक वॉल्ट हैं जिनमें 24/7 सुरक्षा, बीमा कवरेज और 70 साल का ट्रैक रिकॉर्ड है।"
+        evidence: "हमारे यहां सोने के नुकसान या चोरी का एक भी मामला नहीं हुआ है। आपका सोना पूरी कीमत के लिए बीमित है और RBI-विनियमित वॉल्ट में रखा जाता है।"
+        call_to_action: "क्या आप चाहेंगे कि मैं हमारी सुरक्षा प्रक्रिया के बारे में और विस्तार से बताऊं?"
+
+  interest_rate:
+    display_name: "Interest Rate Objection"
+    description: "Customer thinks the rate is too high"
+    patterns:
+      en:
+        - "interest"
+        - "rate"
+        - "high"
+        - "expensive"
+        - "costly"
+      hi:
+        - "byaj"
+        - "ब्याज"
+        - "महंगा"
+        - "ज्यादा"
+        - "दर"
+    responses:
+      en:
+        acknowledge: "I hear you - interest rates are definitely an important factor in choosing a lender."
+        reframe: "Here's the thing: our rate at 9.5% for premium customers is actually one of the lowest in the market. NBFCs like Muthoot and Manappuram charge 18-20%."
+        evidence: "On a 5 lakh loan, you'd save approximately ₹3,500 per month compared to Muthoot - that's ₹42,000 per year!"
+        call_to_action: "Shall I calculate the exact savings based on your loan amount?"
+      hi:
+        acknowledge: "मैं समझता/समझती हूं - ब्याज दर लेंडर चुनने में ज़रूरी फैक्टर है।"
+        reframe: "देखिए, प्रीमियम ग्राहकों के लिए हमारी 9.5% दर बाज़ार में सबसे कम में से एक है। Muthoot और Manappuram जैसे NBFC 18-20% चार्ज करते हैं।"
+        evidence: "5 लाख के लोन पर, आप Muthoot की तुलना में लगभग ₹3,500 प्रति माह बचाएंगे - यानी साल में ₹42,000!"
+        call_to_action: "क्या मैं आपकी लोन राशि के आधार पर सटीक बचत की गणना करूं?"
+
+  gold_security:
+    display_name: "Gold Security Concerns"
+    description: "Customer doesn't want to leave their gold"
+    patterns:
+      en:
+        - "my gold"
+        - "leave gold"
+        - "give gold"
+        - "part with"
+      hi:
+        - "मेरा सोना"
+        - "सोना देना"
+        - "छोड़ना"
+    responses:
+      en:
+        acknowledge: "I understand - your gold has emotional and financial value. It's natural to feel protective about it."
+        reframe: "Think of it this way: your gold stays safely with us while you get the funds you need. And when you repay, you get your exact same gold back - every gram, every piece."
+        evidence: "We provide detailed receipts with photos and weight certification. Many customers actually feel relieved knowing their gold is in a secure vault rather than at home."
+        call_to_action: "Would you like to visit our branch and see our vault security firsthand?"
+      hi:
+        acknowledge: "मैं समझता/समझती हूं - आपके सोने की भावनात्मक और आर्थिक दोनों कीमत है। इसके प्रति सुरक्षात्मक महसूस करना स्वाभाविक है।"
+        reframe: "इसे इस तरह सोचिए: आपका सोना हमारे पास सुरक्षित रहता है जबकि आपको ज़रूरी पैसे मिलते हैं। और जब आप चुकाते हैं, तो आपको वही सोना वापस मिलता है - हर ग्राम, हर टुकड़ा।"
+        evidence: "हम फोटो और वजन प्रमाण पत्र के साथ विस्तृत रसीद देते हैं। कई ग्राहक वास्तव में राहत महसूस करते हैं कि उनका सोना घर के बजाय सुरक्षित वॉल्ट में है।"
+        call_to_action: "क्या आप हमारी ब्रांच में आकर हमारी वॉल्ट सुरक्षा खुद देखना चाहेंगे?"
+
+  process_complexity:
+    display_name: "Process Complexity"
+    description: "Customer thinks process is complicated"
+    patterns:
+      en:
+        - "complicated"
+        - "difficult"
+        - "complex"
+        - "time consuming"
+        - "too long"
+      hi:
+        - "मुश्किल"
+        - "कठिन"
+        - "जटिल"
+        - "समय"
+    responses:
+      en:
+        acknowledge: "I completely get it - no one wants to deal with complicated paperwork and long waits."
+        reframe: "That's actually one of our biggest strengths! Kotak's gold loan process is designed to be quick and simple. Just bring your gold and one ID proof."
+        evidence: "Most customers complete the entire process in under 30 minutes. We've done over 1 lakh gold loans this year with an average disbursal time of just 15 minutes."
+        call_to_action: "The process is really straightforward. Would you like me to walk you through the simple steps?"
+      hi:
+        acknowledge: "मैं पूरी तरह समझता/समझती हूं - कोई भी जटिल कागज़ी काम और लंबी प्रतीक्षा नहीं चाहता।"
+        reframe: "यह असल में हमारी सबसे बड़ी ताकत है! कोटक की गोल्ड लोन प्रक्रिया तेज़ और सरल है। बस अपना सोना और एक ID प्रूफ लाइए।"
+        evidence: "ज़्यादातर ग्राहक पूरी प्रक्रिया 30 मिनट से कम में पूरी करते हैं। इस साल हमने 1 लाख से ज़्यादा गोल्ड लोन किए हैं, औसत वितरण समय सिर्फ 15 मिनट।"
+        call_to_action: "प्रक्रिया वास्तव में बहुत सीधी है। क्या मैं आपको सरल चरणों के बारे में बताऊं?"
+
+  need_time:
+    display_name: "Need Time to Decide"
+    description: "Customer wants to think about it"
+    patterns:
+      en:
+        - "think"
+        - "later"
+        - "not now"
+        - "time"
+        - "consider"
+      hi:
+        - "sochna"
+        - "सोचना"
+        - "बाद में"
+        - "अभी नहीं"
+    responses:
+      en:
+        acknowledge: "Of course, taking time to make an informed decision is wise. I respect that."
+        reframe: "However, I should mention that our current promotional rate of 9.5% is valid only till month-end. After that, it goes back to 10.5%."
+        evidence: "On a 3 lakh loan over 12 months, the difference is about ₹3,000. Many customers who waited ended up paying the higher rate."
+        call_to_action: "Would you like me to do a quick eligibility check now? There's no commitment, and you'll have all the information to decide."
+      hi:
+        acknowledge: "बिल्कुल, सोच-समझकर फैसला लेना समझदारी है। मैं इसका सम्मान करता/करती हूं।"
+        reframe: "हालांकि, मुझे बताना चाहिए कि हमारी मौजूदा प्रमोशनल दर 9.5% सिर्फ महीने के अंत तक वैध है। उसके बाद यह वापस 10.5% हो जाएगी।"
+        evidence: "12 महीने के 3 लाख के लोन पर, अंतर लगभग ₹3,000 का है। कई ग्राहक जिन्होंने इंतज़ार किया, उन्हें ऊंची दर देनी पड़ी।"
+        call_to_action: "क्या मैं अभी एक त्वरित पात्रता जांच करूं? कोई प्रतिबद्धता नहीं है, और आपके पास फैसला लेने के लिए सारी जानकारी होगी।"
+
+  current_lender_satisfaction:
+    display_name: "Happy with Current Lender"
+    description: "Customer satisfied with existing lender"
+    patterns:
+      en:
+        - "happy"
+        - "satisfied"
+        - "current"
+        - "already have"
+        - "muthoot"
+        - "manappuram"
+        - "iifl"
+      hi:
+        - "khush"
+        - "खुश"
+        - "संतुष्ट"
+        - "पहले से"
+    responses:
+      en:
+        acknowledge: "That's great that you have a good relationship with your current lender. Loyalty is valuable."
+        reframe: "But have you compared the rates recently? Many customers are surprised to find they're paying 7-8% more than necessary."
+        evidence: "We've helped over 50,000 customers switch from Muthoot and Manappuram this year alone, saving them an average of ₹40,000 annually."
+        call_to_action: "Would you mind sharing your current interest rate? I can quickly show you the potential savings."
+      hi:
+        acknowledge: "यह अच्छी बात है कि आपका अपने मौजूदा लेंडर के साथ अच्छा संबंध है। वफादारी मूल्यवान है।"
+        reframe: "लेकिन क्या आपने हाल ही में दरों की तुलना की है? कई ग्राहक यह जानकर हैरान होते हैं कि वे ज़रूरत से 7-8% ज़्यादा दे रहे हैं।"
+        evidence: "हमने अकेले इस साल Muthoot और Manappuram से 50,000 से ज़्यादा ग्राहकों को स्विच करने में मदद की है, जिससे उन्हें औसतन ₹40,000 सालाना की बचत हुई।"
+        call_to_action: "क्या आप अपनी मौजूदा ब्याज दर बता सकते हैं? मैं जल्दी से संभावित बचत दिखा सकता/सकती हूं।"
+
+  hidden_charges:
+    display_name: "Hidden Charges Concern"
+    description: "Customer worried about hidden fees"
+    patterns:
+      en:
+        - "hidden"
+        - "extra"
+        - "charges"
+        - "fees"
+        - "additional"
+      hi:
+        - "छुपे"
+        - "अतिरिक्त"
+        - "शुल्क"
+    responses:
+      en:
+        acknowledge: "You're absolutely right to ask about this. Transparency is essential, and unfortunately some lenders aren't upfront about fees."
+        reframe: "At Kotak, we're proud of our complete transparency. Our processing fee is just 1%, and there are NO hidden charges - no documentation fee, no valuation fee, no prepayment penalty."
+        evidence: "We provide a complete fee breakdown in writing before you sign anything. In fact, RBI regulations require us to disclose all charges, and we go beyond that with our fee guarantee."
+        call_to_action: "Would you like me to send you our complete fee structure in writing?"
+      hi:
+        acknowledge: "इस बारे में पूछना बिल्कुल सही है। पारदर्शिता ज़रूरी है, और दुर्भाग्य से कुछ लेंडर फीस के बारे में स्पष्ट नहीं होते।"
+        reframe: "कोटक में, हम अपनी पूर्ण पारदर्शिता पर गर्व करते हैं। हमारी प्रोसेसिंग फीस सिर्फ 1% है, और कोई छुपी हुई फीस नहीं है - न डॉक्यूमेंटेशन फीस, न वैल्यूएशन फीस, न प्रीपेमेंट पेनल्टी।"
+        evidence: "हम किसी भी चीज़ पर हस्ताक्षर करने से पहले लिखित में पूर्ण फीस विवरण देते हैं। वास्तव में, RBI नियमों के तहत हमें सभी शुल्क बताने होते हैं, और हम अपनी फीस गारंटी के साथ उससे आगे जाते हैं।"
+        call_to_action: "क्या आप चाहेंगे कि मैं आपको हमारी पूरी फीस संरचना लिखित में भेजूं?"
+
+  documentation:
+    display_name: "Documentation Concerns"
+    description: "Customer worried about paperwork"
+    patterns:
+      en:
+        - "document"
+        - "paper"
+        - "kyc"
+        - "proof"
+      hi:
+        - "kagaz"
+        - "कागज"
+        - "दस्तावेज"
+    responses:
+      en:
+        acknowledge: "I understand - paperwork can feel overwhelming."
+        reframe: "We've simplified everything. You just need your Aadhaar card and the gold you want to pledge. That's it - just one document!"
+        evidence: "We use digital verification which takes just 2 minutes. No multiple copies, no attestation needed."
+        call_to_action: "Do you have your Aadhaar with you? That's literally all you need."
+      hi:
+        acknowledge: "मैं समझता/समझती हूं - कागज़ी काम भारी लग सकता है।"
+        reframe: "हमने सब कुछ सरल कर दिया है। आपको बस आधार कार्ड और वह सोना चाहिए जो आप गिरवी रखना चाहते हैं। बस - सिर्फ एक दस्तावेज!"
+        evidence: "हम डिजिटल वेरिफिकेशन का उपयोग करते हैं जिसमें सिर्फ 2 मिनट लगते हैं। कोई मल्टीपल कॉपी नहीं, कोई अटेस्टेशन नहीं।"
+        call_to_action: "क्या आपके पास आधार है? बस इतना ही चाहिए।"
+
+  trust_issues:
+    display_name: "Bank Trust Issues"
+    description: "Customer doesn't trust banks"
+    patterns:
+      en:
+        - "bank"
+        - "trust"
+        - "believe"
+        - "scam"
+      hi:
+        - "बैंक"
+        - "भरोसा"
+        - "विश्वास"
+    responses:
+      en:
+        acknowledge: "I understand your hesitation. Trust has to be earned, and banks haven't always made that easy."
+        reframe: "Kotak Mahindra Bank is an RBI-regulated bank with 35+ years of history and 3.5 crore customers. We're not a small finance company - we're one of India's largest private banks."
+        evidence: "Our gold loan customers have given us a 4.5-star rating. We've disbursed over ₹25,000 crores in gold loans with zero complaints to RBI's Banking Ombudsman."
+        call_to_action: "Would you feel more comfortable visiting our branch first to see our operations?"
+      hi:
+        acknowledge: "मैं आपकी झिझक समझता/समझती हूं। भरोसा कमाना होता है, और बैंकों ने हमेशा यह आसान नहीं किया है।"
+        reframe: "कोटक महिंद्रा बैंक एक RBI-विनियमित बैंक है जिसका 35+ साल का इतिहास और 3.5 करोड़ ग्राहक हैं। हम कोई छोटी फाइनेंस कंपनी नहीं - हम भारत के सबसे बड़े प्राइवेट बैंकों में से एक हैं।"
+        evidence: "हमारे गोल्ड लोन ग्राहकों ने हमें 4.5-स्टार रेटिंग दी है। हमने ₹25,000 करोड़ से ज़्यादा गोल्ड लोन वितरित किए हैं, RBI के बैंकिंग ओम्बड्समैन में शून्य शिकायतों के साथ।"
+        call_to_action: "क्या आप पहले हमारी ब्रांच देखने में ज़्यादा comfortable महसूस करेंगे?"
+
+# Default objection for unrecognized concerns
+default_objection:
+  responses:
+    en:
+      acknowledge: "I appreciate you sharing your concern with me."
+      reframe: "Let me address that for you."
+      evidence: "At Kotak, we're committed to providing the best service and value."
+      call_to_action: "What specific aspect would you like me to explain in more detail?"
+    hi:
+      acknowledge: "आपकी चिंता साझा करने के लिए धन्यवाद।"
+      reframe: "मुझे इसे आपके लिए स्पष्ट करने दीजिए।"
+      evidence: "कोटक में, हम सर्वोत्तम सेवा और मूल्य प्रदान करने के लिए प्रतिबद्ध हैं।"
+      call_to_action: "आप किस पहलू के बारे में विस्तार से जानना चाहेंगे?"

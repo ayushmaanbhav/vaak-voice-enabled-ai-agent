@@ -10,9 +10,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::ConfigError;
+use super::objections::ObjectionsConfig;
+use super::prompts::PromptsConfig;
 use super::scoring::ScoringConfig;
 use super::slots::SlotsConfig;
 use super::stages::StagesConfig;
+use super::tools::ToolsConfig;
 
 /// Brand configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -139,6 +142,15 @@ pub struct MasterDomainConfig {
     /// Lead scoring configuration (loaded from scoring.yaml)
     #[serde(skip)]
     pub scoring: ScoringConfig,
+    /// Tool schemas for LLM function calling (loaded from tools/schemas.yaml)
+    #[serde(skip)]
+    pub tools: ToolsConfig,
+    /// Prompt templates (loaded from prompts/system.yaml)
+    #[serde(skip)]
+    pub prompts: PromptsConfig,
+    /// Objection handling configuration (loaded from objections.yaml)
+    #[serde(skip)]
+    pub objections: ObjectionsConfig,
     /// Raw JSON for dynamic access
     #[serde(skip)]
     raw_config: Option<JsonValue>,
@@ -162,6 +174,9 @@ impl Default for MasterDomainConfig {
             slots: SlotsConfig::default(),
             stages: StagesConfig::default(),
             scoring: ScoringConfig::default(),
+            tools: ToolsConfig::default(),
+            prompts: PromptsConfig::default(),
+            objections: ObjectionsConfig::default(),
             raw_config: None,
         }
     }
@@ -270,6 +285,63 @@ impl MasterDomainConfig {
             }
         } else {
             tracing::debug!("No scoring config found at {:?}", scoring_path);
+        }
+
+        // 8. Load tools configuration (optional)
+        let tools_path = config_dir.join(format!("domains/{}/tools/schemas.yaml", domain_id));
+        if tools_path.exists() {
+            match ToolsConfig::load(&tools_path) {
+                Ok(tools) => {
+                    tracing::info!(
+                        tools_count = tools.tools.len(),
+                        "Loaded tools configuration"
+                    );
+                    config.tools = tools;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load tools config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No tools config found at {:?}", tools_path);
+        }
+
+        // 9. Load prompts configuration (optional)
+        let prompts_path = config_dir.join(format!("domains/{}/prompts/system.yaml", domain_id));
+        if prompts_path.exists() {
+            match PromptsConfig::load(&prompts_path) {
+                Ok(prompts) => {
+                    tracing::info!(
+                        has_system_prompt = !prompts.system_prompt.is_empty(),
+                        "Loaded prompts configuration"
+                    );
+                    config.prompts = prompts;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load prompts config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No prompts config found at {:?}", prompts_path);
+        }
+
+        // 10. Load objections configuration (optional)
+        let objections_path = config_dir.join(format!("domains/{}/objections.yaml", domain_id));
+        if objections_path.exists() {
+            match ObjectionsConfig::load(&objections_path) {
+                Ok(objections) => {
+                    tracing::info!(
+                        objection_types = objections.objections.len(),
+                        "Loaded objections configuration"
+                    );
+                    config.objections = objections;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load objections config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No objections config found at {:?}", objections_path);
         }
 
         tracing::info!(

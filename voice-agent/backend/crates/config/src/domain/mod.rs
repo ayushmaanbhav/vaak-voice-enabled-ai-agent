@@ -9,12 +9,19 @@
 //! raw config into crate-specific terminology.
 
 mod master;
+mod objections;
+mod prompts;
 mod scoring;
 mod slots;
 mod stages;
+mod tools;
 mod views;
 
 pub use master::MasterDomainConfig;
+pub use objections::{
+    ObjectionDefinition, ObjectionResponse, ObjectionsConfig, ObjectionsConfigError,
+};
+pub use prompts::{PromptsConfig, PromptsConfigError};
 pub use scoring::{
     CategoryWeights, ConversionMultipliers, EscalationConfig, QualificationThresholds,
     ScoringConfig, ScoringConfigError, TrustScores,
@@ -25,6 +32,7 @@ pub use slots::{
 pub use stages::{
     StageDefinition, StageRequirements, StagesConfig, StagesConfigError, TransitionTrigger,
 };
+pub use tools::{ToolParameter, ToolSchema, ToolsConfig, ToolsConfigError};
 pub use views::{AgentDomainView, CompetitorInfo, LlmDomainView, ToolsDomainView};
 
 // Re-export legacy DomainConfig for backward compatibility

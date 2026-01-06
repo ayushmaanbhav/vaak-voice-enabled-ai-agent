@@ -5,9 +5,12 @@
 
 use std::sync::Arc;
 
+use super::objections::{ObjectionResponse, ObjectionsConfig};
+use super::prompts::PromptsConfig;
 use super::scoring::{CategoryWeights, EscalationConfig, ScoringConfig};
 use super::slots::{GoalDefinition, SlotDefinition, SlotsConfig};
 use super::stages::{StageDefinition, StagesConfig, TransitionTrigger};
+use super::tools::{ToolSchema, ToolsConfig};
 use super::MasterDomainConfig;
 
 /// View for the agent crate
@@ -232,6 +235,38 @@ impl AgentDomainView {
         let t = &self.config.scoring.qualification_thresholds;
         (t.cold, t.warm, t.hot, t.qualified)
     }
+
+    // ====== Objection Handling Configuration ======
+
+    /// Get the full objections configuration
+    pub fn objections_config(&self) -> &ObjectionsConfig {
+        &self.config.objections
+    }
+
+    /// Detect objection type from text
+    pub fn detect_objection(&self, text: &str, language: &str) -> Option<&str> {
+        self.config.objections.detect_objection(text, language)
+    }
+
+    /// Get objection response for a type and language
+    pub fn objection_response(&self, objection_type: &str, language: &str) -> Option<&ObjectionResponse> {
+        self.config.objections.get_response(objection_type, language)
+    }
+
+    /// Get default objection response for unrecognized concerns
+    pub fn default_objection_response(&self, language: &str) -> Option<&ObjectionResponse> {
+        self.config.objections.get_default_response(language)
+    }
+
+    /// Get all objection type names
+    pub fn objection_types(&self) -> Vec<&str> {
+        self.config.objections.objection_types()
+    }
+
+    /// Build full response text for an objection
+    pub fn build_objection_response(&self, objection_type: &str, language: &str) -> Option<String> {
+        self.config.objections.build_full_response(objection_type, language)
+    }
 }
 
 /// View for the llm crate
@@ -286,6 +321,102 @@ impl LlmDomainView {
     /// Get product variants for tool responses
     pub fn product_names(&self) -> Vec<&str> {
         self.config.products.values().map(|p| p.name.as_str()).collect()
+    }
+
+    // ====== Tool Schema Configuration ======
+
+    /// Get the full tools configuration
+    pub fn tools_config(&self) -> &ToolsConfig {
+        &self.config.tools
+    }
+
+    /// Get a tool schema by name
+    pub fn get_tool(&self, name: &str) -> Option<&ToolSchema> {
+        self.config.tools.get_tool(name)
+    }
+
+    /// Get all tool names
+    pub fn tool_names(&self) -> Vec<&str> {
+        self.config.tools.tool_names()
+    }
+
+    /// Get enabled tool names
+    pub fn enabled_tool_names(&self) -> Vec<&str> {
+        self.config.tools.enabled_tool_names()
+    }
+
+    /// Get all tool schemas as JSON for LLM consumption
+    pub fn tool_schemas_json(&self) -> Vec<serde_json::Value> {
+        self.config.tools.to_json_schemas()
+    }
+
+    /// Get tool usage guideline
+    pub fn tool_guideline(&self, key: &str) -> Option<&str> {
+        self.config.tools.get_guideline(key)
+    }
+
+    /// Get general tool usage guideline
+    pub fn general_tool_guideline(&self) -> Option<&str> {
+        self.config.tools.get_guideline("general")
+    }
+
+    // ====== Prompts Configuration ======
+
+    /// Get the full prompts configuration
+    pub fn prompts_config(&self) -> &PromptsConfig {
+        &self.config.prompts
+    }
+
+    /// Get system prompt template
+    pub fn system_prompt_template(&self) -> &str {
+        &self.config.prompts.system_prompt
+    }
+
+    /// Get language style description
+    pub fn language_style(&self, language: &str) -> &str {
+        self.config.prompts.language_style(language)
+    }
+
+    /// Build persona traits string
+    pub fn build_persona_traits(&self, warmth: f32, empathy: f32, formality: f32, urgency: f32) -> String {
+        self.config.prompts.build_persona_traits(warmth, empathy, formality, urgency)
+    }
+
+    /// Build system prompt with brand and persona
+    pub fn build_system_prompt(
+        &self,
+        persona_traits: &str,
+        language: &str,
+        key_facts: &str,
+    ) -> String {
+        self.config.prompts.build_system_prompt(
+            &self.config.brand.agent_name,
+            &self.config.brand.bank_name,
+            persona_traits,
+            language,
+            key_facts,
+            &self.config.brand.helpline,
+        )
+    }
+
+    /// Build RAG context message
+    pub fn build_rag_context(&self, context: &str) -> String {
+        self.config.prompts.build_rag_context(context)
+    }
+
+    /// Build stage guidance message
+    pub fn build_stage_guidance(&self, guidance: &str) -> String {
+        self.config.prompts.build_stage_guidance(guidance)
+    }
+
+    /// Get response template for scenario and language
+    pub fn response_template(&self, scenario: &str, language: &str) -> Option<&str> {
+        self.config.prompts.response_template(scenario, language)
+    }
+
+    /// Get error template for scenario and language
+    pub fn error_template(&self, scenario: &str, language: &str) -> Option<&str> {
+        self.config.prompts.error_template(scenario, language)
     }
 }
 
