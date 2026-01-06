@@ -59,6 +59,8 @@ pub use voice_agent_text_processing::intent::{
 };
 // P2 FIX: Persuasion engine exports
 pub use agent::GoldLoanAgent;
+/// P5 FIX: Type alias for domain-agnostic naming (GoldLoanAgent is now generic)
+pub type DomainAgent = GoldLoanAgent;
 // P1-SRP: Export agent config types
 pub use agent_config::{
     AgentConfig, AgentEvent, PersonaTraits, SmallModelConfig, SpeculativeDecodingConfig,

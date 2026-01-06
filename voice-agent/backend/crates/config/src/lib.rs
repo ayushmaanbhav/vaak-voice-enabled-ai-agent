@@ -44,6 +44,19 @@ pub use competitor::{
     MonthlySavings, ObjectionHandler, SwitchingBenefits,
 };
 pub use domain::{domain_config, init_domain_config, DomainConfig, DomainConfigManager};
+// P5 FIX: Export new hierarchical domain configuration
+pub use domain::{
+    MasterDomainConfig,
+    // Sub-config types
+    BranchDefaults, BranchEntry, BranchesConfig,
+    ComparisonPoint as DomainComparisonPoint, CompetitorDefaults, CompetitorEntry as DomainCompetitorEntry,
+    CompetitorsConfig, NumericThreshold, ObjectionDefinition, ObjectionResponse, ObjectionsConfig,
+    PromptsConfig, QualificationThresholds, ScoringConfig, SegmentDefinition, SegmentDetection,
+    SegmentsConfig, SlotDefinition, SlotsConfig, SmsTemplatesConfig, StageDefinition, StagesConfig,
+    ToolParameter, ToolSchema, ToolsConfig,
+    // View types
+    AgentDomainView, CompetitorInfo, LlmDomainView, ToolsDomainView,
+};
 pub use product::{
     DigitalFeatures, DocumentationConfig, EligibilityConfig, ExistingCustomerBenefits,
     FeeStructure, FeeType, FeesConfig, GoldPurityRequirements, ProductConfig, ProductFeatures,

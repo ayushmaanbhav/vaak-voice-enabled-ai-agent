@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use voice_agent_config::{load_settings, DomainConfigManager, Settings};
+use voice_agent_config::{load_settings, DomainConfigManager, MasterDomainConfig, Settings};
 use voice_agent_server::{create_router, init_metrics, session::ScyllaSessionStore, AppState};
 
 #[tokio::main]
@@ -41,9 +41,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Configuration loaded"
     );
 
-    // P4 FIX: Load domain configuration
+    // P4 FIX: Load domain configuration (legacy)
     let domain_config = load_domain_config(&config.domain_config_path);
     tracing::info!("Loaded domain configuration");
+
+    // P5 FIX: Load hierarchical domain configuration (new)
+    let master_domain_config = load_master_domain_config("config");
+    tracing::info!(
+        domain = %master_domain_config.domain_id,
+        "Loaded hierarchical domain configuration"
+    );
 
     // P0 FIX: Initialize Prometheus metrics
     let _metrics_handle = init_metrics();
@@ -306,5 +313,35 @@ fn load_domain_config(path: &str) -> DomainConfigManager {
             path.display()
         );
         DomainConfigManager::new()
+    }
+}
+
+/// P5 FIX: Load hierarchical domain configuration from YAML files
+///
+/// Loads the new MasterDomainConfig from config/domains/{domain_id}/ directory.
+/// This provides the hierarchical config structure for domain abstraction.
+fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
+    let domain_id = std::env::var("DOMAIN_ID").unwrap_or_else(|_| "gold_loan".to_string());
+    let config_path = Path::new(config_dir);
+
+    match MasterDomainConfig::load(&domain_id, config_path) {
+        Ok(config) => {
+            tracing::info!(
+                domain_id = %config.domain_id,
+                display_name = %config.display_name,
+                slots_count = config.slots.slots.len(),
+                stages_count = config.stages.stages.len(),
+                "Loaded hierarchical domain configuration"
+            );
+            Arc::new(config)
+        }
+        Err(e) => {
+            tracing::warn!(
+                domain_id = %domain_id,
+                error = %e,
+                "Failed to load hierarchical domain config. Using defaults."
+            );
+            Arc::new(MasterDomainConfig::default())
+        }
     }
 }
