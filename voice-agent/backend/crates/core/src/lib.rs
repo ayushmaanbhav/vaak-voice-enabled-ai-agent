@@ -31,7 +31,7 @@ pub mod personalization;
 // Re-exports from existing modules
 pub use audio::{AudioEncoding, AudioFrame, Channels, SampleRate};
 pub use conversation::{ConversationStage, Turn, TurnRole};
-pub use customer::{CustomerProfile, CustomerSegment, SegmentDetector};
+pub use customer::{CustomerProfile, CustomerSegment, SegmentDetector, CompanyRelationship};
 pub use error::{Error, Result};
 pub use transcript::{TranscriptResult, WordTimestamp};
 
@@ -87,6 +87,11 @@ pub use traits::{
     TextProcessor,
     TextProcessorResult,
     TextToSpeech,
+    // P13 FIX: ToolFactory trait for domain-agnostic tool creation
+    ToolFactory,
+    ToolFactoryError,
+    ToolFactoryRegistry,
+    ToolMetadata,
     TransitionRecord,
     Translator,
     VADConfig,
@@ -99,6 +104,7 @@ pub use traits::{
 // Personalization re-exports
 pub use personalization::{
     BehaviorSignal,
+    // Adaptation types
     Feature,
     LanguageComplexity,
     Objection,
@@ -117,4 +123,11 @@ pub use personalization::{
     SignalDetector,
     Tone,
     TrendAnalysis,
+};
+
+// Domain type aliases re-exports
+pub use domain::{
+    CustomerSignals, FeatureId, GoalDefinition, ObjectionId, Pattern, PatternType, ResponseTemplate,
+    ScoringThresholds, ScoringWeights, SegmentId, SlotDefinition, SlotId, SlotType, SlotValidation,
+    StageId, ToolId,
 };

@@ -674,17 +674,24 @@ mod tests {
 
     #[test]
     fn test_tool_conversion() {
-        use crate::prompt::{gold_loan_tools, ToolBuilder};
+        use crate::prompt::ToolBuilder;
 
-        // Test with actual gold loan tools
-        let tools = gold_loan_tools();
-        assert!(!tools.is_empty());
+        // P16 FIX: Create tool with ToolBuilder instead of hardcoded gold_loan_tools()
+        let tool = ToolBuilder::new("check_eligibility", "Check loan eligibility")
+            .param("weight", "number", "Weight in grams", true)
+            .param("purity", "string", "Purity level", false)
+            .string_enum("purity", &["24K", "22K", "18K", "14K"])
+            .build();
 
         // Verify structure matches Claude API expectations
-        let tool = &tools[0];
         assert!(!tool.name.is_empty());
         assert!(!tool.description.is_empty());
         assert!(tool.parameters.is_object());
+
+        // Verify parameters have proper structure
+        let props = tool.parameters.get("properties").unwrap();
+        assert!(props.get("weight").is_some());
+        assert!(props.get("purity").is_some());
     }
 
     #[test]

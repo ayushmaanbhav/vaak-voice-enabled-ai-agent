@@ -215,24 +215,32 @@ impl HindiG2p {
         self.roman_to_devanagari.insert("sa", "स");
         self.roman_to_devanagari.insert("ha", "ह");
 
-        // Common English words for code-mixed text (gold loan domain)
-        self.english_phonemes.insert("gold", "ɡoʊld");
-        self.english_phonemes.insert("loan", "loʊn");
+        // Common English words for code-mixed text (generic finance terms)
+        // Domain-specific terms should be added via config
         self.english_phonemes.insert("interest", "ˈɪntərəst");
         self.english_phonemes.insert("rate", "reɪt");
-        self.english_phonemes.insert("bank", "bæŋk");
         self.english_phonemes.insert("branch", "bræntʃ");
         self.english_phonemes.insert("apply", "əˈplaɪ");
         self.english_phonemes.insert("amount", "əˈmaʊnt");
         self.english_phonemes.insert("rupees", "ruːˈpiːz");
         self.english_phonemes.insert("percent", "pərˈsɛnt");
-        self.english_phonemes.insert("emi", "iːɛmˈaɪ");
         self.english_phonemes.insert("processing", "ˈprɒsɛsɪŋ");
         self.english_phonemes.insert("fee", "fiː");
-        self.english_phonemes.insert("kotak", "koːˈtək");
-        self.english_phonemes.insert("mahindra", "məˈhɪndrə");
-        self.english_phonemes.insert("muthoot", "muːˈtuːt");
-        self.english_phonemes.insert("manappuram", "mənˈæpʊrəm");
+        self.english_phonemes.insert("service", "ˈsɜːrvɪs");
+        self.english_phonemes.insert("account", "əˈkaʊnt");
+        self.english_phonemes.insert("payment", "ˈpeɪmənt");
+    }
+
+    /// Add domain-specific phonemes from config
+    ///
+    /// Note: This leaks the strings intentionally since they're loaded once
+    /// at startup and persist for the lifetime of the application.
+    pub fn add_domain_phonemes(&mut self, phonemes: std::collections::HashMap<String, String>) {
+        for (word, ipa) in phonemes {
+            let word_static: &'static str = Box::leak(word.into_boxed_str());
+            let ipa_static: &'static str = Box::leak(ipa.into_boxed_str());
+            self.english_phonemes.insert(word_static, ipa_static);
+        }
     }
 
     /// Convert text to phonemes
@@ -531,7 +539,7 @@ mod tests {
     fn test_english_word() {
         let g2p = create_hindi_g2p();
 
-        let phonemes = g2p.convert("gold loan").unwrap();
+        let phonemes = g2p.convert("interest rate").unwrap();
         assert!(!phonemes.is_empty());
     }
 
@@ -539,8 +547,8 @@ mod tests {
     fn test_mixed_text() {
         let g2p = create_hindi_g2p();
 
-        // Mixed Hindi-English: "मुझे gold loan चाहिए"
-        let phonemes = g2p.convert("मुझे gold loan चाहिए").unwrap();
+        // Mixed Hindi-English: "मुझे service चाहिए"
+        let phonemes = g2p.convert("मुझे service चाहिए").unwrap();
         assert!(!phonemes.is_empty());
     }
 
@@ -549,7 +557,7 @@ mod tests {
         let g2p = create_hindi_g2p();
 
         let phonemes = g2p
-            .convert("kya aap mujhe gold loan de sakte hain")
+            .convert("kya aap mujhe help kar sakte hain")
             .unwrap();
         assert!(!phonemes.is_empty());
     }

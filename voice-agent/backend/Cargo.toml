@@ -126,3 +126,4 @@ opt-level = 1
 [profile.bench]
 lto = "thin"
 codegen-units = 1
+

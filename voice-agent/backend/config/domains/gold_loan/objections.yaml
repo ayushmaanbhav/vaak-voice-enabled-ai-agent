@@ -1,5 +1,8 @@
 # Gold Loan Domain - Objection Handling Configuration
 # Defines objection types, detection patterns, and response templates
+#
+# BRAND VARIABLES: Use {brand.bank_name}, {brand.product_name} for substitution.
+# These will be replaced at runtime with actual values from domain.yaml brand config.
 
 # Objection types with detection patterns and responses
 objections:
@@ -25,12 +28,12 @@ objections:
     responses:
       en:
         acknowledge: "I completely understand your concern about safety. It's natural to be cautious with something as valuable as gold."
-        reframe: "Actually, keeping gold at a bank is much safer than keeping it at home. Kotak has state-of-the-art vaults with 24/7 security, insurance coverage, and a 70-year track record."
+        reframe: "Actually, keeping gold at a bank is much safer than keeping it at home. {brand.bank_name} has state-of-the-art vaults with 24/7 security, insurance coverage, and a 70-year track record."
         evidence: "We have never had a single case of gold loss or theft. Your gold is insured for its full value and stored in RBI-regulated vaults."
         call_to_action: "Would you like me to explain our security process in more detail?"
       hi:
         acknowledge: "मैं आपकी चिंता पूरी तरह समझता/समझती हूं। सोने जैसी कीमती चीज़ के साथ सावधान रहना स्वाभाविक है।"
-        reframe: "असल में, बैंक में सोना रखना घर में रखने से ज़्यादा सुरक्षित है। कोटक के पास अत्याधुनिक वॉल्ट हैं जिनमें 24/7 सुरक्षा, बीमा कवरेज और 70 साल का ट्रैक रिकॉर्ड है।"
+        reframe: "असल में, बैंक में सोना रखना घर में रखने से ज़्यादा सुरक्षित है। {brand.bank_name} के पास अत्याधुनिक वॉल्ट हैं जिनमें 24/7 सुरक्षा, बीमा कवरेज और 70 साल का ट्रैक रिकॉर्ड है।"
         evidence: "हमारे यहां सोने के नुकसान या चोरी का एक भी मामला नहीं हुआ है। आपका सोना पूरी कीमत के लिए बीमित है और RBI-विनियमित वॉल्ट में रखा जाता है।"
         call_to_action: "क्या आप चाहेंगे कि मैं हमारी सुरक्षा प्रक्रिया के बारे में और विस्तार से बताऊं?"
 
@@ -105,12 +108,12 @@ objections:
     responses:
       en:
         acknowledge: "I completely get it - no one wants to deal with complicated paperwork and long waits."
-        reframe: "That's actually one of our biggest strengths! Kotak's gold loan process is designed to be quick and simple. Just bring your gold and one ID proof."
+        reframe: "That's actually one of our biggest strengths! {brand.bank_name}'s {brand.product_name} process is designed to be quick and simple. Just bring your gold and one ID proof."
         evidence: "Most customers complete the entire process in under 30 minutes. We've done over 1 lakh gold loans this year with an average disbursal time of just 15 minutes."
         call_to_action: "The process is really straightforward. Would you like me to walk you through the simple steps?"
       hi:
         acknowledge: "मैं पूरी तरह समझता/समझती हूं - कोई भी जटिल कागज़ी काम और लंबी प्रतीक्षा नहीं चाहता।"
-        reframe: "यह असल में हमारी सबसे बड़ी ताकत है! कोटक की गोल्ड लोन प्रक्रिया तेज़ और सरल है। बस अपना सोना और एक ID प्रूफ लाइए।"
+        reframe: "यह असल में हमारी सबसे बड़ी ताकत है! {brand.bank_name} की {brand.product_name} प्रक्रिया तेज़ और सरल है। बस अपना सोना और एक ID प्रूफ लाइए।"
         evidence: "ज़्यादातर ग्राहक पूरी प्रक्रिया 30 मिनट से कम में पूरी करते हैं। इस साल हमने 1 लाख से ज़्यादा गोल्ड लोन किए हैं, औसत वितरण समय सिर्फ 15 मिनट।"
         call_to_action: "प्रक्रिया वास्तव में बहुत सीधी है। क्या मैं आपको सरल चरणों के बारे में बताऊं?"
 
@@ -187,12 +190,12 @@ objections:
     responses:
       en:
         acknowledge: "You're absolutely right to ask about this. Transparency is essential, and unfortunately some lenders aren't upfront about fees."
-        reframe: "At Kotak, we're proud of our complete transparency. Our processing fee is just 1%, and there are NO hidden charges - no documentation fee, no valuation fee, no prepayment penalty."
+        reframe: "At {brand.bank_name}, we're proud of our complete transparency. Our processing fee is just 1%, and there are NO hidden charges - no documentation fee, no valuation fee, no prepayment penalty."
         evidence: "We provide a complete fee breakdown in writing before you sign anything. In fact, RBI regulations require us to disclose all charges, and we go beyond that with our fee guarantee."
         call_to_action: "Would you like me to send you our complete fee structure in writing?"
       hi:
         acknowledge: "इस बारे में पूछना बिल्कुल सही है। पारदर्शिता ज़रूरी है, और दुर्भाग्य से कुछ लेंडर फीस के बारे में स्पष्ट नहीं होते।"
-        reframe: "कोटक में, हम अपनी पूर्ण पारदर्शिता पर गर्व करते हैं। हमारी प्रोसेसिंग फीस सिर्फ 1% है, और कोई छुपी हुई फीस नहीं है - न डॉक्यूमेंटेशन फीस, न वैल्यूएशन फीस, न प्रीपेमेंट पेनल्टी।"
+        reframe: "{brand.bank_name} में, हम अपनी पूर्ण पारदर्शिता पर गर्व करते हैं। हमारी प्रोसेसिंग फीस सिर्फ 1% है, और कोई छुपी हुई फीस नहीं है - न डॉक्यूमेंटेशन फीस, न वैल्यूएशन फीस, न प्रीपेमेंट पेनल्टी।"
         evidence: "हम किसी भी चीज़ पर हस्ताक्षर करने से पहले लिखित में पूर्ण फीस विवरण देते हैं। वास्तव में, RBI नियमों के तहत हमें सभी शुल्क बताने होते हैं, और हम अपनी फीस गारंटी के साथ उससे आगे जाते हैं।"
         call_to_action: "क्या आप चाहेंगे कि मैं आपको हमारी पूरी फीस संरचना लिखित में भेजूं?"
 
@@ -237,13 +240,13 @@ objections:
     responses:
       en:
         acknowledge: "I understand your hesitation. Trust has to be earned, and banks haven't always made that easy."
-        reframe: "Kotak Mahindra Bank is an RBI-regulated bank with 35+ years of history and 3.5 crore customers. We're not a small finance company - we're one of India's largest private banks."
-        evidence: "Our gold loan customers have given us a 4.5-star rating. We've disbursed over ₹25,000 crores in gold loans with zero complaints to RBI's Banking Ombudsman."
+        reframe: "{brand.bank_name} is an RBI-regulated bank with 35+ years of history and 3.5 crore customers. We're not a small finance company - we're one of India's largest private banks."
+        evidence: "Our {brand.product_name} customers have given us a 4.5-star rating. We've disbursed over ₹25,000 crores in gold loans with zero complaints to RBI's Banking Ombudsman."
         call_to_action: "Would you feel more comfortable visiting our branch first to see our operations?"
       hi:
         acknowledge: "मैं आपकी झिझक समझता/समझती हूं। भरोसा कमाना होता है, और बैंकों ने हमेशा यह आसान नहीं किया है।"
-        reframe: "कोटक महिंद्रा बैंक एक RBI-विनियमित बैंक है जिसका 35+ साल का इतिहास और 3.5 करोड़ ग्राहक हैं। हम कोई छोटी फाइनेंस कंपनी नहीं - हम भारत के सबसे बड़े प्राइवेट बैंकों में से एक हैं।"
-        evidence: "हमारे गोल्ड लोन ग्राहकों ने हमें 4.5-स्टार रेटिंग दी है। हमने ₹25,000 करोड़ से ज़्यादा गोल्ड लोन वितरित किए हैं, RBI के बैंकिंग ओम्बड्समैन में शून्य शिकायतों के साथ।"
+        reframe: "{brand.bank_name} एक RBI-विनियमित बैंक है जिसका 35+ साल का इतिहास और 3.5 करोड़ ग्राहक हैं। हम कोई छोटी फाइनेंस कंपनी नहीं - हम भारत के सबसे बड़े प्राइवेट बैंकों में से एक हैं।"
+        evidence: "हमारे {brand.product_name} ग्राहकों ने हमें 4.5-स्टार रेटिंग दी है। हमने ₹25,000 करोड़ से ज़्यादा गोल्ड लोन वितरित किए हैं, RBI के बैंकिंग ओम्बड्समैन में शून्य शिकायतों के साथ।"
         call_to_action: "क्या आप पहले हमारी ब्रांच देखने में ज़्यादा comfortable महसूस करेंगे?"
 
 # Default objection for unrecognized concerns
@@ -252,10 +255,10 @@ default_objection:
     en:
       acknowledge: "I appreciate you sharing your concern with me."
       reframe: "Let me address that for you."
-      evidence: "At Kotak, we're committed to providing the best service and value."
+      evidence: "At {brand.bank_name}, we're committed to providing the best service and value."
       call_to_action: "What specific aspect would you like me to explain in more detail?"
     hi:
       acknowledge: "आपकी चिंता साझा करने के लिए धन्यवाद।"
       reframe: "मुझे इसे आपके लिए स्पष्ट करने दीजिए।"
-      evidence: "कोटक में, हम सर्वोत्तम सेवा और मूल्य प्रदान करने के लिए प्रतिबद्ध हैं।"
+      evidence: "{brand.bank_name} में, हम सर्वोत्तम सेवा और मूल्य प्रदान करने के लिए प्रतिबद्ध हैं।"
       call_to_action: "आप किस पहलू के बारे में विस्तार से जानना चाहेंगे?"

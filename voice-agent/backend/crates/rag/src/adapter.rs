@@ -13,8 +13,8 @@ use voice_agent_core::{
 
 use crate::{
     // P2-1 FIX: Use QueryContext (renamed from ConversationContext)
-    agentic::QueryContext as RagContext, AgenticRetriever, DomainBooster, HybridRetriever,
-    QueryExpander, SearchResult, VectorStore,
+    agentic::QueryContext as RagContext, AgenticRetriever, DomainBoostConfig, DomainBooster,
+    HybridRetriever, QueryExpander, QueryExpansionConfig, SearchResult, VectorStore,
 };
 
 /// Enhanced retriever implementing the core Retriever trait
@@ -79,6 +79,10 @@ struct PrefetchResult {
 
 impl EnhancedRetriever {
     /// Create a new enhanced retriever
+    ///
+    /// NOTE: This creates an instance with empty expander and booster.
+    /// Use `with_expander()` and `with_booster()` to configure domain-specific
+    /// behavior from config.
     pub fn new(
         hybrid: Arc<HybridRetriever>,
         vector_store: Arc<VectorStore>,
@@ -88,8 +92,30 @@ impl EnhancedRetriever {
             hybrid,
             agentic: None,
             vector_store,
-            expander: QueryExpander::gold_loan(),
-            booster: DomainBooster::gold_loan(),
+            expander: QueryExpander::new(QueryExpansionConfig::default()),
+            booster: DomainBooster::new(DomainBoostConfig::default()),
+            prefetch_cache: Mutex::new(None),
+            config,
+        }
+    }
+
+    /// Create a new enhanced retriever with domain-specific components
+    ///
+    /// This is the preferred constructor for production use with config-driven
+    /// expander and booster.
+    pub fn with_domain_components(
+        hybrid: Arc<HybridRetriever>,
+        vector_store: Arc<VectorStore>,
+        config: EnhancedRetrieverConfig,
+        expander: QueryExpander,
+        booster: DomainBooster,
+    ) -> Self {
+        Self {
+            hybrid,
+            agentic: None,
+            vector_store,
+            expander,
+            booster,
             prefetch_cache: Mutex::new(None),
             config,
         }
@@ -308,8 +334,7 @@ impl Retriever for EnhancedRetriever {
         }
         drop(prefetch_cache);
 
-        let expander = QueryExpander::gold_loan();
-        let expanded = expander.expand_to_string(&partial);
+        let expanded = self.expander.expand_to_string(&partial);
 
         // Spawn async prefetch task
         let cache_ref = Arc::new(Mutex::new(None::<PrefetchResult>));
@@ -358,6 +383,24 @@ impl Retriever for EnhancedRetriever {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    /// Create a test fixture expander with sample data
+    fn test_expander() -> QueryExpander {
+        let synonyms: HashMap<String, Vec<String>> = vec![
+            ("gold", vec!["sona", "swarna"]),
+            ("loan", vec!["karza", "rin"]),
+            ("rate", vec!["byaj", "dar"]),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+        .collect();
+
+        let transliterations: HashMap<String, Vec<String>> = HashMap::new();
+        let stopwords = vec!["the".to_string(), "a".to_string()];
+
+        QueryExpander::from_domain_config("test", stopwords, synonyms, transliterations)
+    }
 
     #[test]
     fn test_config_default() {
@@ -369,8 +412,8 @@ mod tests {
 
     #[test]
     fn test_query_expansion_processing() {
-        // Test QueryExpander directly without needing full retriever setup
-        let expander = QueryExpander::gold_loan();
+        // Test QueryExpander with test fixture
+        let expander = test_expander();
         let processed = expander.expand_to_string("gold loan rate");
 
         // Should include expansions

@@ -119,25 +119,26 @@ pub struct HybridRetriever {
 
 impl HybridRetriever {
     /// Create a new hybrid retriever
+    ///
+    /// NOTE: Query expansion starts disabled. Use `with_query_expander()` to
+    /// enable with a config-driven expander.
     pub fn new(config: RetrieverConfig, reranker_config: RerankerConfig) -> Self {
-        // P1 FIX: Create query expander if expansion is enabled
-        let query_expander = if config.query_expansion_enabled {
-            Some(QueryExpander::gold_loan())
-        } else {
-            None
-        };
-
+        // Query expander starts as None - caller must set it via with_query_expander()
+        // This ensures all domain data comes from config, not hardcoded defaults
         Self {
             config,
             embedder: Some(Arc::new(SimpleEmbedder::new(EmbeddingConfig::default()))),
             sparse_index: None,
             reranker_config,
             reranker: None, // Will use SimpleScorer fallback if not set
-            query_expander,
+            query_expander: None,
         }
     }
 
-    /// P1 FIX: Set a custom query expander
+    /// Set a custom query expander (config-driven)
+    ///
+    /// This is the preferred way to enable query expansion - create the expander
+    /// from domain configuration, then pass it here.
     pub fn with_query_expander(mut self, expander: QueryExpander) -> Self {
         self.query_expander = Some(expander);
         self

@@ -7,69 +7,79 @@
 
 use super::DomainAgent;
 use crate::agent_config::AgentEvent;
+use crate::dst::DialogueStateTrait;
 use crate::AgentError;
 use voice_agent_tools::ToolExecutor;
 
 impl DomainAgent {
     /// Maybe call a tool based on intent
+    /// P16 FIX: Now uses config-driven intent-to-tool mappings
     pub(super) async fn maybe_call_tool(
         &self,
         intent: &crate::intent::DetectedIntent,
     ) -> Result<Option<String>, AgentError> {
-        let tool_name = match intent.intent.as_str() {
-            "eligibility_check" => {
-                // Check if we have required slots
-                if intent.slots.contains_key("gold_weight") {
-                    Some("check_eligibility")
+        // Collect available slot names
+        let available_slots: Vec<&str> = intent.slots.keys().map(|s| s.as_str()).collect();
+
+        // P16 FIX: Try config-driven intent-to-tool resolution first
+        let tool_name = self.domain_view
+            .as_ref()
+            .and_then(|view| {
+                if view.has_intent_mappings() {
+                    view.resolve_tool_for_intent(&intent.intent, &available_slots)
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
-            }
-            "switch_lender" => {
-                if intent.slots.contains_key("current_lender") {
-                    Some("calculate_savings")
-                } else {
-                    None
+            })
+            .or_else(|| {
+                // Legacy fallback mappings (used when no config mappings)
+                match intent.intent.as_str() {
+                    "eligibility_check" => {
+                        if intent.slots.contains_key("gold_weight") {
+                            Some("check_eligibility".to_string())
+                        } else {
+                            None
+                        }
+                    }
+                    "switch_lender" => {
+                        if intent.slots.contains_key("current_lender") {
+                            Some("calculate_savings".to_string())
+                        } else {
+                            None
+                        }
+                    }
+                    "schedule_visit" => Some("find_locations".to_string()),
+                    "capture_lead" | "interested" | "callback_request" => {
+                        if intent.slots.contains_key("customer_name")
+                            || intent.slots.contains_key("phone_number")
+                        {
+                            Some("capture_lead".to_string())
+                        } else {
+                            None
+                        }
+                    }
+                    "schedule_appointment" | "book_appointment" | "visit_branch" => {
+                        if intent.slots.contains_key("preferred_date")
+                            || intent.slots.contains_key("branch_id")
+                        {
+                            Some("schedule_appointment".to_string())
+                        } else {
+                            Some("find_locations".to_string())
+                        }
+                    }
+                    "gold_price" | "check_gold_price" | "price_inquiry" | "current_rate" => {
+                        Some("get_price".to_string())
+                    }
+                    "escalate" | "human_agent" | "speak_to_person" | "talk_to_human" | "real_person" => {
+                        Some("escalate_to_human".to_string())
+                    }
+                    "send_sms" | "send_message" | "text_me" | "send_details" | "sms_info" => {
+                        Some("send_sms".to_string())
+                    }
+                    _ => None,
                 }
-            }
-            "schedule_visit" => Some("find_branches"),
-            // P4 FIX: Add intent mappings for CRM/Calendar integrations
-            "capture_lead" | "interested" | "callback_request" => {
-                // Capture lead when customer shows interest
-                if intent.slots.contains_key("customer_name")
-                    || intent.slots.contains_key("phone_number")
-                {
-                    Some("capture_lead")
-                } else {
-                    None
-                }
-            }
-            "schedule_appointment" | "book_appointment" | "visit_branch" => {
-                // Schedule appointment when customer wants to visit
-                if intent.slots.contains_key("preferred_date")
-                    || intent.slots.contains_key("branch_id")
-                {
-                    Some("schedule_appointment")
-                } else {
-                    // If no specific date/branch, first find branches
-                    Some("find_branches")
-                }
-            }
-            // P1 FIX: Add missing tool intent mappings
-            "gold_price" | "check_gold_price" | "price_inquiry" | "current_rate" => {
-                // Gold price inquiry - no required slots
-                Some("get_gold_price")
-            }
-            "escalate" | "human_agent" | "speak_to_person" | "talk_to_human" | "real_person" => {
-                // Escalation to human agent - no required slots
-                Some("escalate_to_human")
-            }
-            "send_sms" | "send_message" | "text_me" | "send_details" | "sms_info" => {
-                // Send SMS - phone_number slot is optional (can use customer's registered number)
-                Some("send_sms")
-            }
-            _ => None,
-        };
+            });
 
         if let Some(name) = tool_name {
             let _ = self.event_tx.send(AgentEvent::ToolCall {
@@ -178,7 +188,7 @@ impl DomainAgent {
 
             let result = self
                 .tools
-                .execute(name, serde_json::Value::Object(args))
+                .execute(&name, serde_json::Value::Object(args))
                 .await;
 
             let success = result.is_ok();
@@ -239,6 +249,7 @@ impl DomainAgent {
             let state = dst.state();
 
             // Map DST slot names to tool argument names
+            // Uses generic get_slot_value() for domain-agnostic slot access
             if let Some(val) = state.customer_name() {
                 args.entry("customer_name".to_string())
                     .or_insert(serde_json::json!(val));
@@ -251,29 +262,29 @@ impl DomainAgent {
                 args.entry("city".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.gold_weight_grams() {
+            if let Some(val) = state.get_slot_value("gold_weight") {
                 args.entry("gold_weight".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.gold_purity() {
+            if let Some(val) = state.get_slot_value("gold_purity") {
                 args.entry("gold_purity".to_string())
-                    .or_insert(serde_json::json!(val.to_string()));
+                    .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.loan_amount() {
+            if let Some(val) = state.get_slot_value("loan_amount") {
                 args.entry("loan_amount".to_string())
                     .or_insert(serde_json::json!(val));
                 args.entry("current_loan_amount".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.current_lender() {
+            if let Some(val) = state.get_slot_value("current_lender") {
                 args.entry("current_lender".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.current_interest_rate() {
+            if let Some(val) = state.get_slot_value("current_interest_rate") {
                 args.entry("current_interest_rate".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.loan_tenure() {
+            if let Some(val) = state.get_slot_value("loan_tenure") {
                 args.entry("remaining_tenure_months".to_string())
                     .or_insert(serde_json::json!(val));
             }

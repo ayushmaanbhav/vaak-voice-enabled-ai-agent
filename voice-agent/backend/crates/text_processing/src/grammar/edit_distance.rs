@@ -37,38 +37,37 @@ pub struct EditDistanceCorrector {
 }
 
 impl EditDistanceCorrector {
-    /// Create a new corrector with domain vocabulary
-    pub fn new(vocabulary: Vec<String>, config: EditDistanceConfig) -> Self {
+    /// Create a new empty corrector
+    ///
+    /// NOTE: This creates an empty corrector with no vocabulary or phonetic rules.
+    /// Use `from_domain_config()` for production use with config-driven data.
+    pub fn new(config: EditDistanceConfig) -> Self {
+        Self {
+            vocabulary: HashMap::new(),
+            phonetic_map: HashMap::new(),
+            config,
+        }
+    }
+
+    /// Create corrector from domain configuration
+    ///
+    /// This is the preferred way to create an EditDistanceCorrector - all values
+    /// come from config files rather than hardcoded defaults.
+    ///
+    /// # Arguments
+    /// * `vocabulary` - Domain-specific terms to correct towards
+    /// * `phonetic_map` - ASR error corrections (misspelling -> correct)
+    /// * `config` - Configuration settings
+    pub fn from_domain_config(
+        vocabulary: Vec<String>,
+        phonetic_map: HashMap<String, String>,
+        config: EditDistanceConfig,
+    ) -> Self {
         let mut vocab_map = HashMap::new();
         for term in vocabulary {
             // Store as lowercase for matching, keep original for output
             vocab_map.insert(term.to_lowercase(), term);
         }
-
-        // Common ASR phonetic substitutions for gold loan domain
-        let mut phonetic_map = HashMap::new();
-        // "alone" -> "loan" (very common ASR error)
-        phonetic_map.insert("alone".to_string(), "loan".to_string());
-        phonetic_map.insert("along".to_string(), "loan".to_string());
-        // "kotuk/kotek/kodak" -> "Kotak"
-        phonetic_map.insert("kotuk".to_string(), "Kotak".to_string());
-        phonetic_map.insert("kotek".to_string(), "Kotak".to_string());
-        phonetic_map.insert("kodak".to_string(), "Kotak".to_string());
-        phonetic_map.insert("kotac".to_string(), "Kotak".to_string());
-        // "lone/long" -> "loan"
-        phonetic_map.insert("lone".to_string(), "loan".to_string());
-        phonetic_map.insert("long".to_string(), "loan".to_string());
-        // "gol" -> "gold"
-        phonetic_map.insert("gol".to_string(), "gold".to_string());
-        phonetic_map.insert("gould".to_string(), "gold".to_string());
-        // "intrst" -> "interest"
-        phonetic_map.insert("intrst".to_string(), "interest".to_string());
-        phonetic_map.insert("intrest".to_string(), "interest".to_string());
-        // "emi/amy" -> "EMI"
-        phonetic_map.insert("amy".to_string(), "EMI".to_string());
-        phonetic_map.insert("emy".to_string(), "EMI".to_string());
-        // Common sentence start confusion
-        phonetic_map.insert("why".to_string(), "I".to_string());
 
         Self {
             vocabulary: vocab_map,
@@ -77,38 +76,16 @@ impl EditDistanceCorrector {
         }
     }
 
-    /// Create corrector with gold loan domain vocabulary
-    pub fn gold_loan() -> Self {
-        let vocabulary = vec![
-            "gold".to_string(),
-            "loan".to_string(),
-            "gold loan".to_string(),
-            "Kotak".to_string(),
-            "Kotak Bank".to_string(),
-            "Kotak Mahindra".to_string(),
-            "interest".to_string(),
-            "interest rate".to_string(),
-            "EMI".to_string(),
-            "LTV".to_string(),
-            "balance transfer".to_string(),
-            "top-up".to_string(),
-            "foreclosure".to_string(),
-            "prepayment".to_string(),
-            "disbursement".to_string(),
-            "processing fee".to_string(),
-            "hallmark".to_string(),
-            "purity".to_string(),
-            "carat".to_string(),
-            "jewellery".to_string(),
-            "ornaments".to_string(),
-            "Muthoot".to_string(),
-            "Manappuram".to_string(),
-            "lakh".to_string(),
-            "rupees".to_string(),
-            "percent".to_string(),
-            "branch".to_string(),
-        ];
-        Self::new(vocabulary, EditDistanceConfig::default())
+    /// Add vocabulary terms dynamically
+    pub fn add_vocabulary(&mut self, terms: Vec<String>) {
+        for term in terms {
+            self.vocabulary.insert(term.to_lowercase(), term);
+        }
+    }
+
+    /// Add phonetic corrections dynamically
+    pub fn add_phonetic_rules(&mut self, rules: HashMap<String, String>) {
+        self.phonetic_map.extend(rules);
     }
 
     /// Calculate Levenshtein edit distance between two strings
@@ -293,48 +270,74 @@ pub struct Correction {
 mod tests {
     use super::*;
 
+    /// Create a test fixture corrector with sample data
+    fn test_fixture() -> EditDistanceCorrector {
+        let vocabulary = vec![
+            "gold".to_string(),
+            "loan".to_string(),
+            "gold loan".to_string(),
+            "BrandX".to_string(),
+            "BrandX Bank".to_string(),
+            "interest".to_string(),
+            "EMI".to_string(),
+        ];
+
+        let mut phonetic_map = HashMap::new();
+        // Common ASR errors
+        phonetic_map.insert("alone".to_string(), "loan".to_string());
+        phonetic_map.insert("along".to_string(), "loan".to_string());
+        phonetic_map.insert("lone".to_string(), "loan".to_string());
+        phonetic_map.insert("gol".to_string(), "gold".to_string());
+        // Brand name corrections
+        phonetic_map.insert("brandex".to_string(), "BrandX".to_string());
+        phonetic_map.insert("brandix".to_string(), "BrandX".to_string());
+        // Sentence start correction
+        phonetic_map.insert("why".to_string(), "I".to_string());
+
+        EditDistanceCorrector::from_domain_config(
+            vocabulary,
+            phonetic_map,
+            EditDistanceConfig::default(),
+        )
+    }
+
     #[test]
     fn test_levenshtein_distance() {
         assert_eq!(EditDistanceCorrector::levenshtein_distance("", ""), 0);
         assert_eq!(EditDistanceCorrector::levenshtein_distance("abc", "abc"), 0);
         assert_eq!(EditDistanceCorrector::levenshtein_distance("abc", ""), 3);
         assert_eq!(EditDistanceCorrector::levenshtein_distance("", "abc"), 3);
-        // lone -> loan: substitute 'e' for 'a' = 1
-        assert_eq!(EditDistanceCorrector::levenshtein_distance("lone", "loan"), 1);
-        // alone -> loan: delete 'a', substitute 'e' for empty = 2
+        // kitten -> sitting = 3 (substitute k→s, e→i, add g)
+        assert_eq!(EditDistanceCorrector::levenshtein_distance("kitten", "sitting"), 3);
+        // lone -> loan: substitute n→a, e→n = 2
         assert_eq!(
-            EditDistanceCorrector::levenshtein_distance("alone", "loan"),
+            EditDistanceCorrector::levenshtein_distance("lone", "loan"),
             2
         );
-        // kotuk -> kotak: substitute 'u' for 'a' = 1
+        // gol -> gold: insert 'd' = 1
         assert_eq!(
-            EditDistanceCorrector::levenshtein_distance("kotuk", "kotak"),
+            EditDistanceCorrector::levenshtein_distance("gol", "gold"),
             1
         );
-        // kodak -> kotak: substitute 'd' for 't' = 1 (case insensitive)
-        // Note: If algorithm returns 2, the implementation may have a subtle issue
-        // but it still works for our purpose since we use phonetic_map for exact matches
-        let kodak_dist = EditDistanceCorrector::levenshtein_distance("kodak", "kotak");
-        assert!(kodak_dist <= 2, "kodak->kotak distance should be 1 or 2");
     }
 
     #[test]
     fn test_phonetic_map() {
-        let corrector = EditDistanceCorrector::gold_loan();
+        let corrector = test_fixture();
 
         // Test phonetic map matches
         let result = corrector.find_closest_match("alone");
         assert!(result.is_some());
         assert_eq!(result.unwrap().0, "loan");
 
-        let result = corrector.find_closest_match("kotuk");
+        let result = corrector.find_closest_match("brandex");
         assert!(result.is_some());
-        assert_eq!(result.unwrap().0, "Kotak");
+        assert_eq!(result.unwrap().0, "BrandX");
     }
 
     #[test]
-    fn test_gold_alone_correction() {
-        let corrector = EditDistanceCorrector::gold_loan();
+    fn test_alone_correction() {
+        let corrector = test_fixture();
 
         // "gold alone" should become "gold loan"
         let (corrected, corrections) = corrector.correct("gold alone");
@@ -344,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_sentence_correction() {
-        let corrector = EditDistanceCorrector::gold_loan();
+        let corrector = test_fixture();
 
         // "Why need help regarding gold alone" -> "I need help regarding gold loan"
         let (corrected, corrections) = corrector.correct("Why need help regarding gold alone");
@@ -354,19 +357,19 @@ mod tests {
     }
 
     #[test]
-    fn test_kotak_correction() {
-        let corrector = EditDistanceCorrector::gold_loan();
+    fn test_brand_correction() {
+        let corrector = test_fixture();
 
-        let (corrected, _) = corrector.correct("kotuk bank gold lone");
-        assert!(corrected.contains("Kotak"));
+        let (corrected, _) = corrector.correct("brandex bank gold lone");
+        assert!(corrected.contains("BrandX"));
         assert!(corrected.contains("loan"));
     }
 
     #[test]
     fn test_edit_distance_match() {
-        let corrector = EditDistanceCorrector::gold_loan();
+        let corrector = test_fixture();
 
-        // "lone" should correct to "loan" (distance 1)
+        // "lone" should correct to "loan" (distance 0 because it's in phonetic map)
         let result = corrector.find_closest_match("lone");
         assert!(result.is_some());
         let (word, dist) = result.unwrap();
@@ -376,11 +379,41 @@ mod tests {
 
     #[test]
     fn test_no_correction_needed() {
-        let corrector = EditDistanceCorrector::gold_loan();
+        let corrector = test_fixture();
 
-        // Words that should not be corrected
-        let (corrected, corrections) = corrector.correct("hello world");
-        assert_eq!(corrected, "hello world");
+        // Words that should not be corrected (far from any vocabulary)
+        let (corrected, corrections) = corrector.correct("please check tomorrow");
+        assert_eq!(corrected, "please check tomorrow");
         assert!(corrections.is_empty());
+    }
+
+    #[test]
+    fn test_empty_corrector() {
+        let corrector = EditDistanceCorrector::new(EditDistanceConfig::default());
+        let (corrected, corrections) = corrector.correct("some text");
+        assert_eq!(corrected, "some text");
+        assert!(corrections.is_empty());
+    }
+
+    #[test]
+    fn test_add_vocabulary_dynamically() {
+        let mut corrector = EditDistanceCorrector::new(EditDistanceConfig::default());
+        corrector.add_vocabulary(vec!["custom".to_string(), "term".to_string()]);
+
+        // Should now match "custom" in vocabulary
+        let result = corrector.find_closest_match("custm");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_add_phonetic_rules_dynamically() {
+        let mut corrector = EditDistanceCorrector::new(EditDistanceConfig::default());
+        let mut rules = HashMap::new();
+        rules.insert("typo".to_string(), "type".to_string());
+        corrector.add_phonetic_rules(rules);
+
+        let result = corrector.find_closest_match("typo");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, "type");
     }
 }

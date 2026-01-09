@@ -284,19 +284,28 @@ pub enum FSMError {
 /// Implementors manage conversation flow through discrete stages,
 /// handling events and producing actions.
 ///
+/// # Design Notes
+///
+/// Methods return owned values (not references) to enable implementations
+/// using interior mutability (Mutex/RwLock) without unsafe code. This is
+/// appropriate since:
+/// - ConversationStage is Copy
+/// - Context values are typically small JSON
+/// - Checkpoints are infrequently accessed
+///
 /// # Example Implementation
 ///
 /// ```ignore
-/// struct GoldLoanFSM {
+/// struct DomainFSM {
 ///     stage: ConversationStage,
 ///     context: HashMap<String, Value>,
 ///     checkpoints: Vec<FSMCheckpoint>,
 /// }
 ///
 /// #[async_trait]
-/// impl ConversationFSM for GoldLoanFSM {
-///     fn state(&self) -> &ConversationStage {
-///         &self.stage
+/// impl ConversationFSM for DomainFSM {
+///     fn state(&self) -> ConversationStage {
+///         self.stage
 ///     }
 ///
 ///     async fn transition(&mut self, event: ConversationEvent) -> Result<Vec<FSMAction>, FSMError> {
@@ -304,7 +313,7 @@ pub enum FSMError {
 ///             (ConversationStage::Greeting, ConversationEvent::UserIntent { intent, .. })
 ///                 if intent == "interested" => {
 ///                 self.stage = ConversationStage::Discovery;
-///                 Ok(vec![FSMAction::speak("Great! Tell me about your gold...")])
+///                 Ok(vec![FSMAction::speak("Great! Tell me more...")])
 ///             }
 ///             _ => Ok(vec![])
 ///         }
@@ -314,8 +323,8 @@ pub enum FSMError {
 /// ```
 #[async_trait]
 pub trait ConversationFSM: Send + Sync + 'static {
-    /// Get current conversation stage
-    fn state(&self) -> &ConversationStage;
+    /// Get current conversation stage (owned copy - ConversationStage is Copy)
+    fn state(&self) -> ConversationStage;
 
     /// Process an event and transition to new state
     ///
@@ -344,17 +353,17 @@ pub trait ConversationFSM: Send + Sync + 'static {
     /// Returns FSMError::NoCheckpoint if the index doesn't exist.
     fn restore(&mut self, checkpoint_index: usize) -> Result<(), FSMError>;
 
-    /// Get all checkpoints
-    fn checkpoints(&self) -> &[FSMCheckpoint];
+    /// Get all checkpoints (owned copy for lock safety)
+    fn checkpoints(&self) -> Vec<FSMCheckpoint>;
 
-    /// Get context value by key
-    fn get_context(&self, key: &str) -> Option<&serde_json::Value>;
+    /// Get context value by key (cloned for lock safety)
+    fn get_context(&self, key: &str) -> Option<serde_json::Value>;
 
     /// Set context value
     fn set_context(&mut self, key: &str, value: serde_json::Value);
 
-    /// Get full context
-    fn context(&self) -> &HashMap<String, serde_json::Value>;
+    /// Get full context (cloned for lock safety)
+    fn context(&self) -> HashMap<String, serde_json::Value>;
 
     /// Get conversation metrics
     fn metrics(&self) -> FSMMetrics;

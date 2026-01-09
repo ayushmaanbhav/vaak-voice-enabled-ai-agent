@@ -1,0 +1,167 @@
+# Domain Intents Configuration
+# Defines intents for the voice agent to detect
+
+intents:
+  - name: service_inquiry
+    description: "User wants to know about the service"
+    required_slots: []
+    optional_slots:
+      - requested_amount
+      - asset_quantity
+    examples:
+      - "I want to apply"
+      - "Tell me about your services"
+      - "How does this work"
+
+  - name: interest_rate
+    description: "User asking about interest rates"
+    required_slots: []
+    optional_slots:
+      - requested_amount
+    examples:
+      - "What is the interest rate"
+      - "Interest rate kitna hai"
+      - "Rate of interest"
+      - "What are your rates"
+
+  - name: eligibility_check
+    description: "User wants to check eligibility"
+    required_slots:
+      - asset_quantity
+    optional_slots:
+      - asset_quality
+    examples:
+      - "Am I eligible"
+      - "Can I get approved"
+      - "Kitna milega"
+      - "How much can I get"
+
+  - name: balance_transfer
+    description: "User wants to transfer from competitor"
+    required_slots:
+      - current_provider
+    optional_slots:
+      - current_rate
+      - current_amount
+    examples:
+      - "I want to transfer my loan"
+      - "Balance transfer"
+      - "Switch from current provider"
+      - "Move my account"
+
+  - name: branch_inquiry
+    description: "User asking about locations"
+    required_slots: []
+    optional_slots:
+      - location
+    examples:
+      - "Where is your branch"
+      - "Nearest location"
+      - "Branch kahan hai"
+      - "Office location"
+
+  - name: schedule_visit
+    description: "User wants to schedule appointment"
+    required_slots: []
+    optional_slots:
+      - preferred_date
+      - preferred_time
+      - location
+    examples:
+      - "I want to visit"
+      - "Schedule appointment"
+      - "Book a time"
+      - "Can I come to your office"
+
+  - name: document_inquiry
+    description: "User asking about required documents"
+    required_slots: []
+    optional_slots:
+      - service_type
+    examples:
+      - "What documents do I need"
+      - "Documents required"
+      - "Kya papers chahiye"
+      - "What should I bring"
+
+  - name: process_inquiry
+    description: "User asking about the process"
+    required_slots: []
+    optional_slots: []
+    examples:
+      - "What is the process"
+      - "How long does it take"
+      - "Process kya hai"
+      - "How does it work"
+
+  - name: callback_request
+    description: "User requesting callback"
+    required_slots:
+      - phone_number
+    optional_slots:
+      - customer_name
+      - preferred_time
+    examples:
+      - "Call me back"
+      - "Please call me"
+      - "I want a callback"
+      - "Contact me later"
+
+  - name: price_inquiry
+    description: "User asking about current rates/prices"
+    required_slots: []
+    optional_slots:
+      - asset_quality
+    examples:
+      - "What is the current rate"
+      - "Today's price"
+      - "Aaj ka rate"
+      - "Current market price"
+
+  - name: complaint
+    description: "User has a complaint or issue"
+    required_slots: []
+    optional_slots: []
+    examples:
+      - "I have a complaint"
+      - "Not satisfied"
+      - "Problem hai"
+      - "Issue with service"
+
+  - name: escalate
+    description: "User wants to speak to human"
+    required_slots: []
+    optional_slots: []
+    examples:
+      - "Talk to human"
+      - "Speak to agent"
+      - "Real person"
+      - "Manager se baat"
+      - "Transfer me"
+
+  - name: greeting
+    description: "User greeting"
+    required_slots: []
+    optional_slots: []
+    examples:
+      - "Hello"
+      - "Hi"
+      - "Namaste"
+      - "Good morning"
+
+  - name: farewell
+    description: "User ending conversation"
+    required_slots: []
+    optional_slots: []
+    examples:
+      - "Thank you"
+      - "Bye"
+      - "Goodbye"
+      - "That's all"
+      - "Dhanyavaad"
+
+# Default intent when none matches
+default_intent: service_inquiry
+
+# Minimum confidence threshold
+min_confidence: 0.3

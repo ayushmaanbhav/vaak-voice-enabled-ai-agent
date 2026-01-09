@@ -17,12 +17,23 @@ pub struct LLMGrammarCorrector {
 
 impl LLMGrammarCorrector {
     /// Create a new LLM grammar corrector
+    ///
+    /// Note: This uses a default DomainContext. For config-driven contexts,
+    /// use `with_domain_context()`.
     pub fn new(llm: Arc<dyn LanguageModel>, domain: &str, temperature: f32) -> Self {
-        let domain_context = match domain {
-            "gold_loan" => DomainContext::gold_loan(),
-            _ => DomainContext::new(domain),
-        };
+        // Default to empty context - callers should use with_domain_context for config-driven
+        let domain_context = DomainContext::new(domain);
+        Self::with_domain_context(llm, domain_context, temperature)
+    }
 
+    /// Create a new LLM grammar corrector with a pre-built DomainContext
+    ///
+    /// This is the preferred constructor for config-driven contexts.
+    pub fn with_domain_context(
+        llm: Arc<dyn LanguageModel>,
+        domain_context: DomainContext,
+        temperature: f32,
+    ) -> Self {
         Self {
             llm,
             domain_context,
@@ -133,11 +144,23 @@ impl Clone for LLMGrammarCorrector {
 mod tests {
     use super::*;
 
+    /// Create a test fixture for DomainContext
+    fn test_context() -> DomainContext {
+        DomainContext::from_config(
+            "test",
+            vec!["term1".to_string(), "term2".to_string()],
+            vec!["phrase1".to_string()],
+            vec![("LTV".to_string(), "Loan to Value".to_string())],
+            vec!["PersonName".to_string()],
+            vec!["CompetitorX".to_string()],
+        )
+    }
+
     #[test]
-    fn test_prompt_building() {
-        // We can't test the full corrector without an LLM, but we can test prompt building
-        let context = DomainContext::gold_loan();
-        assert!(context.vocabulary.contains(&"gold loan".to_string()));
-        assert!(context.vocabulary.contains(&"Kotak".to_string()));
+    fn test_domain_context_from_config() {
+        let context = test_context();
+        assert_eq!(context.domain, "test");
+        assert!(context.vocabulary.contains(&"term1".to_string()));
+        assert!(context.vocabulary.contains(&"term2".to_string()));
     }
 }

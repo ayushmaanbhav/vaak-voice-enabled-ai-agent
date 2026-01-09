@@ -24,26 +24,27 @@ use crate::stage::{ConversationStage as AgentStage, StageManager, TransitionReas
 ///
 /// This allows the agent's StageManager to be used anywhere
 /// the `dyn ConversationFSM` trait is expected.
+///
+/// # Thread Safety
+///
+/// All state is protected by locks (Mutex/RwLock), enabling safe concurrent access.
+/// The trait methods return owned values to avoid lifetime issues with locked data.
 pub struct StageManagerAdapter {
     inner: Arc<StageManager>,
     checkpoints: Mutex<Vec<FSMCheckpoint>>,
     context: RwLock<HashMap<String, serde_json::Value>>,
     turn_count: Mutex<usize>,
-    /// Cached current stage for returning by reference
-    current_stage: RwLock<CoreStage>,
     metrics: Mutex<FSMMetrics>,
 }
 
 impl StageManagerAdapter {
     /// Create a new adapter wrapping a StageManager
     pub fn new(stage_manager: Arc<StageManager>) -> Self {
-        let initial_stage = Self::to_core_stage(stage_manager.current());
         Self {
             inner: stage_manager,
             checkpoints: Mutex::new(Vec::new()),
             context: RwLock::new(HashMap::new()),
             turn_count: Mutex::new(0),
-            current_stage: RwLock::new(initial_stage),
             metrics: Mutex::new(FSMMetrics::default()),
         }
     }
@@ -82,12 +83,6 @@ impl StageManagerAdapter {
             CoreStage::Closing => AgentStage::Closing,
             CoreStage::Farewell => AgentStage::Farewell,
         }
-    }
-
-    /// Update the cached current stage
-    fn update_cached_stage(&self) {
-        let stage = Self::to_core_stage(self.inner.current());
-        *self.current_stage.write() = stage;
     }
 
     /// Determine target stage from event
@@ -189,12 +184,9 @@ impl StageManagerAdapter {
 
 #[async_trait]
 impl ConversationFSM for StageManagerAdapter {
-    fn state(&self) -> &CoreStage {
-        // Update cached stage and return reference
-        self.update_cached_stage();
-        // SAFETY: We just updated this, and RwLock ensures safe access
-        // This is a workaround for returning a reference to computed data
-        unsafe { &*(&*self.current_stage.read() as *const CoreStage) }
+    fn state(&self) -> CoreStage {
+        // Return owned copy - CoreStage is Copy
+        Self::to_core_stage(self.inner.current())
     }
 
     async fn transition(&mut self, event: ConversationEvent) -> Result<Vec<FSMAction>, FSMError> {
@@ -255,9 +247,6 @@ impl ConversationFSM for StageManagerAdapter {
                 from: Self::to_core_stage(from),
                 event: e,
             })?;
-
-        // Update cached stage
-        self.update_cached_stage();
 
         Ok(self.actions_for_transition(from, target))
     }
@@ -345,34 +334,29 @@ impl ConversationFSM for StageManagerAdapter {
         *self.context.write() = checkpoint.context;
         *self.turn_count.lock() = checkpoint.turn_count;
 
-        // Update cached stage and metrics
-        self.update_cached_stage();
+        // Update metrics
         self.metrics.lock().restore_count += 1;
 
         Ok(())
     }
 
-    fn checkpoints(&self) -> &[FSMCheckpoint] {
-        // Return empty slice - we can't return a reference to Mutex-protected data
-        // In production, consider using a different design or Arc<[FSMCheckpoint]>
-        &[]
+    fn checkpoints(&self) -> Vec<FSMCheckpoint> {
+        // Return cloned vector - safe access through lock
+        self.checkpoints.lock().clone()
     }
 
-    fn get_context(&self, _key: &str) -> Option<&serde_json::Value> {
-        // Can't return a reference to RwLock-protected data
-        // Workaround: Use unsafe or change trait design
-        None
+    fn get_context(&self, key: &str) -> Option<serde_json::Value> {
+        // Return cloned value - safe access through lock
+        self.context.read().get(key).cloned()
     }
 
     fn set_context(&mut self, key: &str, value: serde_json::Value) {
         self.context.write().insert(key.to_string(), value);
     }
 
-    fn context(&self) -> &HashMap<String, serde_json::Value> {
-        // Same issue as get_context - return empty for now
-        static EMPTY: std::sync::OnceLock<HashMap<String, serde_json::Value>> =
-            std::sync::OnceLock::new();
-        EMPTY.get_or_init(HashMap::new)
+    fn context(&self) -> HashMap<String, serde_json::Value> {
+        // Return cloned context - safe access through lock
+        self.context.read().clone()
     }
 
     fn metrics(&self) -> FSMMetrics {
@@ -385,7 +369,6 @@ impl ConversationFSM for StageManagerAdapter {
         self.context.write().clear();
         *self.turn_count.lock() = 0;
         *self.metrics.lock() = FSMMetrics::default();
-        self.update_cached_stage();
     }
 }
 
@@ -401,7 +384,7 @@ mod tests {
     #[tokio::test]
     async fn test_fsm_adapter_initial_state() {
         let adapter = StageManagerAdapter::with_new_manager();
-        assert_eq!(*adapter.state(), CoreStage::Greeting);
+        assert_eq!(adapter.state(), CoreStage::Greeting);
     }
 
     #[tokio::test]

@@ -131,7 +131,10 @@ impl SessionStore for InMemorySessionStore {
 
     async fn touch(&self, id: &str) -> Result<(), ServerError> {
         if let Some(meta) = self.metadata.write().get_mut(id) {
-            meta.last_activity_ms = 0; // Would need system time for real timestamp
+            meta.last_activity_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
         }
         Ok(())
     }

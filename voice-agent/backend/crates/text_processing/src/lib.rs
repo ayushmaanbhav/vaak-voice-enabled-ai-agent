@@ -27,6 +27,7 @@ pub mod intent; // P1-2 FIX: Intent detection moved from agent crate
 pub mod pii;
 pub mod sentiment; // P2-1 FIX: Sentiment analysis for customer emotion detection
 pub mod simplifier; // P2 FIX: Text simplifier for TTS
+pub mod slot_extraction; // P3-3 FIX: Slot extraction moved from agent/dst
 pub mod translation; // P2-5 FIX: Loan entity extraction
 
 mod error;
@@ -47,3 +48,5 @@ pub use intent::{DetectedIntent, Intent, IntentDetector, Slot, SlotType};
 pub use sentiment::{Sentiment, SentimentAnalyzer, SentimentConfig, SentimentResult};
 // P2-5 FIX: Loan entity extraction exports
 pub use entities::{Currency, Duration, LoanEntities, LoanEntityExtractor, Percentage, Weight};
+// P3-3 FIX: Slot extraction exports (moved from agent/dst)
+pub use slot_extraction::SlotExtractor;

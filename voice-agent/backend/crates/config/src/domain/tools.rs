@@ -1,11 +1,18 @@
 //! Tool Schema Configuration
 //!
 //! Defines config-driven tool schemas for LLM function calling.
+//! Provides conversion to core::ToolSchema for use by Tool implementations.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::Path;
+
+// Import core types for schema conversion
+use voice_agent_core::traits::{
+    InputSchema as CoreInputSchema, PropertySchema as CorePropertySchema,
+    ToolSchema as CoreToolSchema,
+};
 
 /// Tools configuration loaded from tools/schemas.yaml
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +23,23 @@ pub struct ToolsConfig {
     /// Usage guidelines for the LLM
     #[serde(default)]
     pub usage_guidelines: HashMap<String, String>,
+    /// P16 FIX: Intent to tool mapping
+    /// Maps intent names to tool configurations
+    #[serde(default)]
+    pub intent_to_tool: HashMap<String, IntentToolMapping>,
+}
+
+/// P16 FIX: Mapping from intent to tool with optional conditions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentToolMapping {
+    /// Tool to call for this intent
+    pub tool: String,
+    /// Required slots that must be present to trigger the tool
+    #[serde(default)]
+    pub required_slots: Vec<String>,
+    /// Alternative tool if required slots are not present
+    #[serde(default)]
+    pub fallback_tool: Option<String>,
 }
 
 impl Default for ToolsConfig {
@@ -23,6 +47,7 @@ impl Default for ToolsConfig {
         Self {
             tools: HashMap::new(),
             usage_guidelines: HashMap::new(),
+            intent_to_tool: HashMap::new(),
         }
     }
 }
@@ -65,6 +90,91 @@ impl ToolsConfig {
             .map(|(name, _)| name.as_str())
             .collect()
     }
+
+    /// P16 FIX: Convert to Vec<ToolDefinition> for LLM crate
+    ///
+    /// Returns tool definitions in the format expected by voice_agent_core::ToolDefinition.
+    /// This replaces the hardcoded gold_loan_tools() function in the llm crate.
+    pub fn to_tool_definitions(&self) -> Vec<ToolDefinition> {
+        self.tools
+            .iter()
+            .filter(|(_, t)| t.enabled.unwrap_or(true))
+            .map(|(_, schema)| schema.to_tool_definition())
+            .collect()
+    }
+
+    /// Get tools by category (if categories are added to schema)
+    pub fn tools_by_category(&self, category: &str) -> Vec<&str> {
+        self.tools
+            .iter()
+            .filter(|(_, t)| t.category.as_deref() == Some(category))
+            .map(|(name, _)| name.as_str())
+            .collect()
+    }
+
+    /// Get a tool's core schema by name for use by Tool trait implementations
+    ///
+    /// Returns None if the tool is not defined in config.
+    /// Tools should call this in their schema() method to get config-driven schemas.
+    pub fn get_core_schema(&self, name: &str) -> Option<CoreToolSchema> {
+        self.tools.get(name).map(|t| t.to_core_schema())
+    }
+
+    // ====== P16 FIX: Intent to Tool Resolution ======
+
+    /// Get the tool mapping for an intent
+    pub fn get_intent_mapping(&self, intent: &str) -> Option<&IntentToolMapping> {
+        self.intent_to_tool.get(intent)
+    }
+
+    /// Resolve which tool to call for an intent, given the available slots
+    /// Returns Some(tool_name) if a tool should be called, None otherwise
+    pub fn resolve_tool_for_intent(&self, intent: &str, available_slots: &[&str]) -> Option<&str> {
+        if let Some(mapping) = self.intent_to_tool.get(intent) {
+            // Check if all required slots are present
+            let has_required = mapping.required_slots.iter()
+                .all(|slot| available_slots.contains(&slot.as_str()));
+
+            if has_required || mapping.required_slots.is_empty() {
+                Some(&mapping.tool)
+            } else if let Some(ref fallback) = mapping.fallback_tool {
+                // Use fallback tool if required slots are missing
+                Some(fallback)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Check if intent-to-tool mappings are configured
+    pub fn has_intent_mappings(&self) -> bool {
+        !self.intent_to_tool.is_empty()
+    }
+
+    /// Get all configured intent names
+    pub fn mapped_intents(&self) -> Vec<&str> {
+        self.intent_to_tool.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+/// Simplified tool definition for LLM consumption (matches core::ToolDefinition)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: JsonValue,
+}
+
+impl ToolDefinition {
+    pub fn new(name: impl Into<String>, description: impl Into<String>, parameters: JsonValue) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            parameters,
+        }
+    }
 }
 
 /// Schema definition for a single tool
@@ -80,9 +190,71 @@ pub struct ToolSchema {
     /// Whether the tool is enabled (default: true)
     #[serde(default)]
     pub enabled: Option<bool>,
+    /// Tool category for grouping (e.g., "calculation", "communication", "crm")
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 impl ToolSchema {
+    /// Convert config ToolSchema to core::ToolSchema for Tool trait implementations
+    ///
+    /// This allows tools to read their schema from config instead of hardcoding.
+    /// All content (names, descriptions, parameters, enums) comes from YAML config.
+    pub fn to_core_schema(&self) -> CoreToolSchema {
+        let mut input_schema = CoreInputSchema::object();
+
+        for param in &self.parameters {
+            let prop_schema = param.to_core_property_schema();
+            input_schema = input_schema.property(&param.name, prop_schema, param.required);
+        }
+
+        CoreToolSchema {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            input_schema,
+        }
+    }
+
+    /// P16 FIX: Convert to ToolDefinition for LLM crate consumption
+    pub fn to_tool_definition(&self) -> ToolDefinition {
+        let mut properties = serde_json::Map::new();
+        let mut required = Vec::new();
+
+        for param in &self.parameters {
+            let mut prop = serde_json::Map::new();
+            prop.insert("type".to_string(), JsonValue::String(param.param_type.clone()));
+            prop.insert("description".to_string(), JsonValue::String(param.description.clone()));
+
+            if let Some(enum_values) = &param.enum_values {
+                let values: Vec<JsonValue> = enum_values.iter()
+                    .map(|v| JsonValue::String(v.clone()))
+                    .collect();
+                prop.insert("enum".to_string(), JsonValue::Array(values));
+            }
+
+            if let Some(min) = param.min {
+                prop.insert("minimum".to_string(), serde_json::json!(min));
+            }
+            if let Some(max) = param.max {
+                prop.insert("maximum".to_string(), serde_json::json!(max));
+            }
+
+            properties.insert(param.name.clone(), JsonValue::Object(prop));
+
+            if param.required {
+                required.push(JsonValue::String(param.name.clone()));
+            }
+        }
+
+        let parameters = serde_json::json!({
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        });
+
+        ToolDefinition::new(&self.name, &self.description, parameters)
+    }
+
     /// Convert to JSON Schema format compatible with LLM tool_use
     pub fn to_json_schema(&self) -> JsonValue {
         let mut properties = serde_json::Map::new();
@@ -162,6 +334,58 @@ pub struct ToolParameter {
     pub default: Option<String>,
 }
 
+impl ToolParameter {
+    /// Convert to core::PropertySchema for use by Tool trait implementations
+    ///
+    /// Maps config parameter definition to core schema format including:
+    /// - Type mapping (string, number, integer, boolean)
+    /// - Enum constraints
+    /// - Numeric range constraints (min/max)
+    /// - Default values
+    pub fn to_core_property_schema(&self) -> CorePropertySchema {
+        // Create base schema based on type
+        let mut schema = match self.param_type.as_str() {
+            "string" => {
+                if let Some(ref enum_values) = self.enum_values {
+                    CorePropertySchema::enum_type(&self.description, enum_values.clone())
+                } else {
+                    CorePropertySchema::string(&self.description)
+                }
+            }
+            "number" => CorePropertySchema::number(&self.description),
+            "integer" => CorePropertySchema::integer(&self.description),
+            "boolean" => CorePropertySchema::boolean(&self.description),
+            // Default to string for unknown types
+            _ => CorePropertySchema::string(&self.description),
+        };
+
+        // Add numeric range constraints
+        if let (Some(min), Some(max)) = (self.min, self.max) {
+            schema = schema.with_range(min, max);
+        } else if let Some(min) = self.min {
+            schema.minimum = Some(min);
+        } else if let Some(max) = self.max {
+            schema.maximum = Some(max);
+        }
+
+        // Add default value
+        if let Some(ref default) = self.default {
+            // Try to parse as appropriate type
+            let default_value = match self.param_type.as_str() {
+                "number" => default.parse::<f64>().ok().map(|v| serde_json::json!(v)),
+                "integer" => default.parse::<i64>().ok().map(|v| serde_json::json!(v)),
+                "boolean" => default.parse::<bool>().ok().map(|v| serde_json::json!(v)),
+                _ => Some(serde_json::json!(default)),
+            };
+            if let Some(val) = default_value {
+                schema = schema.with_default(val);
+            }
+        }
+
+        schema
+    }
+}
+
 /// Errors when loading tools configuration
 #[derive(Debug)]
 pub enum ToolsConfigError {
@@ -222,6 +446,7 @@ tools:
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             enabled: None,
+            category: Some("test".to_string()),
             parameters: vec![
                 ToolParameter {
                     name: "required_param".to_string(),

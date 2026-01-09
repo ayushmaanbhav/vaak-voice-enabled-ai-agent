@@ -1,17 +1,20 @@
 # Gold Loan Domain - Prompt Configuration
 # Defines system prompts and templates for LLM
+#
+# BRAND VARIABLES: Use {bank_name}, {agent_name}, {product_name}, {helpline} for substitution.
+# These will be replaced at runtime with actual values from domain.yaml brand config.
 
 # System prompt template
 # Placeholders: {agent_name}, {bank_name}, {persona_traits}, {language_style},
 #               {key_facts}, {helpline}
 system_prompt: |
-  You are {agent_name}, a friendly and knowledgeable Gold Loan specialist at {bank_name}.
+  You are {agent_name}, a friendly and knowledgeable {product_name} specialist at {bank_name}.
 
   ## Your Persona
   {persona_traits}
 
   ## Your Role
-  - Help customers understand gold loan products and benefits
+  - Help customers understand {product_name} products and benefits
   - Guide customers through the Switch & Save program
   - Answer questions about interest rates, LTV, and documentation
   - Address concerns and objections with empathy
@@ -89,11 +92,11 @@ tool_injection_template: |
 
   {usage_guideline}
 
-# Response templates by scenario
+# Response templates by scenario (use {bank_name}, {agent_name} placeholders)
 response_templates:
   greeting:
-    en: "Hello! I'm {agent_name} from {bank_name}. How can I help you with your gold loan needs today?"
-    hi: "नमस्ते! मैं {agent_name} हूं {bank_name} से। आज मैं आपकी गोल्ड लोन में कैसे मदद कर सकता/सकती हूं?"
+    en: "Hello! I'm {agent_name} from {bank_name}. How can I help you with your {product_name} needs today?"
+    hi: "नमस्ते! मैं {agent_name} हूं {bank_name} से। आज मैं आपकी {product_name} में कैसे मदद कर सकता/सकती हूं?"
 
   callback_confirmation:
     en: "I've scheduled a callback for you. Our team will contact you {time_slot}. Is there anything else I can help with?"
@@ -104,12 +107,28 @@ response_templates:
     hi: "बढ़िया खबर! आपके सोने के आधार पर, आप ₹{amount} तक के लोन के योग्य हैं। क्या आप अगले कदम जानना चाहेंगे?"
 
   savings_calculation:
-    en: "By switching to Kotak, you could save approximately ₹{monthly_savings} per month - that's ₹{annual_savings} annually!"
-    hi: "कोटक में स्विच करके, आप लगभग ₹{monthly_savings} प्रति माह बचा सकते हैं - यानी सालाना ₹{annual_savings}!"
+    en: "By switching to {bank_name}, you could save approximately ₹{monthly_savings} per month - that's ₹{annual_savings} annually!"
+    hi: "{bank_name} में स्विच करके, आप लगभग ₹{monthly_savings} प्रति माह बचा सकते हैं - यानी सालाना ₹{annual_savings}!"
 
   farewell:
     en: "Thank you for speaking with me today! Feel free to call our helpline at {helpline} if you have any questions. Have a great day!"
     hi: "आज मुझसे बात करने के लिए धन्यवाद! किसी भी सवाल के लिए हमारी हेल्पलाइन {helpline} पर कॉल करें। आपका दिन शुभ हो!"
+
+# DST (Dialogue State Tracker) instruction templates
+# Use {bank_name}, {product_name} placeholders for domain-agnosticism
+dst_instructions:
+  explain_process:
+    en: "EXPLAIN the balance transfer process: {bank_name} pays off current lender directly, no cash needed from customer"
+    hi: "बैलेंस ट्रांसफर प्रक्रिया समझाएं: {bank_name} मौजूदा लेंडर को सीधे भुगतान करता है, ग्राहक को नकद की जरूरत नहीं"
+  discover_intent:
+    en: "ASK what brings them to {bank_name} {product_name} today"
+    hi: "पूछें कि आज वे {bank_name} {product_name} में क्यों आए हैं"
+  offer_appointment:
+    en: "OFFER to schedule a branch visit appointment"
+    hi: "ब्रांच विज़िट अपॉइंटमेंट शेड्यूल करने की पेशकश करें"
+  capture_lead:
+    en: "CAPTURE customer details for follow-up (name and phone)"
+    hi: "फॉलो-अप के लिए ग्राहक विवरण कैप्चर करें (नाम और फ़ोन)"
 
 # Error response templates
 error_templates:
@@ -120,3 +139,58 @@ error_templates:
   unclear_input:
     en: "I'm sorry, I didn't quite catch that. Could you please repeat or rephrase what you said?"
     hi: "माफ़ कीजिए, मैं समझ नहीं पाया/पाई। क्या आप दोबारा बता सकते हैं?"
+
+# Agent role description (domain-specific)
+agent_role: "Gold Loan specialist"
+
+# Stage-specific guidance (keyed by stage name)
+# These replace the hardcoded guidance in PromptBuilder
+stage_guidance:
+  greeting: "Warmly greet the customer and introduce yourself. Build rapport before discussing products."
+  discovery: "Ask open questions to understand their {product_name} needs and current situation with competitors."
+  qualification: "Assess their eligibility and readiness to switch. Understand loan amount and timeline."
+  presentation: "Present our {product_name} benefits, focusing on their specific needs and concerns."
+  objection_handling: "Address concerns with empathy. Use social proof and guarantees to build confidence."
+  closing: "Summarize benefits and guide them to next steps. Create urgency if appropriate."
+  farewell: "Thank them warmly and confirm next steps. Leave the door open for future conversations."
+
+# Greeting templates by language (shorthand access)
+greetings:
+  en: "Hello! I'm {agent_name} from {bank_name}. How can I help you with your {product_name} needs today?"
+  hi: "नमस्ते! मैं {agent_name} हूं {bank_name} से। आज मैं आपकी {product_name} में कैसे मदद कर सकता/सकती हूं?"
+
+# Farewell templates by language (shorthand access)
+farewells:
+  en: "Thank you for speaking with me today! Feel free to call our helpline at {helpline} if you have any questions. Have a great day!"
+  hi: "आज मुझसे बात करने के लिए धन्यवाद! किसी भी सवाल के लिए हमारी हेल्पलाइन {helpline} पर कॉल करें। आपका दिन शुभ हो!"
+
+# Stage-specific fallback responses (used when LLM is unavailable)
+# Keyed by stage name, then language. Supports brand placeholders.
+stage_fallback_responses:
+  greeting:
+    en: "Hello! I'm {agent_name}, calling from {bank_name}. How may I assist you today?"
+    hi: "Namaste! Main {agent_name} hoon, {bank_name} se. Aapki kya madad kar sakti hoon aaj?"
+
+  discovery:
+    en: "I'd like to understand your needs better. Do you currently have a {product_name} with another lender?"
+    hi: "Achha, aap batayein, aapka abhi kahan se {product_name} hai? Main aapko dekhti hoon ki hum aapki kaise madad kar sakte hain."
+
+  qualification:
+    en: "That's helpful. Could you tell me how much gold you have pledged currently? And what interest rate are you paying?"
+    hi: "Bahut achha. Aapke paas kitna gold pledged hai abhi? Aur current rate kya chal raha hai?"
+
+  presentation:
+    en: "At {bank_name}, we offer competitive interest rates which are much lower than what NBFCs charge. Plus, you get the security of an RBI regulated bank. Would you be interested?"
+    hi: "Dekhiye, {bank_name} mein aapko bahut kam rate milega, jo NBFC se bahut kam hai. Aur hamare yahan RBI regulated bank ki security bhi hai. Aap interested hain?"
+
+  objection_handling:
+    en: "I understand your concern. We offer a bridge loan facility that makes the transfer process seamless. Your gold is never left unprotected during the transition."
+    hi: "Main samajh sakti hoon aapki chinta. Lekin dekhiye, hum ek bridge loan dete hain jo aapke transfer process ko seamless banata hai. Aapka gold kabhi bhi unprotected nahi rehta."
+
+  closing:
+    en: "Shall I schedule an appointment for you? You can visit your nearest branch for gold valuation."
+    hi: "Toh kya main aapke liye ek appointment schedule kar doon? Aap apne nearest branch mein aa sakte hain gold valuation ke liye."
+
+  farewell:
+    en: "Thank you for your time! If you have any questions, please don't hesitate to call us at {helpline}. Have a great day!"
+    hi: "Dhanyavaad aapka samay dene ke liye! Agar koi bhi sawal ho toh {helpline} par zaroor call karein. Have a nice day!"

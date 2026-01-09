@@ -52,7 +52,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/metrics", get(metrics_handler))
         // Admin endpoints
         .route("/admin/reload-config", post(reload_config))
-        .route("/admin/reload-domain-config", post(reload_domain_config))
+        // P12 FIX: Removed reload-domain-config (MasterDomainConfig loaded at startup)
         .route("/api/domain/info", get(domain_info))
         // WebSocket
         .route("/ws/:session_id", get(ws_handler))
@@ -61,7 +61,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/ptt/stream", post(ptt::handle_ptt_stream))
         .route("/api/ptt/greeting", post(ptt::get_greeting_handler))
         .route("/api/ptt/translate", post(ptt::translate_handler))
-        .route("/api/ptt/health", get(ptt::ptt_health));
+        .route("/api/ptt/health", get(ptt::ptt_health))
+        .route("/api/ptt/stt-test", post(ptt::handle_stt_test));
 
     // WebRTC routes (optional)
     #[cfg(feature = "webrtc")]
@@ -446,76 +447,66 @@ async fn reload_config(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-/// P4 FIX: Domain config reload endpoint
-///
-/// POST /admin/reload-domain-config
-///
-/// Hot-reloads domain configuration (gold loan settings, prompts, competitor info).
-async fn reload_domain_config(State(state): State<AppState>) -> impl IntoResponse {
-    match state.reload_domain_config() {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "status": "success",
-                "message": "Domain configuration reloaded successfully"
-            })),
-        ),
-        Err(e) => {
-            tracing::error!("Domain config reload failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "status": "error",
-                    "message": e
-                })),
-            )
-        },
-    }
-}
-
-/// P4 FIX: Domain config info endpoint
+/// P12 FIX: Domain config info endpoint
 ///
 /// GET /api/domain/info
 ///
 /// Returns current domain configuration summary for debugging/monitoring.
+/// Now uses MasterDomainConfig and views instead of legacy DomainConfigManager.
 async fn domain_info(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let domain = state.get_domain_config();
-    let config = domain.get();
+    let config = state.get_master_domain_config();
+    let tools_view = state.get_tools_view();
 
-    Json(serde_json::json!({
-        "domain": config.domain,
+    // Build domain-specific business info dynamically
+    let domain_id = config.domain_id.clone();
+    let business_info = serde_json::json!({
+        "current_price_per_unit": tools_view.gold_price_per_gram(),
+        "base_interest_rate": tools_view.base_interest_rate(),
+        "ltv_percent": tools_view.ltv_percent(),
+        "tiered_rates": {
+            "tier1": format!("Up to ₹100000: {}%", tools_view.get_rate_for_amount(50000.0)),
+            "tier2": format!("Up to ₹500000: {}%", tools_view.get_rate_for_amount(200000.0)),
+            "tier3": format!("Above ₹500000: {}%", tools_view.get_rate_for_amount(1000000.0)),
+        },
+        "limits": {
+            "min": tools_view.min_loan_amount(),
+            "max": tools_view.max_loan_amount(),
+        }
+    });
+
+    let mut response = serde_json::json!({
+        "domain": config.domain_id,
+        "display_name": config.display_name,
         "version": config.version,
-        "gold_loan": {
-            "current_gold_price": domain.gold_price(),
-            "interest_rate": config.gold_loan.kotak_interest_rate,
-            "ltv_percent": config.gold_loan.ltv_percent,
-            "tiered_rates": {
-                "tier1": format!("Up to ₹{}: {}%", config.gold_loan.tiered_rates.tier1_threshold, config.gold_loan.tiered_rates.tier1_rate),
-                "tier2": format!("Up to ₹{}: {}%", config.gold_loan.tiered_rates.tier2_threshold, config.gold_loan.tiered_rates.tier2_rate),
-                "tier3": format!("Above ₹{}: {}%", config.gold_loan.tiered_rates.tier2_threshold, config.gold_loan.tiered_rates.tier3_rate),
-            }
+        "brand": {
+            "company_name": config.brand.company_name,
+            "agent_name": config.brand.agent_name,
+            "helpline": config.brand.helpline,
         },
         "branches": {
-            "total": config.branches.total_branches,
-            "states_covered": config.branches.states.len(),
-            "cities_with_coverage": config.branches.city_coverage.len(),
+            "total": config.branches.branches.len(),
             "doorstep_enabled": config.branches.doorstep_service.enabled,
         },
         "products": {
-            "variants": config.product.variants.iter()
-                .filter(|v| v.active)
-                .map(|v| v.name.clone())
-                .collect::<Vec<_>>(),
+            "variants": config.products.keys().cloned().collect::<Vec<_>>(),
         },
         "competitors": {
-            "count": config.competitors.competitors.len(),
-            "tracked": config.competitors.competitors.keys().collect::<Vec<_>>(),
+            "count": config.competitors.len(),
+            "tracked": config.competitors.keys().collect::<Vec<_>>(),
         },
         "prompts": {
-            "agent_name": config.prompts.system_prompt.agent_name,
-            "stages": config.prompts.stage_prompts.keys().collect::<Vec<_>>(),
+            "agent_name": config.brand.agent_name,
+            "stages": config.stages.stages.keys().collect::<Vec<_>>(),
         }
-    }))
+    });
+
+    // Add domain-specific business info under the domain_id key
+    // This allows different domains to have their own business info structure
+    if let serde_json::Value::Object(ref mut map) = response {
+        map.insert(domain_id, business_info);
+    }
+
+    Json(response)
 }
 
 /// WebSocket handler wrapper

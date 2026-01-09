@@ -18,6 +18,14 @@ pub struct SlotsConfig {
     /// Intent to goal mapping
     #[serde(default)]
     pub intent_mapping: HashMap<String, Vec<String>>,
+    /// P16 FIX: Slot name aliases for normalization
+    /// Maps alternative slot names to canonical fact keys
+    /// e.g., {"weight": "asset_quantity", "gold_weight": "asset_quantity"}
+    #[serde(default)]
+    pub slot_aliases: HashMap<String, String>,
+    /// P16 FIX: Slots that should trigger customer name update (instead of fact storage)
+    #[serde(default)]
+    pub customer_name_slots: Vec<String>,
 }
 
 impl Default for SlotsConfig {
@@ -26,6 +34,8 @@ impl Default for SlotsConfig {
             slots: HashMap::new(),
             goals: HashMap::new(),
             intent_mapping: HashMap::new(),
+            slot_aliases: HashMap::new(),
+            customer_name_slots: vec!["customer_name".to_string(), "name".to_string()],
         }
     }
 }
@@ -105,6 +115,32 @@ impl SlotsConfig {
             .and_then(|s| s.unit_conversions.as_ref())
             .and_then(|c| c.get(unit))
             .copied()
+    }
+
+    // ====== P16 FIX: Slot Alias Resolution ======
+
+    /// Resolve a slot name to its canonical fact key using aliases
+    /// Returns the canonical key if an alias exists, otherwise None
+    pub fn resolve_slot_alias(&self, slot_name: &str) -> Option<&str> {
+        self.slot_aliases.get(slot_name).map(|s| s.as_str())
+    }
+
+    /// Check if a slot name should trigger customer name update
+    pub fn is_customer_name_slot(&self, slot_name: &str) -> bool {
+        self.customer_name_slots.iter().any(|s| s == slot_name)
+    }
+
+    /// Get the canonical fact key for a slot, checking aliases first
+    /// If no alias exists, returns the original slot name
+    pub fn canonical_fact_key<'a>(&'a self, slot_name: &'a str) -> &'a str {
+        self.slot_aliases.get(slot_name)
+            .map(|s| s.as_str())
+            .unwrap_or(slot_name)
+    }
+
+    /// Check if slot aliases are configured
+    pub fn has_slot_aliases(&self) -> bool {
+        !self.slot_aliases.is_empty()
     }
 }
 

@@ -17,7 +17,8 @@ use std::pin::Pin;
 ///
 /// ```ignore
 /// let corrector: Box<dyn GrammarCorrector> = Box::new(LLMGrammarCorrector::new(llm));
-/// let context = DomainContext::gold_loan();
+/// // DomainContext loaded from config via AgentDomainView::create_domain_context()
+/// let context = view.create_domain_context();
 /// let corrected = corrector.correct("mujhe gol lone chahiye", &context).await?;
 /// // "mujhe gold loan chahiye" - preserves domain vocabulary
 /// ```

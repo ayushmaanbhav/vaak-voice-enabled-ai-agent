@@ -18,6 +18,8 @@ tracing.workspace = true
 once_cell.workspace = true
 # P5 FIX: High-quality audio resampling
 rubato.workspace = true
+# P4.3 FIX: Regex for slot extraction patterns
+regex.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

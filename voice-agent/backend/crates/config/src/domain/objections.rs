@@ -1,10 +1,20 @@
 //! Objection Handling Configuration
 //!
 //! Defines config-driven objection detection patterns and responses.
+//!
+//! Supports brand variable substitution in response templates using placeholders:
+//! - {brand.company_name} - The company/organization name
+//! - {brand.product_name} - The product name
+//! - {brand.agent_name} - The agent name
+//!
+//! P16 FIX: Renamed bank_name to company_name for domain-agnostic design.
+//! Legacy placeholder {brand.bank_name} is still supported for backwards compatibility.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+
+use super::goals::ActionContext;
 
 /// Objections configuration loaded from objections.yaml
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +109,19 @@ impl ObjectionsConfig {
         self.get_response(objection_type, language)
             .map(|r| r.full_response())
     }
+
+    /// Build full response text with brand variable substitution
+    ///
+    /// Replaces {brand.bank_name}, {brand.product_name}, etc. with actual values.
+    pub fn build_full_response_with_brand(
+        &self,
+        objection_type: &str,
+        language: &str,
+        context: &ActionContext,
+    ) -> Option<String> {
+        self.get_response(objection_type, language)
+            .map(|r| r.full_response_with_brand(context))
+    }
 }
 
 /// Definition for a single objection type
@@ -144,14 +167,42 @@ impl ObjectionResponse {
         )
     }
 
+    /// Build full response with brand variable substitution
+    ///
+    /// Replaces placeholders like {brand.bank_name}, {brand.product_name}, etc.
+    /// with actual values from the ActionContext.
+    pub fn full_response_with_brand(&self, context: &ActionContext) -> String {
+        context.substitute(&self.full_response())
+    }
+
     /// Get acknowledgment only
     pub fn acknowledge_only(&self) -> &str {
         &self.acknowledge
     }
 
+    /// Get acknowledgment with brand substitution
+    pub fn acknowledge_with_brand(&self, context: &ActionContext) -> String {
+        context.substitute(&self.acknowledge)
+    }
+
     /// Get acknowledge + reframe
     pub fn acknowledge_and_reframe(&self) -> String {
         format!("{} {}", self.acknowledge, self.reframe)
+    }
+
+    /// Get acknowledge + reframe with brand substitution
+    pub fn acknowledge_and_reframe_with_brand(&self, context: &ActionContext) -> String {
+        context.substitute(&self.acknowledge_and_reframe())
+    }
+
+    /// Get reframe with brand substitution
+    pub fn reframe_with_brand(&self, context: &ActionContext) -> String {
+        context.substitute(&self.reframe)
+    }
+
+    /// Get evidence with brand substitution
+    pub fn evidence_with_brand(&self, context: &ActionContext) -> String {
+        context.substitute(&self.evidence)
     }
 }
 
@@ -253,5 +304,46 @@ objections:
             response.full_response(),
             "I understand. Let me explain. We have proof. Want to continue?"
         );
+    }
+
+    #[test]
+    fn test_brand_substitution() {
+        let response = ObjectionResponse {
+            acknowledge: "I understand your concern about {brand.bank_name}.".to_string(),
+            reframe: "{brand.bank_name} is a trusted institution.".to_string(),
+            evidence: "Our {brand.product_name} has a 70-year track record.".to_string(),
+            call_to_action: "Would you like to learn more about {brand.bank_name}?".to_string(),
+        };
+
+        let context = ActionContext::new("Kotak Mahindra Bank", "Gold Loan", "Priya");
+        let full = response.full_response_with_brand(&context);
+
+        assert!(full.contains("Kotak Mahindra Bank"));
+        assert!(full.contains("Gold Loan"));
+        assert!(!full.contains("{brand."));
+    }
+
+    #[test]
+    fn test_objections_config_brand_substitution() {
+        let yaml = r#"
+objections:
+  safety:
+    display_name: "Safety Concerns"
+    patterns:
+      en:
+        - "safe"
+    responses:
+      en:
+        acknowledge: "I understand your concern."
+        reframe: "{brand.bank_name} has state-of-the-art security."
+        evidence: "We've never lost any gold."
+        call_to_action: "Would you like to visit a {brand.bank_name} branch?"
+"#;
+        let config: ObjectionsConfig = serde_yaml::from_str(yaml).unwrap();
+        let context = ActionContext::new("Test Bank", "Test Loan", "Agent");
+
+        let response = config.build_full_response_with_brand("safety", "en", &context).unwrap();
+        assert!(response.contains("Test Bank"));
+        assert!(!response.contains("{brand.bank_name}"));
     }
 }

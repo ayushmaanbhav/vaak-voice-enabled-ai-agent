@@ -32,8 +32,8 @@ impl AgentDomainView {
     // ====== Brand Information ======
 
     /// P13 FIX: Get bank name for persona goal
-    pub fn bank_name(&self) -> &str {
-        &self.config.brand.bank_name
+    pub fn company_name(&self) -> &str {
+        &self.config.brand.company_name
     }
 
     /// P13 FIX: Get agent name
@@ -385,6 +385,149 @@ impl AgentDomainView {
     pub fn default_segment(&self) -> &str {
         &self.config.segments.default_segment
     }
+
+    // ====== P16 FIX: Additional Agent Methods ======
+
+    /// Get product name from brand config
+    pub fn product_name(&self) -> &str {
+        &self.config.brand.product_name
+    }
+
+    /// Get competitors configuration
+    pub fn competitors_config(&self) -> &CompetitorsConfig {
+        &self.config.competitors_config
+    }
+
+    /// Get stage fallback response with brand substitution
+    pub fn stage_fallback_response(&self, stage_name: &str, language: &str) -> Option<String> {
+        self.config.prompts.get_stage_fallback(stage_name, language)
+            .map(|r| self.substitute_brand_placeholders(r))
+    }
+
+    /// Get greeting text for a language
+    pub fn greeting(&self, language: &str) -> String {
+        let template = self.config.prompts.get_greeting(language);
+        self.substitute_brand_placeholders(template)
+    }
+
+    /// Get farewell text for a language
+    pub fn farewell(&self, language: &str) -> String {
+        let template = self.config.prompts.get_farewell(language);
+        self.substitute_brand_placeholders(template)
+    }
+
+    /// Substitute brand placeholders in text
+    /// P16 FIX: Supports both new ({company_name}) and legacy ({bank_name}) placeholders
+    fn substitute_brand_placeholders(&self, text: &str) -> String {
+        text.replace("{company_name}", &self.config.brand.company_name)
+            .replace("{bank_name}", &self.config.brand.company_name) // Legacy support
+            .replace("{brand.company_name}", &self.config.brand.company_name)
+            .replace("{brand.bank_name}", &self.config.brand.company_name) // Legacy support
+            .replace("{agent_name}", &self.config.brand.agent_name)
+            .replace("{brand.agent_name}", &self.config.brand.agent_name)
+            .replace("{product_name}", &self.config.brand.product_name)
+            .replace("{brand.product_name}", &self.config.brand.product_name)
+            .replace("{helpline}", &self.config.brand.helpline)
+            .replace("{brand.helpline}", &self.config.brand.helpline)
+    }
+
+    // ====== P16 FIX: Slot Alias Resolution for Fact Storage ======
+
+    /// Resolve a slot name to its canonical fact key using config aliases
+    /// Returns Some(canonical_key) if an alias exists, None otherwise
+    pub fn resolve_slot_alias(&self, slot_name: &str) -> Option<&str> {
+        self.config.slots.resolve_slot_alias(slot_name)
+    }
+
+    /// Check if a slot name should trigger customer name update (not fact storage)
+    pub fn is_customer_name_slot(&self, slot_name: &str) -> bool {
+        self.config.slots.is_customer_name_slot(slot_name)
+    }
+
+    /// Get the canonical fact key for a slot, using config aliases
+    /// Returns the alias if one exists, otherwise returns the original slot name
+    pub fn canonical_fact_key<'a>(&'a self, slot_name: &'a str) -> &'a str {
+        self.config.slots.canonical_fact_key(slot_name)
+    }
+
+    /// Check if slot aliases are configured
+    pub fn has_slot_aliases(&self) -> bool {
+        self.config.slots.has_slot_aliases()
+    }
+
+    // ====== P16 FIX: Intent to Tool Resolution ======
+
+    /// Resolve which tool to call for an intent, given the available slots
+    /// Returns Some(tool_name) if a tool should be called, None otherwise
+    pub fn resolve_tool_for_intent(&self, intent: &str, available_slots: &[&str]) -> Option<&str> {
+        self.config.tools.resolve_tool_for_intent(intent, available_slots)
+    }
+
+    /// Get the intent-to-tool mapping for an intent
+    pub fn get_intent_mapping(&self, intent: &str) -> Option<&super::tools::IntentToolMapping> {
+        self.config.tools.get_intent_mapping(intent)
+    }
+
+    /// Check if intent-to-tool mappings are configured
+    pub fn has_intent_mappings(&self) -> bool {
+        self.config.tools.has_intent_mappings()
+    }
+
+    // ====== Domain Context / Vocabulary ======
+
+    /// Get vocabulary terms for text processing
+    pub fn vocabulary_terms(&self) -> &[String] {
+        &self.config.vocabulary.terms
+    }
+
+    /// Get phrases for text processing
+    pub fn vocabulary_phrases(&self) -> &[String] {
+        &self.config.vocabulary.phrases
+    }
+
+    /// Get abbreviations as (short, full) pairs
+    pub fn vocabulary_abbreviations(&self) -> Vec<(String, String)> {
+        self.config.vocabulary.abbreviations
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    /// Get entity types to preserve
+    pub fn vocabulary_entities(&self) -> &[String] {
+        &self.config.vocabulary.preserve_entities
+    }
+
+    /// Get all competitor names for text processing
+    pub fn all_competitor_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        // From extended competitors config
+        for (_, entry) in &self.config.competitors_config.competitors {
+            names.push(entry.display_name.clone());
+            names.extend(entry.aliases.clone());
+        }
+        // From basic competitors in domain.yaml
+        for (_, entry) in &self.config.competitors {
+            names.push(entry.display_name.clone());
+            names.extend(entry.aliases.clone());
+        }
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// Create DomainContext from config for text processing
+    /// Returns a DomainContext populated from vocabulary config
+    pub fn create_domain_context(&self) -> voice_agent_core::DomainContext {
+        voice_agent_core::DomainContext::from_config(
+            &self.config.domain_id,
+            self.vocabulary_terms().to_vec(),
+            self.vocabulary_phrases().to_vec(),
+            self.vocabulary_abbreviations(),
+            self.vocabulary_entities().to_vec(),
+            self.all_competitor_names(),
+        )
+    }
 }
 
 /// View for the llm crate
@@ -404,8 +547,8 @@ impl LlmDomainView {
     }
 
     /// Get brand information for prompts
-    pub fn bank_name(&self) -> &str {
-        &self.config.brand.bank_name
+    pub fn company_name(&self) -> &str {
+        &self.config.brand.company_name
     }
 
     pub fn agent_name(&self) -> &str {
@@ -509,7 +652,7 @@ impl LlmDomainView {
     ) -> String {
         self.config.prompts.build_system_prompt(
             &self.config.brand.agent_name,
-            &self.config.brand.bank_name,
+            &self.config.brand.company_name,
             persona_traits,
             language,
             key_facts,
@@ -547,13 +690,13 @@ impl LlmDomainView {
             .map(|template| {
                 template
                     .replace("{agent_name}", &self.config.brand.agent_name)
-                    .replace("{bank_name}", &self.config.brand.bank_name)
+                    .replace("{company_name}", &self.config.brand.company_name)
             })
             .unwrap_or_else(|| {
                 format!(
                     "Hello! I'm {} from {}. How can I help you today?",
                     self.config.brand.agent_name,
-                    self.config.brand.bank_name
+                    self.config.brand.company_name
                 )
             })
     }
@@ -609,17 +752,22 @@ impl ToolsDomainView {
         self.config.constants.ltv_percent
     }
 
-    /// Get purity factor for gold type
-    pub fn purity_factor(&self, purity: &str) -> f64 {
-        self.config.constants.purity_factors
-            .get(purity)
+    /// Get variant/purity factor (e.g., K24=1.0, K22=0.916 for gold)
+    pub fn purity_factor(&self, variant: &str) -> f64 {
+        self.config.constants.variant_factors
+            .get(variant)
             .copied()
             .unwrap_or(1.0)
     }
 
-    /// Get gold price per gram
+    /// Get asset price per unit (e.g., gold price per gram)
+    pub fn asset_price_per_unit(&self) -> f64 {
+        self.config.constants.asset_price_per_unit
+    }
+
+    /// Legacy alias for gold_price_per_gram
     pub fn gold_price_per_gram(&self) -> f64 {
-        self.config.constants.gold_price_per_gram
+        self.asset_price_per_unit()
     }
 
     /// Get loan limits
@@ -646,8 +794,8 @@ impl ToolsDomainView {
     }
 
     /// Get brand info for SMS/responses
-    pub fn bank_name(&self) -> &str {
-        &self.config.brand.bank_name
+    pub fn company_name(&self) -> &str {
+        &self.config.brand.company_name
     }
 
     pub fn helpline(&self) -> &str {
@@ -681,9 +829,14 @@ impl ToolsDomainView {
         self.config.branches.get_branch(branch_id)
     }
 
-    /// Get branches with gold loan service
-    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+    /// Get branches with the primary service (domain-specific)
+    pub fn service_branches(&self) -> Vec<&BranchEntry> {
         self.config.branches.gold_loan_branches()
+    }
+
+    /// Legacy alias
+    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+        self.service_branches()
     }
 
     /// Get default max results for branch search
@@ -838,15 +991,20 @@ impl ToolsDomainView {
 
     // ====== P12: Methods replacing GoldLoanConfig ======
 
-    /// Calculate gold value given weight and purity
-    pub fn calculate_gold_value(&self, weight_grams: f64, purity: &str) -> f64 {
-        let purity_factor = self.purity_factor(purity);
-        weight_grams * self.gold_price_per_gram() * purity_factor
+    /// Calculate asset value given weight/quantity and variant/purity
+    pub fn calculate_asset_value(&self, weight: f64, variant: &str) -> f64 {
+        let variant_factor = self.purity_factor(variant);
+        weight * self.asset_price_per_unit() * variant_factor
     }
 
-    /// Calculate maximum loan amount based on gold value
-    pub fn calculate_max_loan(&self, gold_value: f64) -> f64 {
-        let max_from_ltv = gold_value * (self.ltv_percent() / 100.0);
+    /// Legacy alias for calculate_gold_value
+    pub fn calculate_gold_value(&self, weight_grams: f64, purity: &str) -> f64 {
+        self.calculate_asset_value(weight_grams, purity)
+    }
+
+    /// Calculate maximum loan amount based on asset value
+    pub fn calculate_max_loan(&self, asset_value: f64) -> f64 {
+        let max_from_ltv = asset_value * (self.ltv_percent() / 100.0);
         max_from_ltv.min(self.max_loan_amount())
     }
 
@@ -971,6 +1129,130 @@ impl ToolsDomainView {
             self.vocabulary_entities().to_vec(),
             self.all_competitor_names(),
         )
+    }
+
+    // ====== P16 FIX: Tool Schema Configuration ======
+
+    /// Get the full tools configuration
+    /// Tools should use this to read their schemas from config
+    pub fn tools_config(&self) -> &ToolsConfig {
+        &self.config.tools
+    }
+
+    /// Get a tool schema by name
+    pub fn get_tool(&self, name: &str) -> Option<&ToolSchema> {
+        self.config.tools.get_tool(name)
+    }
+
+    /// Get core schema for a tool by name
+    /// Returns the schema in the format expected by the Tool trait
+    pub fn get_tool_core_schema(
+        &self,
+        name: &str,
+    ) -> Option<voice_agent_core::traits::ToolSchema> {
+        self.config.tools.get_core_schema(name)
+    }
+
+    // ====== P16 FIX: Document Requirements Configuration ======
+
+    /// Get the full documents configuration
+    pub fn documents_config(&self) -> &super::documents::DocumentsConfig {
+        &self.config.documents
+    }
+
+    /// Get mandatory documents for all applications
+    pub fn mandatory_documents(&self) -> &[super::documents::DocumentEntry] {
+        &self.config.documents.mandatory_documents
+    }
+
+    /// Get domain-specific documents (e.g., items to bring for valuation)
+    pub fn domain_specific_documents(&self) -> &[super::documents::DocumentEntry] {
+        &self.config.documents.domain_specific_documents
+    }
+
+    /// Get additional documents for a service type
+    pub fn documents_for_service_type(&self, service_type: &str) -> &[super::documents::DocumentEntry] {
+        self.config.documents.documents_for_service_type(service_type)
+    }
+
+    /// Get additional documents for a customer type
+    pub fn documents_for_customer_type(&self, customer_type: &str) -> &[super::documents::DocumentEntry] {
+        self.config.documents.documents_for_customer_type(customer_type)
+    }
+
+    /// Get service type IDs for tool schema enum
+    pub fn document_service_types(&self) -> Vec<&str> {
+        self.config.documents.service_type_ids()
+    }
+
+    /// Get customer type IDs for tool schema enum
+    pub fn document_customer_types(&self) -> Vec<&str> {
+        self.config.documents.customer_type_ids()
+    }
+
+    /// Get existing customer note
+    pub fn existing_customer_note(&self) -> &str {
+        self.config.documents.existing_customer_note()
+    }
+
+    /// Get new customer note
+    pub fn new_customer_note(&self) -> &str {
+        self.config.documents.new_customer_note()
+    }
+
+    /// Get general notes
+    pub fn document_general_notes(&self) -> &[String] {
+        self.config.documents.general_notes()
+    }
+
+    /// Get document tool description from config
+    pub fn document_tool_description(&self) -> &str {
+        self.config.documents.tool_description()
+    }
+
+    /// Check if document config has any document definitions
+    pub fn has_document_config(&self) -> bool {
+        self.config.documents.has_documents()
+    }
+
+    // ====== Domain ID ======
+
+    /// Get the domain ID
+    pub fn domain_id(&self) -> &str {
+        &self.config.domain_id
+    }
+
+    /// Get the domain display name
+    pub fn domain_display_name(&self) -> &str {
+        &self.config.display_name
+    }
+
+    /// Get product name from brand config
+    pub fn product_name(&self) -> &str {
+        &self.config.brand.product_name
+    }
+
+    // ====== P16 FIX: Intent to Tool Resolution ======
+
+    /// Resolve which tool to call for an intent, given the available slots
+    /// Returns Some(tool_name) if a tool should be called, None otherwise
+    pub fn resolve_tool_for_intent(&self, intent: &str, available_slots: &[&str]) -> Option<&str> {
+        self.config.tools.resolve_tool_for_intent(intent, available_slots)
+    }
+
+    /// Get the intent-to-tool mapping for an intent
+    pub fn get_intent_mapping(&self, intent: &str) -> Option<&super::tools::IntentToolMapping> {
+        self.config.tools.get_intent_mapping(intent)
+    }
+
+    /// Check if intent-to-tool mappings are configured
+    pub fn has_intent_mappings(&self) -> bool {
+        self.config.tools.has_intent_mappings()
+    }
+
+    /// Get all configured intent names
+    pub fn mapped_intents(&self) -> Vec<&str> {
+        self.config.tools.mapped_intents()
     }
 }
 

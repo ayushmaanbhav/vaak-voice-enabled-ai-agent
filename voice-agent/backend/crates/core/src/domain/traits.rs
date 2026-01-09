@@ -90,56 +90,17 @@ pub struct ResponseTemplate {
     pub language: String,
 }
 
-/// Generic customer segment trait
-/// Implementations define segment-specific matching logic
-pub trait CustomerSegment: Send + Sync {
-    /// Unique segment identifier
-    fn segment_id(&self) -> &str;
-
-    /// Check if customer signals match this segment
-    fn matches(&self, signals: &CustomerSignals) -> bool;
-
-    /// Features to highlight for this segment
-    fn priority_features(&self) -> &[FeatureId];
-
-    /// Value propositions for this segment
-    fn value_propositions(&self) -> &[String];
-}
-
-/// Generic objection handler trait
-/// Implementations define objection-specific responses
-pub trait ObjectionHandler: Send + Sync {
-    /// Unique objection identifier
-    fn objection_id(&self) -> &str;
-
-    /// Patterns to detect this objection
-    fn patterns(&self) -> &[Pattern];
-
-    /// Response template for this objection
-    fn response_template(&self) -> &ResponseTemplate;
-
-    /// Check if text matches this objection
-    fn matches(&self, text: &str) -> bool;
-}
-
-/// Generic conversation stage trait
-/// Implementations define stage-specific behavior
-pub trait ConversationStage: Send + Sync {
-    /// Unique stage identifier
-    fn stage_id(&self) -> &str;
-
-    /// Stage guidance/instructions for the agent
-    fn guidance(&self) -> &str;
-
-    /// Stages that can be transitioned to from this stage
-    fn allowed_transitions(&self) -> &[StageId];
-
-    /// Context budget for this stage (tokens)
-    fn context_budget(&self) -> usize;
-
-    /// RAG retrieval fraction for this stage
-    fn rag_fraction(&self) -> f32;
-}
+// NOTE: The following traits have been superseded by better implementations:
+// - CustomerSegment trait → use core::traits::SegmentDetector instead
+// - ObjectionHandler trait → use core::traits::ObjectionHandler instead
+// - ConversationStage trait → use config/domain/stages.rs StageDefinition instead
+//
+// These traits were part of an earlier design iteration. The current architecture
+// uses config-driven implementations via DomainBridge (see config/domain/bridge.rs).
+//
+// For segment detection: use ConfigSegmentDetector via bridge.segment_detector()
+// For objection handling: use ConfigObjectionHandler via bridge.objection_handler()
+// For conversation stages: use StagesConfig loaded from stages.yaml
 
 /// Generic slot definition for dialogue state tracking
 #[derive(Debug, Clone)]
@@ -228,20 +189,10 @@ pub struct ScoringThresholds {
     pub min_engagement_turns: usize,
 }
 
-/// Domain configuration view for agents
-/// Trait for domain-specific configuration access
-pub trait DomainView: Send + Sync {
-    /// Domain identifier
-    fn domain_id(&self) -> &str;
-
-    /// Display name for the domain
-    fn display_name(&self) -> &str;
-
-    /// Get a constant value by key path (e.g., "interest_rates.base_rate")
-    fn get_constant(&self, key: &str) -> Option<serde_json::Value>;
-
-    /// Get brand configuration
-    fn brand_name(&self) -> &str;
-    fn agent_name(&self) -> &str;
-    fn helpline(&self) -> &str;
-}
+// NOTE: DomainView trait has been superseded by concrete view implementations:
+// - AgentDomainView (config/domain/views.rs) - for agent crate
+// - LlmDomainView (config/domain/views.rs) - for llm crate
+// - ToolsDomainView (config/domain/views.rs) - for tools crate
+//
+// These concrete views provide type-safe access to domain configuration
+// loaded from MasterDomainConfig. See CONFIG_CONSOLIDATION_PLAN.md for details.

@@ -167,20 +167,49 @@ impl SignalDetection {
     }
 }
 
+/// Signal detection configuration
+#[derive(Debug, Clone, Default)]
+pub struct SignalDetectorConfig {
+    /// Competitor names that trigger Comparison signal
+    pub competitors: Vec<String>,
+    /// Additional patterns per signal type (signal_id -> patterns with confidence)
+    pub extra_patterns: std::collections::HashMap<String, Vec<(String, f32)>>,
+    /// Patterns to exclude (override defaults)
+    pub exclude_patterns: Vec<String>,
+}
+
 /// Behavior signal detector
+///
+/// Uses both built-in generic patterns and config-driven patterns.
+/// Built-in patterns cover universal behavioral signals; domain-specific
+/// patterns (like competitor names) come from config.
 pub struct SignalDetector {
     /// Minimum confidence threshold
     min_confidence: f32,
     /// Enable pause analysis
     analyze_pauses: bool,
+    /// Domain-specific configuration
+    config: SignalDetectorConfig,
 }
 
 impl SignalDetector {
-    /// Create a new detector
+    /// Create a new detector with default settings
     pub fn new() -> Self {
         Self {
             min_confidence: 0.6,
             analyze_pauses: true,
+            config: SignalDetectorConfig::default(),
+        }
+    }
+
+    /// Create from domain configuration
+    ///
+    /// Loads competitor names and additional patterns from config.
+    pub fn from_config(config: SignalDetectorConfig) -> Self {
+        Self {
+            min_confidence: 0.6,
+            analyze_pauses: true,
+            config,
         }
     }
 
@@ -196,13 +225,38 @@ impl SignalDetector {
         self
     }
 
+    /// Set domain configuration
+    pub fn with_config(mut self, config: SignalDetectorConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Detect signals from text
     pub fn detect(&self, text: &str) -> Option<SignalDetection> {
         let lower = text.to_lowercase();
         let mut detections: Vec<(BehaviorSignal, f32, String)> = Vec::new();
 
+        // Helper function to check pattern matches
+        fn add_matches(
+            detections: &mut Vec<(BehaviorSignal, f32, String)>,
+            lower: &str,
+            exclude: &[String],
+            signal: BehaviorSignal,
+            patterns: &[(&str, f32)],
+        ) {
+            for (pattern, conf) in patterns {
+                if !exclude.contains(&pattern.to_string()) && lower.contains(*pattern) {
+                    detections.push((signal, *conf, pattern.to_string()));
+                }
+            }
+        }
+
+        let exclude = &self.config.exclude_patterns;
+
+        // Generic behavioral patterns (domain-agnostic)
+
         // Hesitation patterns
-        let hesitation_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Hesitation, &[
             ("hmm", 0.7),
             ("umm", 0.7),
             ("let me think", 0.8),
@@ -215,16 +269,10 @@ impl SignalDetector {
             ("mujhe nahi pata", 0.85),
             ("need to check", 0.7),
             ("...", 0.6),
-        ];
-
-        for (pattern, conf) in hesitation_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Hesitation, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Interest patterns
-        let interest_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Interest, &[
             ("tell me more", 0.85),
             ("aur batao", 0.85),
             ("interesting", 0.8),
@@ -236,16 +284,10 @@ impl SignalDetector {
             ("apply", 0.75),
             ("next step", 0.9),
             ("aage kya", 0.85),
-        ];
-
-        for (pattern, conf) in interest_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Interest, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Strong interest patterns
-        let strong_interest_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::StrongInterest, &[
             ("let's do it", 0.95),
             ("i want to", 0.9),
             ("sign me up", 0.95),
@@ -255,16 +297,10 @@ impl SignalDetector {
             ("proceed", 0.9),
             ("let's proceed", 0.95),
             ("aage badho", 0.9),
-        ];
-
-        for (pattern, conf) in strong_interest_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::StrongInterest, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Urgency patterns
-        let urgency_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Urgency, &[
             ("urgent", 0.95),
             ("jaldi", 0.9),
             ("quickly", 0.85),
@@ -274,16 +310,10 @@ impl SignalDetector {
             ("right now", 0.9),
             ("abhi", 0.85),
             ("emergency", 0.95),
-        ];
-
-        for (pattern, conf) in urgency_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Urgency, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Frustration patterns
-        let frustration_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Frustration, &[
             ("frustrated", 0.95),
             ("this is taking", 0.8),
             ("why so", 0.75),
@@ -293,16 +323,10 @@ impl SignalDetector {
             ("pareshan", 0.85),
             ("waste of time", 0.95),
             ("bekar", 0.8),
-        ];
-
-        for (pattern, conf) in frustration_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Frustration, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Confusion patterns
-        let confusion_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Confusion, &[
             ("confused", 0.9),
             ("don't understand", 0.9),
             ("samajh nahi", 0.9),
@@ -312,35 +336,28 @@ impl SignalDetector {
             ("phir se batao", 0.85),
             ("sorry?", 0.7),
             ("huh", 0.65),
-        ];
+        ]);
 
-        for (pattern, conf) in confusion_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Confusion, conf, pattern.to_string()));
-            }
-        }
-
-        // Comparison patterns
-        let comparison_patterns = [
+        // Comparison patterns (generic only - competitor names from config)
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Comparison, &[
             ("compared to", 0.9),
             ("vs", 0.8),
             ("better than", 0.85),
-            ("muthoot", 0.8),
-            ("manappuram", 0.8),
-            ("iifl", 0.8),
+            ("other provider", 0.85),
             ("other bank", 0.85),
             ("difference", 0.8),
             ("farak kya hai", 0.85),
-        ];
+        ]);
 
-        for (pattern, conf) in comparison_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Comparison, conf, pattern.to_string()));
+        // Config-driven competitor mentions trigger Comparison
+        for competitor in &self.config.competitors {
+            if lower.contains(competitor.as_str()) {
+                detections.push((BehaviorSignal::Comparison, 0.8, competitor.clone()));
             }
         }
 
         // Skepticism patterns
-        let skepticism_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Skepticism, &[
             ("really", 0.6),
             ("sure about", 0.75),
             ("hard to believe", 0.9),
@@ -351,16 +368,10 @@ impl SignalDetector {
             ("chhupa", 0.8),
             ("is this true", 0.85),
             ("sach mein", 0.8),
-        ];
-
-        for (pattern, conf) in skepticism_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Skepticism, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Satisfaction patterns
-        let satisfaction_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Satisfaction, &[
             ("great", 0.8),
             ("perfect", 0.9),
             ("bahut accha", 0.9),
@@ -371,16 +382,10 @@ impl SignalDetector {
             ("khush", 0.85),
             ("thanks", 0.7),
             ("dhanyawad", 0.75),
-        ];
-
-        for (pattern, conf) in satisfaction_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Satisfaction, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Exit intent patterns
-        let exit_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::ExitIntent, &[
             ("not interested", 0.95),
             ("nahi chahiye", 0.95),
             ("no thanks", 0.9),
@@ -391,16 +396,10 @@ impl SignalDetector {
             ("phir kabhi", 0.8),
             ("don't call", 0.95),
             ("stop", 0.85),
-        ];
-
-        for (pattern, conf) in exit_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::ExitIntent, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Commitment patterns
-        let commitment_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::Commitment, &[
             ("yes", 0.6),
             ("haan", 0.65),
             ("ok let's", 0.85),
@@ -410,16 +409,10 @@ impl SignalDetector {
             ("confirm", 0.9),
             ("book", 0.8),
             ("schedule", 0.8),
-        ];
-
-        for (pattern, conf) in commitment_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::Commitment, conf, pattern.to_string()));
-            }
-        }
+        ]);
 
         // Needs reassurance patterns
-        let reassurance_patterns = [
+        add_matches(&mut detections, &lower, exclude, BehaviorSignal::NeedsReassurance, &[
             ("are you sure", 0.9),
             ("guarantee", 0.85),
             ("promise", 0.85),
@@ -430,11 +423,16 @@ impl SignalDetector {
             ("bharosa", 0.85),
             ("what if", 0.75),
             ("agar", 0.7),
-        ];
+        ]);
 
-        for (pattern, conf) in reassurance_patterns {
-            if lower.contains(pattern) {
-                detections.push((BehaviorSignal::NeedsReassurance, conf, pattern.to_string()));
+        // Add extra patterns from config
+        for (signal_id, patterns) in &self.config.extra_patterns {
+            if let Some(signal) = Self::signal_from_id(signal_id) {
+                for (pattern, conf) in patterns {
+                    if lower.contains(pattern.as_str()) {
+                        detections.push((signal, *conf, pattern.clone()));
+                    }
+                }
             }
         }
 
@@ -458,6 +456,25 @@ impl SignalDetector {
         }
 
         Some(result)
+    }
+
+    /// Parse signal from ID string
+    fn signal_from_id(id: &str) -> Option<BehaviorSignal> {
+        match id {
+            "hesitation" => Some(BehaviorSignal::Hesitation),
+            "interest" => Some(BehaviorSignal::Interest),
+            "strong_interest" => Some(BehaviorSignal::StrongInterest),
+            "urgency" => Some(BehaviorSignal::Urgency),
+            "frustration" => Some(BehaviorSignal::Frustration),
+            "confusion" => Some(BehaviorSignal::Confusion),
+            "comparison" => Some(BehaviorSignal::Comparison),
+            "skepticism" => Some(BehaviorSignal::Skepticism),
+            "satisfaction" => Some(BehaviorSignal::Satisfaction),
+            "exit_intent" => Some(BehaviorSignal::ExitIntent),
+            "commitment" => Some(BehaviorSignal::Commitment),
+            "needs_reassurance" => Some(BehaviorSignal::NeedsReassurance),
+            _ => None,
+        }
     }
 
     /// Detect signals from transcript with timing info
@@ -619,10 +636,27 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_comparison() {
+    fn test_detect_comparison_generic() {
         let detector = SignalDetector::new();
+        // Generic comparison pattern (works without config)
         let result = detector
-            .detect("How does this compare to Muthoot?")
+            .detect("How does this compared to other options?")
+            .unwrap();
+
+        assert_eq!(result.primary, BehaviorSignal::Comparison);
+    }
+
+    #[test]
+    fn test_detect_comparison_with_competitor() {
+        // Create detector with competitor names from config
+        let config = SignalDetectorConfig {
+            competitors: vec!["competitor_a".to_string()],
+            ..Default::default()
+        };
+        let detector = SignalDetector::from_config(config);
+
+        let result = detector
+            .detect("How does this compare to competitor_a?")
             .unwrap();
 
         assert_eq!(result.primary, BehaviorSignal::Comparison);

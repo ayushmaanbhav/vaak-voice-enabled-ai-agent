@@ -1,0 +1,151 @@
+# Feature definitions and segment mappings
+# This config drives what features to emphasize per customer segment
+
+features:
+  low_rates:
+    display_name:
+      en: "Competitive Interest Rates"
+      hi: "Kam Byaj Dar"
+    description: "Low interest rates"
+
+  quick_process:
+    display_name:
+      en: "Quick 30-Minute Approval"
+      hi: "Tez Processing"
+    description: "Quick processing/approval"
+
+  security:
+    display_name:
+      en: "Bank-Grade Security"
+      hi: "Surakshit"
+    description: "Security and safety"
+
+  transparency:
+    display_name:
+      en: "Transparent Pricing"
+      hi: "Poori Jankari"
+    description: "Transparency"
+
+  flexibility:
+    display_name:
+      en: "Flexible Repayment"
+      hi: "Flexible Bhugtan"
+    description: "Flexibility"
+
+  digital:
+    display_name:
+      en: "Digital Services"
+      hi: "Digital Suvidha"
+    description: "Digital/online services"
+
+  relationship_manager:
+    display_name:
+      en: "Dedicated Relationship Manager"
+      hi: "Personal Manager"
+    description: "Personal relationship manager"
+
+  higher_limits:
+    display_name:
+      en: "Higher Loan Limits"
+      hi: "Zyada Loan"
+    description: "Higher loan limits"
+
+  no_hidden_charges:
+    display_name:
+      en: "No Hidden Charges"
+      hi: "Koi Chhupe Charges Nahi"
+    description: "No hidden charges"
+
+  rbi_regulated:
+    display_name:
+      en: "RBI Regulated Bank"
+      hi: "RBI Registered Bank"
+    description: "RBI regulated bank"
+
+  zero_foreclosure:
+    display_name:
+      en: "Zero Foreclosure Charges"
+      hi: "Free Foreclosure"
+    description: "Zero foreclosure charges"
+
+  doorstep_service:
+    display_name:
+      en: "Doorstep Service"
+      hi: "Ghar Par Seva"
+    description: "Doorstep service"
+
+  women_benefits:
+    display_name:
+      en: "Shakti Gold Benefits"
+      hi: "Shakti Gold"
+    description: "Women-specific benefits"
+
+# Segment to feature priority mappings
+segment_features:
+  high_value:
+    - relationship_manager
+    - higher_limits
+    - quick_process
+    - flexibility
+
+  trust_seeker:
+    - rbi_regulated
+    - security
+    - transparency
+    - no_hidden_charges
+
+  first_time:
+    - no_hidden_charges
+    - quick_process
+    - transparency
+    - flexibility
+
+  price_sensitive:
+    - low_rates
+    - zero_foreclosure
+    - no_hidden_charges
+    - transparency
+
+  women:
+    - women_benefits
+    - security
+    - flexibility
+    - doorstep_service
+
+  professional:
+    - quick_process
+    - digital
+    - flexibility
+    - no_hidden_charges
+
+# Value propositions per segment
+value_propositions:
+  high_value:
+    - "Exclusive rates and priority processing for valued customers"
+    - "Dedicated relationship manager for personalized service"
+    - "Higher loan limits to meet your requirements"
+
+  trust_seeker:
+    - "Kotak is an RBI-regulated scheduled bank with highest safety standards"
+    - "Your gold is stored in bank-grade security vaults with full insurance"
+    - "Digital tracking lets you monitor your gold status anytime"
+
+  first_time:
+    - "Simple process with just 2 documents - ID and address proof"
+    - "No hidden charges - what we quote is what you pay"
+    - "Loan approved in just 30 minutes at the branch"
+
+  price_sensitive:
+    - "Starting at {our_best_rate}% - among the lowest rates in the market"
+    - "Zero foreclosure charges - prepay anytime without penalty"
+    - "Use our calculator to see exactly how much you save"
+
+  women:
+    - "Shakti Gold program with 0.25% lower interest for women"
+    - "Women-priority branches with female staff"
+    - "Flexible EMI options to suit your schedule"
+
+  professional:
+    - "Complete the process in 30 minutes during lunch break"
+    - "Track everything on our mobile app"
+    - "Instant approval with minimal documentation"

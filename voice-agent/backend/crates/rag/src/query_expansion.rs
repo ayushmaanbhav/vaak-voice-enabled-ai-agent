@@ -1,9 +1,11 @@
 //! Query Expansion for improved retrieval
 //!
 //! Expands queries with:
-//! - Domain-specific synonyms (gold loan terminology)
+//! - Domain-specific synonyms
 //! - Hindi/Hinglish transliterations
 //! - Related terms and concepts
+//!
+//! All domain data is loaded from configuration files.
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -30,7 +32,7 @@ impl Default for QueryExpansionConfig {
             enable_transliteration: true,
             max_expansions_per_term: 3,
             original_term_boost: 2.0,
-            domain: "gold_loan".to_string(),
+            domain: String::new(), // No default domain - must be config-driven
         }
     }
 }
@@ -98,80 +100,80 @@ pub struct QueryExpander {
     stopwords: RwLock<std::collections::HashSet<String>>,
 }
 
-/// Domain-specific stopwords for Hindi/English gold loan queries
-pub fn gold_loan_stopwords() -> std::collections::HashSet<String> {
-    let words = [
-        // English common stopwords
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
-        "may", "might", "must", "shall", "can", "need", "dare", "ought", "used",
-        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into",
-        "through", "during", "before", "after", "above", "below", "between", "under",
-        "and", "but", "or", "nor", "so", "yet", "both", "either", "neither",
-        "not", "only", "own", "same", "than", "too", "very", "just", "also",
-        "i", "me", "my", "mine", "we", "us", "our", "ours",
-        "you", "your", "yours", "he", "him", "his", "she", "her", "hers",
-        "it", "its", "they", "them", "their", "theirs",
-        "this", "that", "these", "those", "what", "which", "who", "whom",
-        "here", "there", "when", "where", "why", "how", "all", "each", "every",
-        "some", "any", "no", "more", "most", "other", "such", "few", "now",
-        "about", "please", "want", "get", "tell", "know",
-        // Hindi common stopwords (Romanized)
-        "hai", "hain", "tha", "thi", "the", "hoga", "hogi", "ho", "hota", "hoti",
-        "ka", "ki", "ke", "ko", "se", "me", "mein", "par", "pe", "tak", "ke liye",
-        "aur", "ya", "lekin", "par", "magar", "kyonki", "isliye", "jab", "tab",
-        "mai", "main", "mera", "meri", "mere", "hum", "humara", "humari", "humare",
-        "tu", "tum", "tera", "teri", "tere", "aap", "aapka", "aapki", "aapke",
-        "wo", "woh", "uska", "uski", "uske", "ye", "yeh", "iska", "iski", "iske",
-        "ve", "unka", "unki", "unke", "kya", "kaun", "kahan", "kab", "kaise", "kyun",
-        "yahan", "wahan", "ab", "abhi", "phir", "fir", "bhi", "hi", "sirf", "bas",
-        "kuch", "sab", "bahut", "thoda", "zyada", "kam", "itna", "utna", "jitna",
-        "chahiye", "chahte", "chahti", "karein", "karo", "karna", "kar",
-        "bataiye", "batao", "batana", "boliye", "bolo", "bolna",
-        // Hindi stopwords (Devanagari)
-        "है", "हैं", "था", "थी", "थे", "होगा", "होगी", "हो", "होता", "होती",
-        "का", "की", "के", "को", "से", "में", "पर", "तक",
-        "और", "या", "लेकिन", "पर", "मगर", "क्योंकि", "इसलिए", "जब", "तब",
-        "मैं", "मेरा", "मेरी", "मेरे", "हम", "हमारा", "हमारी", "हमारे",
-        "तू", "तुम", "तेरा", "तेरी", "तेरे", "आप", "आपका", "आपकी", "आपके",
-        "वो", "वह", "उसका", "उसकी", "उसके", "ये", "यह", "इसका", "इसकी", "इसके",
-        "वे", "उनका", "उनकी", "उनके", "क्या", "कौन", "कहाँ", "कब", "कैसे", "क्यों",
-        "यहाँ", "वहाँ", "अब", "अभी", "फिर", "भी", "ही", "सिर्फ", "बस",
-        "कुछ", "सब", "बहुत", "थोड़ा", "ज्यादा", "कम",
-        "चाहिए", "चाहते", "चाहती", "करें", "करो", "करना", "कर",
-    ];
-    words.iter().map(|s| s.to_string()).collect()
-}
-
 impl QueryExpander {
-    /// Create a new query expander
+    /// Create a new empty query expander
+    ///
+    /// NOTE: This creates an empty expander with no dictionaries loaded.
+    /// Use `from_domain_config()` for production use with config-driven data.
     pub fn new(config: QueryExpansionConfig) -> Self {
-        let expander = Self {
+        Self {
             config,
             synonyms: RwLock::new(HashMap::new()),
             transliterations: RwLock::new(HashMap::new()),
             domain_terms: RwLock::new(HashMap::new()),
             stopwords: RwLock::new(std::collections::HashSet::new()),
-        };
-        expander.load_default_dictionaries();
-        expander
+        }
     }
 
-    /// Create with default gold loan configuration
-    pub fn gold_loan() -> Self {
+    /// Create from domain configuration
+    ///
+    /// This is the preferred way to create a QueryExpander - all values
+    /// come from config files rather than hardcoded defaults.
+    ///
+    /// # Arguments
+    /// * `domain` - Domain identifier (e.g., "gold_loan")
+    /// * `stopwords` - List of stopwords for the domain
+    /// * `synonyms` - Synonym mappings (term -> alternatives)
+    /// * `transliterations` - Transliteration mappings (Hindi <-> Roman)
+    pub fn from_domain_config(
+        domain: &str,
+        stopwords: Vec<String>,
+        synonyms: HashMap<String, Vec<String>>,
+        transliterations: HashMap<String, Vec<String>>,
+    ) -> Self {
         let config = QueryExpansionConfig {
-            domain: "gold_loan".to_string(),
+            domain: domain.to_string(),
             ..Default::default()
         };
-        let expander = Self {
+
+        Self {
             config,
-            synonyms: RwLock::new(HashMap::new()),
-            transliterations: RwLock::new(HashMap::new()),
+            synonyms: RwLock::new(synonyms),
+            transliterations: RwLock::new(transliterations),
             domain_terms: RwLock::new(HashMap::new()),
-            stopwords: RwLock::new(gold_loan_stopwords()),
+            stopwords: RwLock::new(stopwords.into_iter().collect()),
+        }
+    }
+
+    /// Create from domain configuration with full config control
+    ///
+    /// This variant allows specifying all expansion options.
+    pub fn from_full_config(
+        domain: &str,
+        stopwords: Vec<String>,
+        synonyms: HashMap<String, Vec<String>>,
+        transliterations: HashMap<String, Vec<String>>,
+        domain_terms: HashMap<String, Vec<String>>,
+        enable_synonyms: bool,
+        enable_transliteration: bool,
+        max_expansions_per_term: usize,
+        original_term_boost: f32,
+    ) -> Self {
+        let config = QueryExpansionConfig {
+            domain: domain.to_string(),
+            enable_synonyms,
+            enable_transliteration,
+            max_expansions_per_term,
+            original_term_boost,
         };
-        expander.load_default_dictionaries();
-        expander
+
+        Self {
+            config,
+            synonyms: RwLock::new(synonyms),
+            transliterations: RwLock::new(transliterations),
+            domain_terms: RwLock::new(domain_terms),
+            stopwords: RwLock::new(stopwords.into_iter().collect()),
+        }
     }
 
     /// Check if a word is a stopword
@@ -194,119 +196,6 @@ impl QueryExpander {
         let mut stopwords = self.stopwords.write();
         for word in words {
             stopwords.insert(word.to_lowercase());
-        }
-    }
-
-    /// Load default dictionaries for gold loan domain
-    fn load_default_dictionaries(&self) {
-        // Gold loan synonyms
-        let synonyms = vec![
-            // Interest/rate terms
-            ("interest", vec!["rate", "byaj", "sud"]),
-            ("rate", vec!["interest", "percentage", "dar"]),
-            ("byaj", vec!["interest", "sud", "rate"]),
-            // Loan terms
-            ("loan", vec!["karza", "rin", "udhar", "credit"]),
-            ("karza", vec!["loan", "rin", "udhar"]),
-            ("gold", vec!["sona", "swarna", "jewelry", "jewellery"]),
-            ("sona", vec!["gold", "swarna"]),
-            // Eligibility
-            ("eligibility", vec!["patrta", "qualification", "criteria"]),
-            ("eligible", vec!["patr", "qualified", "qualify"]),
-            // Amount terms
-            ("amount", vec!["rashi", "paisa", "money", "sum"]),
-            ("lakh", vec!["lac", "100000"]),
-            ("crore", vec!["cr", "10000000"]),
-            // Process terms
-            ("apply", vec!["aavedan", "application", "request"]),
-            ("document", vec!["dastavez", "papers", "kagaz"]),
-            ("disburse", vec!["vitrit", "release", "sanction"]),
-            // Gold specific
-            ("purity", vec!["shudhta", "karat", "carat", "fineness"]),
-            ("weight", vec!["vajan", "gram", "tola"]),
-            ("hallmark", vec!["certified", "bis", "standard"]),
-            // Customer terms
-            ("customer", vec!["grahak", "client", "applicant"]),
-            ("account", vec!["khata", "savings", "current"]),
-            // Competitor terms
-            ("muthoot", vec!["muthut", "muthoot finance"]),
-            ("manappuram", vec!["manapuram", "manappuram finance"]),
-            // EMI/repayment
-            ("emi", vec!["installment", "kist", "monthly payment"]),
-            ("repay", vec!["chukana", "payment", "return"]),
-            ("prepay", vec!["prepayment", "early payment", "foreclosure"]),
-        ];
-
-        let mut syn_map = self.synonyms.write();
-        for (term, syns) in synonyms {
-            syn_map.insert(
-                term.to_string(),
-                syns.iter().map(|s| s.to_string()).collect(),
-            );
-        }
-
-        // Hindi-Roman transliterations
-        let transliterations = vec![
-            // Common Hindi terms with Roman equivalents
-            ("सोना", vec!["sona", "gold"]),
-            ("ब्याज", vec!["byaj", "interest"]),
-            ("दर", vec!["dar", "rate"]),
-            ("कर्ज़ा", vec!["karza", "loan"]),
-            ("पात्रता", vec!["patrta", "eligibility"]),
-            ("राशि", vec!["rashi", "amount"]),
-            ("आवेदन", vec!["aavedan", "apply"]),
-            ("दस्तावेज़", vec!["dastavez", "document"]),
-            ("ग्राहक", vec!["grahak", "customer"]),
-            ("खाता", vec!["khata", "account"]),
-            ("किस्त", vec!["kist", "emi"]),
-            ("शुद्धता", vec!["shudhta", "purity"]),
-            ("वजन", vec!["vajan", "weight"]),
-            // Roman Hindi to Devanagari
-            ("sona", vec!["सोना", "gold"]),
-            ("byaj", vec!["ब्याज", "interest"]),
-            ("karza", vec!["कर्ज़ा", "loan"]),
-            ("patrta", vec!["पात्रता", "eligibility"]),
-        ];
-
-        let mut trans_map = self.transliterations.write();
-        for (term, trans) in transliterations {
-            trans_map.insert(
-                term.to_string(),
-                trans.iter().map(|s| s.to_string()).collect(),
-            );
-        }
-
-        // Domain-specific expansions
-        let domain_terms = vec![
-            // Gold loan specific
-            ("gold loan", vec!["sona loan", "gold karza", "jewel loan"]),
-            (
-                "interest rate",
-                vec!["byaj dar", "rate of interest", "loan rate"],
-            ),
-            (
-                "eligibility criteria",
-                vec!["patrta", "who can apply", "requirements"],
-            ),
-            (
-                "loan amount",
-                vec!["kitna milega", "how much", "maximum loan"],
-            ),
-            ("processing fee", vec!["charges", "fees", "cost"]),
-            ("repayment", vec!["chukana", "pay back", "return loan"]),
-            // Questions patterns
-            ("kya hai", vec!["what is", "क्या है"]),
-            ("kitna hai", vec!["how much", "कितना है"]),
-            ("kaise", vec!["how to", "कैसे"]),
-            ("kahan", vec!["where", "कहाँ"]),
-        ];
-
-        let mut domain_map = self.domain_terms.write();
-        for (term, expansions) in domain_terms {
-            domain_map.insert(
-                term.to_string(),
-                expansions.iter().map(|s| s.to_string()).collect(),
-            );
         }
     }
 
@@ -447,9 +336,48 @@ impl QueryExpander {
 mod tests {
     use super::*;
 
+    /// Create a test fixture expander with sample data
+    fn test_fixture() -> QueryExpander {
+        let synonyms = vec![
+            ("gold", vec!["sona", "swarna"]),
+            ("loan", vec!["karza", "rin"]),
+            ("interest", vec!["byaj", "rate"]),
+            ("eligibility", vec!["patrta", "qualification"]),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+        .collect();
+
+        let transliterations = vec![
+            ("sona", vec!["सोना", "gold"]),
+            ("byaj", vec!["ब्याज", "interest"]),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.iter().map(|s| s.to_string()).collect()))
+        .collect();
+
+        let stopwords = vec!["the", "a", "is", "hai", "ka", "ki"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let mut expander = QueryExpander::from_domain_config(
+            "test_domain",
+            stopwords,
+            synonyms,
+            transliterations,
+        );
+
+        // Add some domain terms for testing
+        expander.add_domain_term("kya hai", &["what is", "क्या है"]);
+        expander.add_domain_term("interest rate", &["byaj dar", "rate of interest"]);
+
+        expander
+    }
+
     #[test]
     fn test_basic_expansion() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("gold loan interest rate");
 
         assert!(expanded.was_expanded);
@@ -464,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_synonym_expansion() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("gold eligibility");
 
         // Should expand "gold" to include "sona"
@@ -476,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_transliteration_expansion() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("sona loan");
 
         // "sona" should be transliterated
@@ -488,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_domain_expansion() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("interest rate kya hai");
 
         // "kya hai" should trigger domain expansion
@@ -497,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_expand_to_string() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let query_string = expander.expand_to_string("gold loan");
 
         // Should contain boosted original terms
@@ -507,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_custom_synonym() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         expander.add_synonym("test", &["custom1", "custom2"]);
 
         let expanded = expander.expand("test query");
@@ -516,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_no_duplicate_terms() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("gold sona"); // gold and sona are synonyms
 
         // Should not have duplicate terms
@@ -527,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_original_term_boost() {
-        let expander = QueryExpander::gold_loan();
+        let expander = test_fixture();
         let expanded = expander.expand("loan");
 
         // Original term should have higher weight than expansions
@@ -543,5 +471,35 @@ mod tests {
         if let (Some(orig), Some(exp)) = (original, expansion) {
             assert!(orig.weight > exp.weight);
         }
+    }
+
+    #[test]
+    fn test_from_domain_config() {
+        let synonyms: HashMap<String, Vec<String>> =
+            vec![("term1".to_string(), vec!["alt1".to_string()])]
+                .into_iter()
+                .collect();
+        let transliterations: HashMap<String, Vec<String>> =
+            vec![("word1".to_string(), vec!["शब्द1".to_string()])]
+                .into_iter()
+                .collect();
+        let stopwords = vec!["the".to_string(), "a".to_string()];
+
+        let expander =
+            QueryExpander::from_domain_config("custom_domain", stopwords, synonyms, transliterations);
+
+        assert_eq!(expander.config.domain, "custom_domain");
+        assert!(expander.is_stopword("the"));
+        assert!(!expander.is_stopword("important"));
+    }
+
+    #[test]
+    fn test_empty_expander() {
+        let expander = QueryExpander::new(QueryExpansionConfig::default());
+        let expanded = expander.expand("test query");
+
+        // Should still work, just with no expansions
+        assert!(!expanded.was_expanded);
+        assert_eq!(expanded.terms.len(), 2); // Just original terms
     }
 }

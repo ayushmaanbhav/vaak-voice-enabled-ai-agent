@@ -1,11 +1,14 @@
 //! Voice Agent Server Entry Point
+//!
+//! P12 FIX: Removed legacy DomainConfigManager. All domain configuration now flows
+//! through MasterDomainConfig and its views.
 
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use voice_agent_config::{load_settings, DomainConfigManager, MasterDomainConfig, Settings};
+use voice_agent_config::{load_settings, MasterDomainConfig, Settings};
 use voice_agent_server::{create_router, init_metrics, session::ScyllaSessionStore, AppState};
 
 #[tokio::main]
@@ -41,11 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Configuration loaded"
     );
 
-    // P4 FIX: Load domain configuration (legacy)
-    let domain_config = load_domain_config(&config.domain_config_path);
-    tracing::info!("Loaded domain configuration");
-
-    // P5 FIX: Load hierarchical domain configuration (new)
+    // P12 FIX: Load hierarchical domain configuration (source of truth)
     let master_domain_config = load_master_domain_config("config");
     tracing::info!(
         domain = %master_domain_config.domain_id,
@@ -57,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Initialized Prometheus metrics at /metrics");
 
     // P0 FIX: Optionally initialize ScyllaDB persistence
-    // P6 FIX: Wire both legacy domain_config and new master_domain_config
+    // P12 FIX: Only use MasterDomainConfig (no legacy DomainConfigManager)
     let mut state = if config.persistence.enabled {
         tracing::info!("Initializing ScyllaDB persistence layer...");
         match init_persistence(&config).await {
@@ -77,11 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService> =
                     Arc::new(persistence.gold_price);
                 tracing::info!("SMS and GoldPrice services wired into tools");
-                // P6 FIX: Use new method that accepts both domain configs
-                AppState::with_full_persistence_and_master(
+                // P12 FIX: Use new method that only accepts MasterDomainConfig
+                AppState::with_full_persistence(
                     config.clone(),
                     Arc::new(scylla_store),
-                    domain_config,
                     master_domain_config.clone(),
                     sms_service,
                     gold_price_service,
@@ -93,14 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "Failed to initialize ScyllaDB: {}. Falling back to in-memory.",
                     e
                 );
-                // P6 FIX: Use new method that accepts both domain configs
-                AppState::with_master_domain_config(config.clone(), domain_config, master_domain_config.clone())
+                // P12 FIX: Use new method that only accepts MasterDomainConfig
+                AppState::with_master_domain_config(config.clone(), master_domain_config.clone())
             },
         }
     } else {
         tracing::info!("Persistence disabled, using in-memory session store");
-        // P6 FIX: Use new method that accepts both domain configs
-        AppState::with_master_domain_config(config.clone(), domain_config, master_domain_config.clone())
+        // P12 FIX: Use new method that only accepts MasterDomainConfig
+        AppState::with_master_domain_config(config.clone(), master_domain_config.clone())
     };
 
     // P0 FIX: Optionally initialize VectorStore for RAG
@@ -284,49 +282,36 @@ async fn init_vector_store(
     Ok(store)
 }
 
-/// P4 FIX: Load domain configuration from file
-///
-/// Attempts to load from the specified path. Falls back to defaults if file not found.
-fn load_domain_config(path: &str) -> DomainConfigManager {
-    let path = Path::new(path);
-
-    if path.exists() {
-        match DomainConfigManager::from_file(path) {
-            Ok(manager) => {
-                tracing::info!("Domain config loaded from: {}", path.display());
-
-                // Validate the loaded config
-                let config = manager.get();
-                if let Err(errors) = config.validate() {
-                    tracing::warn!("Domain config validation warnings: {:?}", errors);
-                }
-
-                manager
-            },
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to load domain config from {}: {}. Using defaults.",
-                    path.display(),
-                    e
-                );
-                DomainConfigManager::new()
-            },
-        }
-    } else {
-        tracing::info!(
-            "Domain config not found at {}. Using defaults.",
-            path.display()
-        );
-        DomainConfigManager::new()
-    }
-}
-
-/// P5 FIX: Load hierarchical domain configuration from YAML files
+/// P12 FIX: Load hierarchical domain configuration from YAML files
 ///
 /// Loads the new MasterDomainConfig from config/domains/{domain_id}/ directory.
 /// This provides the hierarchical config structure for domain abstraction.
+///
+/// P16 FIX: DOMAIN_ID is now REQUIRED - no more hardcoded defaults.
+/// The system is domain-agnostic and must be configured for a specific domain.
 fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
-    let domain_id = std::env::var("DOMAIN_ID").unwrap_or_else(|_| "gold_loan".to_string());
+    let domain_id = match std::env::var("DOMAIN_ID") {
+        Ok(id) if !id.is_empty() => id,
+        Ok(_) => {
+            tracing::error!(
+                "DOMAIN_ID environment variable is set but empty. \
+                 Please set DOMAIN_ID to specify which domain configuration to load \
+                 (e.g., DOMAIN_ID=gold_loan). Available domains are in config/domains/."
+            );
+            std::process::exit(1);
+        }
+        Err(_) => {
+            tracing::error!(
+                "DOMAIN_ID environment variable is not set. \
+                 This is a domain-agnostic system - you MUST specify which domain to use. \
+                 Set DOMAIN_ID to the name of the domain config directory \
+                 (e.g., DOMAIN_ID=gold_loan for config/domains/gold_loan/). \
+                 Available domains are in config/domains/."
+            );
+            std::process::exit(1);
+        }
+    };
+
     let config_path = Path::new(config_dir);
 
     match MasterDomainConfig::load(&domain_id, config_path) {
@@ -341,12 +326,14 @@ fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
             Arc::new(config)
         }
         Err(e) => {
-            tracing::warn!(
+            tracing::error!(
                 domain_id = %domain_id,
                 error = %e,
-                "Failed to load hierarchical domain config. Using defaults."
+                "Failed to load domain configuration. \
+                 Make sure config/domains/{}/domain.yaml exists and is valid.",
+                domain_id
             );
-            Arc::new(MasterDomainConfig::default())
+            std::process::exit(1);
         }
     }
 }

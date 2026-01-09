@@ -109,7 +109,32 @@ pub enum Objection {
 }
 
 impl Objection {
-    /// Detect objection from text
+    /// Detect objection from text with config-driven competitor names
+    ///
+    /// # Arguments
+    /// * `text` - The text to analyze
+    /// * `competitor_names` - List of competitor names/aliases to recognize
+    pub fn detect_with_config(text: &str, competitor_names: &[String]) -> Option<Self> {
+        let lower = text.to_lowercase();
+
+        if lower.contains("safe") && lower.contains("gold")
+            || lower.contains("sona")
+            || lower.contains("security")
+            || lower.contains("suraksha")
+        {
+            return Some(Objection::GoldSafety);
+        }
+
+        // Check for competitor mentions (config-driven)
+        let mentions_competitor = competitor_names.iter().any(|c| lower.contains(&c.to_lowercase()));
+        if lower.contains("better rate") || lower.contains("kam rate") || mentions_competitor {
+            return Some(Objection::BetterRatesElsewhere);
+        }
+
+        Self::detect_common_objections(&lower)
+    }
+
+    /// Detect objection from text (backward compatible, no competitor detection)
     pub fn detect(text: &str) -> Option<Self> {
         let lower = text.to_lowercase();
 
@@ -121,13 +146,15 @@ impl Objection {
             return Some(Objection::GoldSafety);
         }
 
-        if lower.contains("better rate")
-            || lower.contains("kam rate")
-            || lower.contains("muthoot")
-            || lower.contains("manappuram")
-        {
+        if lower.contains("better rate") || lower.contains("kam rate") {
             return Some(Objection::BetterRatesElsewhere);
         }
+
+        Self::detect_common_objections(&lower)
+    }
+
+    /// Common objection detection (shared logic)
+    fn detect_common_objections(lower: &str) -> Option<Self> {
 
         if lower.contains("paperwork")
             || lower.contains("documents")
@@ -293,7 +320,7 @@ impl SegmentAdapter {
         self.value_propositions.insert(
             CustomerSegment::TrustSeeker,
             vec![
-                "Kotak is an RBI-regulated scheduled bank with highest safety standards"
+                "We are an RBI-regulated scheduled bank with highest safety standards"
                     .to_string(),
                 "Your gold is stored in bank-grade security vaults with full insurance".to_string(),
                 "Digital tracking lets you monitor your gold status anytime".to_string(),
@@ -347,7 +374,7 @@ impl SegmentAdapter {
             (CustomerSegment::TrustSeeker, Objection::GoldSafety),
             ObjectionResponse {
                 acknowledgment: "I completely understand your concern about gold safety - it's your valuable asset.".to_string(),
-                response: "At Kotak, your gold is stored in RBI-regulated bank vaults with 24/7 security and full insurance coverage. Unlike NBFCs, we're a scheduled bank with the highest safety standards.".to_string(),
+                response: "Your gold is stored in RBI-regulated bank vaults with 24/7 security and full insurance coverage. Unlike NBFCs, we're a scheduled bank with the highest safety standards.".to_string(),
                 follow_up: Some("Would you like to know about our digital tracking system where you can check your gold status anytime?".to_string()),
                 highlight_feature: Feature::Security,
             },
@@ -359,7 +386,7 @@ impl SegmentAdapter {
             ObjectionResponse {
                 acknowledgment: "Getting the best rate is definitely important.".to_string(),
                 response: "Let me share the complete picture - while others may advertise lower rates, they often have processing fees, foreclosure charges, and valuation cuts. Our all-in cost at 9.5% with zero foreclosure is often lower in total.".to_string(),
-                follow_up: Some("Can I show you a quick calculation comparing your current loan with Kotak?".to_string()),
+                follow_up: Some("Can I show you a quick calculation comparing your current loan with us?".to_string()),
                 highlight_feature: Feature::ZeroForeclosure,
             },
         );
@@ -380,7 +407,7 @@ impl SegmentAdapter {
             (CustomerSegment::TrustSeeker, Objection::ExpectsHiddenCharges),
             ObjectionResponse {
                 acknowledgment: "You're right to ask - many customers have faced unexpected charges elsewhere.".to_string(),
-                response: "At Kotak, we believe in complete transparency. I'll give you a printed breakdown of all charges before you sign anything. Our processing fee is flat 1%, and there are absolutely no hidden costs.".to_string(),
+                response: "We believe in complete transparency. I'll give you a printed breakdown of all charges before you sign anything. Our processing fee is flat 1%, and there are absolutely no hidden costs.".to_string(),
                 follow_up: Some("Would you like me to prepare a detailed cost sheet for your gold weight?".to_string()),
                 highlight_feature: Feature::Transparency,
             },

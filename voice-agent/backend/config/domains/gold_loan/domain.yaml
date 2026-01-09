@@ -7,9 +7,12 @@ display_name: "Kotak Gold Loan"
 version: "1.0.0"
 
 # Brand Configuration
+# P16 FIX: Renamed bank_name to company_name for domain-agnostic design
 brand:
-  bank_name: "Kotak Mahindra Bank"
+  company_name: "Kotak Mahindra Bank"
+  product_name: "Gold Loan"
   agent_name: "Priya"
+  agent_role: "Gold Loan Advisor"
   helpline: "1800-266-2666"
   website: "https://www.kotak.com/gold-loan"
 
@@ -145,3 +148,570 @@ high_value:
     - "Priority processing"
     - "Doorstep service"
     - "Premium rates"
+
+# Domain Vocabulary for Text Processing
+# Used by grammar correction, translation, and other text processing
+vocabulary:
+  # Domain-specific terms to preserve (for ASR correction and text processing)
+  terms:
+    - "gold"
+    - "loan"
+    - "gold loan"
+    - "balance transfer"
+    - "top-up"
+    - "topup"
+    - "foreclosure"
+    - "prepayment"
+    - "disbursement"
+    - "interest"
+    - "interest rate"
+    - "EMI"
+    - "LTV"
+    - "processing fee"
+    - "per gram"
+    - "per annum"
+    - "ROI"
+    - "gold ornaments"
+    - "gold jewellery"
+    - "purity"
+    - "carat"
+    - "hallmark"
+    - "jewellery"
+    - "ornaments"
+    # Units
+    - "lakh"
+    - "lakhs"
+    - "crore"
+    - "rupees"
+    - "percent"
+    - "gram"
+    - "grams"
+    # Brand names to preserve (exact spelling)
+    - "Kotak"
+    - "Kotak Bank"
+    - "Kotak Mahindra"
+    - "Kotak Mahindra Bank"
+    # Competitors
+    - "Muthoot"
+    - "Manappuram"
+    - "IIFL"
+    - "HDFC"
+    - "SBI"
+    - "ICICI"
+    # Common terms
+    - "branch"
+    - "documents"
+    - "eligibility"
+    - "apply"
+    - "process"
+    - "transfer"
+
+  # Common phrases in domain
+  phrases:
+    - "Kotak Bank se baat kar rahe hain"
+    - "gold loan balance transfer"
+    - "kam interest rate"
+    - "jaldi disbursement"
+    - "aapka gold safe rahega"
+    - "aapka naam kya hai"
+    - "kitna loan chahiye"
+    - "konsi branch"
+
+  # Abbreviations and their expansions
+  abbreviations:
+    LTV: "Loan to Value"
+    ROI: "Rate of Interest"
+    EMI: "Equated Monthly Installment"
+    KYC: "Know Your Customer"
+    PAN: "Permanent Account Number"
+    NBFC: "Non-Banking Financial Company"
+    RBI: "Reserve Bank of India"
+
+  # Entity types to preserve
+  preserve_entities:
+    - "PersonName"
+    - "PhoneNumber"
+    - "LoanAmount"
+    - "InterestRate"
+    - "BankName"
+
+# P16 FIX: LLM Relevance Terms for Speculative Execution
+# Used by SpeculativeExecutor.estimate_domain_relevance()
+# A focused subset of vocabulary for quality scoring
+relevance_terms:
+  # Core domain concepts
+  - "gold"
+  - "loan"
+  - "interest"
+  - "rate"
+  - "emi"
+  - "tenure"
+  - "collateral"
+  - "purity"
+  - "carat"
+  - "valuation"
+  - "disbursement"
+  # Hindi terms
+  - "सोना"
+  - "ऋण"
+  - "ब्याज"
+  - "दर"
+  - "कार्यकाल"
+  # Competitor names
+  - "kotak"
+  - "muthoot"
+  - "manappuram"
+  - "iifl"
+
+# Phonetic ASR Error Correction Configuration
+# Used by PhoneticCorrector for deterministic ASR error correction
+phonetic_corrections:
+  # Direct confusion rules: misspelling -> correct
+  confusion_rules:
+    # "loan" mishears
+    alone: "loan"
+    along: "loan"
+    "a loan": "loan"
+    lone: "loan"
+    long: "loan"
+    loon: "loan"
+    loom: "loan"
+    # "Kotak" mishears
+    kotuk: "Kotak"
+    kotek: "Kotak"
+    kodak: "Kotak"
+    kotac: "Kotak"
+    "ko tak": "Kotak"
+    "co tak": "Kotak"
+    "co-tak": "Kotak"
+    # "gold" mishears
+    gol: "gold"
+    gould: "gold"
+    gole: "gold"
+    # "interest" mishears
+    intrst: "interest"
+    intrest: "interest"
+    intrist: "interest"
+    # "EMI" mishears
+    amy: "EMI"
+    emy: "EMI"
+    "e m i": "EMI"
+    # "LTV" mishears
+    "l t v": "LTV"
+    "el tv": "LTV"
+    # "lakh" mishears
+    lac: "lakh"
+    lack: "lakh"
+    lacs: "lakhs"
+    lacks: "lakhs"
+    # Spelling errors
+    prosess: "process"
+    procesing: "processing"
+    documants: "documents"
+    documints: "documents"
+    elgibility: "eligibility"
+    eligiblity: "eligibility"
+    # Competitor mishears
+    muthut: "Muthoot"
+    muthood: "Muthoot"
+    manapuram: "Manappuram"
+    manapram: "Manappuram"
+
+  # Contextual rules: [prev_word, error_word] -> correction
+  contextual_rules:
+    - context: "gold"
+      error: "alone"
+      correction: "loan"
+    - context: "gold"
+      error: "along"
+      correction: "loan"
+    - context: "gol"
+      error: "alone"
+      correction: "loan"
+    - context: "gol"
+      error: "along"
+      correction: "loan"
+    - context: "balance"
+      error: "tranfer"
+      correction: "transfer"
+    - context: "balance"
+      error: "transfor"
+      correction: "transfer"
+    - context: "interest"
+      error: "rat"
+      correction: "rate"
+    - context: "intrest"
+      error: "rate"
+      correction: "rate"
+
+  # Phrase-level corrections: phrase -> replacement
+  phrase_rules:
+    # "It's me" misheard for "tell me"
+    "it's me about": "tell me about"
+    "its me about": "tell me about"
+    "it me about": "tell me about"
+    "it's me": "tell me"
+    "its me": "tell me"
+    "can you it's me": "can you tell me"
+    "please it's me": "please tell me"
+    # Gold loan specific
+    "gold alone": "gold loan"
+    "gol alone": "gold loan"
+    "goal alone": "gold loan"
+    "gold loon": "gold loan"
+    "gol loon": "gold loan"
+    "goal loon": "gold loan"
+    "gold long": "gold loan"
+    bulldol: "gold loan"
+    bulldoll: "gold loan"
+    goldol: "gold loan"
+    golddol: "gold loan"
+    workload: "gold loan"
+    # Spelling corrections
+    "balance tranfer": "balance transfer"
+    "intrest rate": "interest rate"
+    "intrst rate": "interest rate"
+
+  # Configuration
+  config:
+    max_edit_distance: 2
+    min_word_length: 3
+    fix_sentence_start: true
+
+# Query Expansion Configuration for RAG
+# Used by QueryExpander for search query enhancement
+query_expansion:
+  # Configuration settings
+  config:
+    max_expansions: 3
+    use_synonyms: true
+    use_transliterations: true
+    enable_stopword_filter: true
+
+  # Domain-specific stopwords to filter from queries
+  stopwords:
+    # English stopwords
+    - "the"
+    - "a"
+    - "an"
+    - "is"
+    - "are"
+    - "was"
+    - "were"
+    - "be"
+    - "been"
+    - "being"
+    - "have"
+    - "has"
+    - "had"
+    - "do"
+    - "does"
+    - "did"
+    - "will"
+    - "would"
+    - "could"
+    - "should"
+    - "may"
+    - "might"
+    - "must"
+    - "shall"
+    - "can"
+    - "need"
+    - "dare"
+    - "ought"
+    - "used"
+    - "to"
+    - "of"
+    - "in"
+    - "for"
+    - "on"
+    - "with"
+    - "at"
+    - "by"
+    - "from"
+    - "up"
+    - "about"
+    - "into"
+    - "over"
+    - "after"
+    - "and"
+    - "but"
+    - "or"
+    - "nor"
+    - "not"
+    - "no"
+    - "so"
+    - "than"
+    - "too"
+    - "very"
+    - "just"
+    - "only"
+    - "own"
+    - "same"
+    - "such"
+    - "other"
+    - "some"
+    - "any"
+    - "this"
+    - "that"
+    - "these"
+    - "those"
+    - "what"
+    - "which"
+    - "who"
+    - "whom"
+    - "how"
+    - "when"
+    - "where"
+    - "why"
+    - "all"
+    - "each"
+    - "every"
+    - "both"
+    - "few"
+    - "more"
+    - "most"
+    - "here"
+    - "there"
+    - "i"
+    - "me"
+    - "my"
+    - "mine"
+    - "we"
+    - "us"
+    - "our"
+    - "ours"
+    - "you"
+    - "your"
+    - "yours"
+    - "he"
+    - "him"
+    - "his"
+    - "she"
+    - "her"
+    - "hers"
+    - "it"
+    - "its"
+    - "they"
+    - "them"
+    - "their"
+    - "theirs"
+    # Hindi stopwords
+    - "ki"
+    - "ka"
+    - "ke"
+    - "ko"
+    - "se"
+    - "mein"
+    - "hai"
+    - "hain"
+    - "tha"
+    - "the"
+    - "thi"
+    - "ho"
+    - "hota"
+    - "hoti"
+    - "hote"
+    - "hua"
+    - "hui"
+    - "hue"
+    - "kya"
+    - "kaun"
+    - "kab"
+    - "kahan"
+    - "kaise"
+    - "kitna"
+    - "kitni"
+    - "kitne"
+    - "yeh"
+    - "woh"
+    - "ye"
+    - "wo"
+    - "aur"
+    - "ya"
+    - "lekin"
+    - "par"
+    - "magar"
+    - "jo"
+    - "jis"
+    - "jise"
+    - "bhi"
+    - "hi"
+    - "sirf"
+    - "ek"
+    - "do"
+    - "teen"
+    - "bahut"
+    - "kuch"
+    - "koi"
+    - "sab"
+    - "apna"
+    - "apni"
+    - "apne"
+    - "mera"
+    - "meri"
+    - "mere"
+    - "tera"
+    - "teri"
+    - "tere"
+    - "uska"
+    - "uski"
+    - "uske"
+    - "unka"
+    - "unki"
+    - "unke"
+    - "ab"
+    - "jab"
+    - "tab"
+    - "yahan"
+    - "wahan"
+    - "jahan"
+    - "kahin"
+
+  # Synonym mappings for query expansion
+  synonyms:
+    # Interest/rate terms
+    interest: ["rate", "byaj", "sud"]
+    rate: ["interest", "percentage", "dar"]
+    byaj: ["interest", "sud", "rate"]
+    # Loan terms
+    loan: ["karza", "rin", "udhar", "credit"]
+    karza: ["loan", "rin", "udhar"]
+    gold: ["sona", "swarna", "jewelry", "jewellery"]
+    sona: ["gold", "swarna"]
+    # Eligibility
+    eligibility: ["patrta", "qualification", "criteria"]
+    eligible: ["patr", "qualified", "qualify"]
+    # Amount terms
+    amount: ["rashi", "paisa", "money", "sum"]
+    lakh: ["lac", "100000"]
+    crore: ["cr", "10000000"]
+    # Process terms
+    apply: ["aavedan", "application", "request"]
+    document: ["dastavez", "papers", "kagaz"]
+    disburse: ["vitrit", "release", "sanction"]
+    # Gold specific
+    purity: ["shudhta", "karat", "carat", "fineness"]
+    weight: ["vajan", "gram", "tola"]
+    hallmark: ["certified", "bis", "standard"]
+    # Customer terms
+    customer: ["grahak", "client", "applicant"]
+    account: ["khata", "savings", "current"]
+    # Competitor terms
+    muthoot: ["muthut", "muthoot finance"]
+    manappuram: ["manapuram", "manappuram finance"]
+    # EMI/repayment
+    emi: ["installment", "kist", "monthly payment"]
+    repay: ["chukana", "payment", "return"]
+    prepay: ["prepayment", "early payment", "foreclosure"]
+
+  # Hindi-Roman transliterations
+  transliterations:
+    सोना: ["sona", "gold"]
+    ब्याज: ["byaj", "interest"]
+    दर: ["dar", "rate"]
+    कर्ज़ा: ["karza", "loan"]
+    ऋण: ["rin", "loan"]
+    पात्रता: ["patrta", "eligibility"]
+    राशि: ["rashi", "amount"]
+    वज़न: ["vajan", "weight"]
+    शुद्धता: ["shudhta", "purity"]
+    ग्राहक: ["grahak", "customer"]
+    आवेदन: ["aavedan", "apply", "application"]
+    दस्तावेज़: ["dastavez", "document"]
+    किस्त: ["kist", "emi", "installment"]
+
+# Domain Boosting Configuration for RAG
+# Used by DomainBooster for relevance boosting
+domain_boost:
+  # Default boost multiplier
+  default_boost: 1.0
+
+  # Term categories and their boost multipliers
+  category_boosts:
+    product: 2.0
+    rate: 1.8
+    eligibility: 1.7
+    process: 1.5
+    gold: 1.6
+    brand: 1.5
+    competitor: 1.3
+    general: 1.0
+
+  # Domain-specific terms with boosting
+  terms:
+    # Product terms
+    - term: "gold loan"
+      category: product
+      boost: 2.0
+      related: ["sona loan", "jewel loan"]
+    - term: "jewel loan"
+      category: product
+      boost: 1.8
+      related: ["gold loan", "ornament loan"]
+    - term: "balance transfer"
+      category: product
+      boost: 1.9
+      related: ["bt", "loan transfer"]
+    # Rate terms
+    - term: "interest rate"
+      category: rate
+      boost: 1.8
+      related: ["byaj dar", "rate"]
+    - term: "emi"
+      category: rate
+      boost: 1.6
+      related: ["kist", "installment"]
+    - term: "processing fee"
+      category: rate
+      boost: 1.5
+      related: ["charges", "fees"]
+    # Eligibility terms
+    - term: "eligibility"
+      category: eligibility
+      boost: 1.7
+      related: ["patrta", "qualify"]
+    - term: "criteria"
+      category: eligibility
+      boost: 1.5
+      related: ["requirements", "conditions"]
+    # Process terms
+    - term: "apply"
+      category: process
+      boost: 1.5
+      related: ["aavedan", "application"]
+    - term: "disbursal"
+      category: process
+      boost: 1.6
+      related: ["disbursement", "sanction"]
+    - term: "prepayment"
+      category: process
+      boost: 1.5
+      related: ["foreclosure", "early payment"]
+    # Gold terms
+    - term: "purity"
+      category: gold
+      boost: 1.6
+      related: ["karat", "carat", "hallmark"]
+    - term: "weight"
+      category: gold
+      boost: 1.4
+      related: ["gram", "tola", "vajan"]
+    - term: "valuation"
+      category: gold
+      boost: 1.5
+      related: ["assessment", "appraisal"]
+    # Brand terms
+    - term: "kotak"
+      category: brand
+      boost: 1.5
+      related: ["kotak mahindra", "kotak bank"]
+    # Competitor terms
+    - term: "muthoot"
+      category: competitor
+      boost: 1.3
+      related: ["muthoot finance"]
+    - term: "manappuram"
+      category: competitor
+      boost: 1.3
+      related: ["manappuram finance"]

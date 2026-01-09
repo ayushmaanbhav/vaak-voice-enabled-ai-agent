@@ -60,6 +60,9 @@ pub struct SpeculativeConfig {
     pub max_draft_iterations: usize,
     /// Verification threshold - below this, reject draft and use LLM
     pub verification_threshold: f32,
+    /// P16 FIX: Domain-specific terms for relevance scoring (config-driven)
+    /// If empty, domain relevance scoring is disabled (returns neutral 0.7)
+    pub domain_terms: Vec<String>,
 }
 
 impl Default for SpeculativeConfig {
@@ -79,7 +82,22 @@ impl Default for SpeculativeConfig {
             draft_chunk_size: 20,        // Draft 20 tokens at a time
             max_draft_iterations: 5,     // Max 5 iterations (100 tokens total)
             verification_threshold: 0.7, // 70% acceptance threshold
+            // P16 FIX: Domain terms loaded from config, empty by default
+            domain_terms: Vec::new(),
         }
+    }
+}
+
+impl SpeculativeConfig {
+    /// P16 FIX: Set domain terms for relevance scoring
+    pub fn with_domain_terms(mut self, terms: Vec<String>) -> Self {
+        self.domain_terms = terms;
+        self
+    }
+
+    /// P16 FIX: Add domain terms from iterator
+    pub fn add_domain_terms<I: IntoIterator<Item = S>, S: Into<String>>(&mut self, terms: I) {
+        self.domain_terms.extend(terms.into_iter().map(|s| s.into()));
     }
 }
 
@@ -810,37 +828,22 @@ impl SpeculativeExecutor {
         }
     }
 
-    /// Estimate domain relevance (gold loan specific)
+    /// P16 FIX: Estimate domain relevance using config-driven terms
+    ///
+    /// If no domain terms are configured, returns a neutral score of 0.7.
+    /// Domain terms should be loaded from config/domains/{domain}/domain.yaml
     fn estimate_domain_relevance(&self, response: &str) -> f32 {
+        // P16 FIX: If no domain terms configured, return neutral score
+        if self.config.domain_terms.is_empty() {
+            return 0.7; // Neutral - don't penalize or boost
+        }
+
         let lower = response.to_lowercase();
 
-        // Domain-specific terms
-        let gold_loan_terms = [
-            "gold",
-            "loan",
-            "interest",
-            "rate",
-            "emi",
-            "tenure",
-            "collateral",
-            "purity",
-            "carat",
-            "valuation",
-            "disbursement",
-            "सोना",
-            "ऋण",
-            "ब्याज",
-            "दर",
-            "कार्यकाल", // Hindi terms
-            "kotak",
-            "muthoot",
-            "manappuram",
-            "iifl",
-        ];
-
-        let matches = gold_loan_terms
+        // P16 FIX: Use config-driven domain terms
+        let matches = self.config.domain_terms
             .iter()
-            .filter(|term| lower.contains(*term))
+            .filter(|term| lower.contains(&term.to_lowercase()))
             .count();
 
         // Score based on matches
@@ -1092,26 +1095,35 @@ mod tests {
 
     #[test]
     fn test_domain_relevance_estimation() {
-        // P1 FIX: Test domain relevance scoring
+        // P16 FIX: Test domain relevance scoring with config-driven terms
 
-        // High relevance - multiple gold loan terms
+        // Test text samples
         let high_relevance =
             "The gold loan interest rate is 7.5% per annum with flexible tenure options.";
-        // Would need executor instance to test, but logic should score this ~0.95
-
-        // Low relevance - no domain terms
         let low_relevance = "Hello, how are you doing today?";
-        // Should score ~0.5
-
-        // Medium relevance - one term
         let medium_relevance = "I'd like to know about your loan products.";
-        // Should score ~0.7
 
-        // These assertions would need mock backend to test
+        // Basic assertions about term presence
         assert!(high_relevance.contains("gold"));
         assert!(high_relevance.contains("loan"));
         assert!(!low_relevance.contains("gold"));
         assert!(medium_relevance.contains("loan"));
+
+        // P16 FIX: Config-driven approach - terms are loaded from config
+        // With empty domain_terms, estimate_domain_relevance returns 0.7 (neutral)
+        let config_without_terms = SpeculativeConfig::default();
+        assert!(config_without_terms.domain_terms.is_empty());
+
+        // With domain terms configured
+        let config_with_terms = SpeculativeConfig {
+            domain_terms: vec![
+                "gold".to_string(),
+                "loan".to_string(),
+                "interest".to_string(),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(config_with_terms.domain_terms.len(), 3);
     }
 
     #[test]

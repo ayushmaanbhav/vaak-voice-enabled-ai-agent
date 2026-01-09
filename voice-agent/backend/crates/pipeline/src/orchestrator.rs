@@ -102,8 +102,9 @@ impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            system_prompt: "You are a helpful voice assistant for Kotak Gold Loan services. \
-                Respond concisely and naturally in Hindi or Hinglish. Keep responses brief \
+            // System prompt MUST come from domain config - this default is intentionally generic
+            system_prompt: "You are a helpful voice assistant. \
+                Respond concisely and naturally. Keep responses brief \
                 as they will be spoken aloud."
                 .to_string(),
             language: Language::Hindi,

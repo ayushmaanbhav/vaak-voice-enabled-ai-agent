@@ -399,8 +399,13 @@ impl DomainAgent {
 
     /// Generate mock response (placeholder for LLM)
     /// P2 FIX: Language-aware mock responses
+    /// P17 FIX: Config-driven fallback responses with brand substitution
     ///
-    /// Generates fallback responses based on configured language:
+    /// Generates fallback responses based on:
+    /// 1. Config-driven stage_fallback_responses from prompts config (preferred)
+    /// 2. Generic defaults if config not available
+    ///
+    /// Language support:
     /// - "hi" or "hi-IN": Hinglish (Hindi + English mix)
     /// - "en" or "en-IN": English
     pub(super) fn generate_mock_response(&self, _user_input: &str, tool_result: Option<&str>) -> String {
@@ -415,66 +420,91 @@ impl DomainAgent {
             }
         }
 
-        let name = &self.config.persona.name;
-        let is_english = self.config.language.starts_with("en");
+        let language = if self.config.language.starts_with("en") { "en" } else { "hi" };
 
-        // P2 FIX: Stage-based responses with language awareness
+        // P17 FIX: Try config-driven fallback first
+        if let Some(view) = &self.domain_view {
+            // Map stage to config key name
+            let stage_name = match stage {
+                ConversationStage::Greeting => "greeting",
+                ConversationStage::Discovery => "discovery",
+                ConversationStage::Qualification => "qualification",
+                ConversationStage::Presentation => "presentation",
+                ConversationStage::ObjectionHandling => "objection_handling",
+                ConversationStage::Closing => "closing",
+                ConversationStage::Farewell => "farewell",
+            };
+
+            // Try to get config-driven response with brand substitution
+            if let Some(response) = view.stage_fallback_response(&stage_name, language) {
+                return response;
+            }
+
+            // Special handling for greeting/farewell with simpler method
+            match stage {
+                ConversationStage::Greeting => {
+                    return view.greeting(language);
+                }
+                ConversationStage::Farewell => {
+                    return view.farewell(language);
+                }
+                _ => {}
+            }
+        }
+
+        // Fallback to generic defaults (no brand names)
+        self.generate_generic_fallback(stage, language)
+    }
+
+    /// Generate generic fallback response (no brand names)
+    ///
+    /// Used when config-driven responses are not available.
+    /// These are domain-agnostic and contain no hardcoded brand references.
+    fn generate_generic_fallback(&self, stage: ConversationStage, language: &str) -> String {
+        let name = &self.config.persona.name;
+        let is_english = language == "en";
+
         match stage {
             ConversationStage::Greeting => {
                 if is_english {
-                    format!(
-                        "Hello! I'm {}, calling from Kotak Mahindra Bank. How may I assist you today?",
-                        name
-                    )
+                    format!("Hello! I'm {}. How may I assist you today?", name)
                 } else {
-                    format!(
-                        "Namaste! Main {} hoon, Kotak Mahindra Bank se. Aapki kya madad kar sakti hoon aaj?",
-                        name
-                    )
+                    format!("Namaste! Main {} hoon. Aapki kya madad kar sakti hoon aaj?", name)
                 }
             }
             ConversationStage::Discovery => {
                 if is_english {
-                    "I'd like to understand your needs better. Do you currently have a gold loan with another lender?".to_string()
+                    "I'd like to understand your needs better. Do you currently have a loan with another lender?".to_string()
                 } else {
-                    "Achha, aap batayein, aapka abhi kahan se gold loan hai? Main aapko dekhti hoon ki hum aapki kaise madad kar sakte hain.".to_string()
+                    "Achha, aap batayein, aapka abhi kahan se loan hai? Main aapko dekhti hoon ki hum aapki kaise madad kar sakte hain.".to_string()
                 }
             }
             ConversationStage::Qualification => {
                 if is_english {
-                    "That's helpful. Could you tell me how much gold you have pledged currently? And what interest rate are you paying?".to_string()
+                    "That's helpful. Could you tell me more about your current situation? What interest rate are you paying?".to_string()
                 } else {
-                    "Bahut achha. Aapke paas kitna gold pledged hai abhi? Aur current rate kya chal raha hai?".to_string()
+                    "Bahut achha. Aap apni current situation ke baare mein batayein? Aur current rate kya chal raha hai?".to_string()
                 }
             }
             ConversationStage::Presentation => {
-                // P13 FIX: Get rates from config if available
-                let (our_rate, nbfc_rate) = if let Some(view) = &self.domain_view {
-                    (
-                        view.our_rate_for_amount(500_000.0),
-                        view.get_competitor_rate("muthoot").unwrap_or(18.0),
-                    )
-                } else {
-                    (10.5, 18.0)
-                };
                 if is_english {
-                    format!("At Kotak, we offer just {:.1}% interest rate, which is much lower than the {:.0}-{:.0}% NBFCs charge. Plus, you get the security of an RBI regulated bank. Would you be interested?", our_rate, nbfc_rate, nbfc_rate + 2.0)
+                    "We offer competitive interest rates which are much lower than what most lenders charge. Plus, you get the security of an RBI regulated bank. Would you be interested?".to_string()
                 } else {
-                    format!("Dekhiye, Kotak mein aapko sirf {:.1}% rate milega, jo NBFC ke {:.0}-{:.0}% se bahut kam hai. Aur hamare yahan RBI regulated bank ki security bhi hai. Aap interested hain?", our_rate, nbfc_rate, nbfc_rate + 2.0)
+                    "Dekhiye, hamare yahan aapko bahut kam rate milega. Aur RBI regulated bank ki security bhi hai. Aap interested hain?".to_string()
                 }
             }
             ConversationStage::ObjectionHandling => {
                 if is_english {
-                    "I understand your concern. We offer a bridge loan facility that makes the transfer process seamless. Your gold is never left unprotected during the transition.".to_string()
+                    "I understand your concern. We offer facilities that make the process seamless and secure.".to_string()
                 } else {
-                    "Main samajh sakti hoon aapki chinta. Lekin dekhiye, hum ek bridge loan dete hain jo aapke transfer process ko seamless banata hai. Aapka gold kabhi bhi unprotected nahi rehta.".to_string()
+                    "Main samajh sakti hoon aapki chinta. Hamare yahan process seamless aur secure hai.".to_string()
                 }
             }
             ConversationStage::Closing => {
                 if is_english {
-                    "Shall I schedule an appointment for you? You can visit your nearest branch for gold valuation.".to_string()
+                    "Shall I schedule an appointment for you? You can visit your nearest branch.".to_string()
                 } else {
-                    "Toh kya main aapke liye ek appointment schedule kar doon? Aap apne nearest branch mein aa sakte hain gold valuation ke liye.".to_string()
+                    "Toh kya main aapke liye ek appointment schedule kar doon? Aap apne nearest branch mein aa sakte hain.".to_string()
                 }
             }
             ConversationStage::Farewell => {

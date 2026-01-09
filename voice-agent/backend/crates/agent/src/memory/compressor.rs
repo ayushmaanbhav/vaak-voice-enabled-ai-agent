@@ -461,7 +461,7 @@ impl ExtractiveCompressor {
         sentences
     }
 
-    /// Compress with DST state from GoldLoanDialogueState
+    /// Compress with DST state from DynamicDialogueState
     pub fn compress_with_dst_slots(
         &self,
         turns: &[ConversationTurn],

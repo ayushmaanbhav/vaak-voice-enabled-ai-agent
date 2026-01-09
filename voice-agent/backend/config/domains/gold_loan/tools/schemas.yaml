@@ -5,8 +5,9 @@ tools:
   check_eligibility:
     name: check_eligibility
     description: "Check if customer is eligible for a gold loan based on their gold weight and purity"
+    category: "calculation"
     parameters:
-      - name: gold_weight
+      - name: gold_weight_grams
         type: number
         description: "Weight of gold in grams"
         required: true
@@ -17,6 +18,12 @@ tools:
         description: "Purity of gold (e.g., '22K', '18K')"
         required: false
         enum: ["24K", "22K", "18K", "14K"]
+        default: "22K"
+      - name: existing_loan_amount
+        type: number
+        description: "Existing loan amount if any (optional)"
+        required: false
+        min: 0.0
 
   calculate_savings:
     name: calculate_savings
@@ -45,8 +52,8 @@ tools:
         min: 1
         max: 360
 
-  find_branches:
-    name: find_branches
+  find_locations:
+    name: find_locations
     description: "Find nearby Kotak Mahindra Bank branches that offer gold loans"
     parameters:
       - name: city
@@ -86,18 +93,24 @@ tools:
         required: true
         enum: ["eligibility_summary", "rate_comparison", "branch_info", "callback_confirmation"]
 
-  get_gold_rate:
-    name: get_gold_rate
-    description: "Get current gold rate per gram"
+  get_price:
+    name: get_price
+    description: "Get current gold rate per gram for different purities"
+    category: "information"
     parameters:
       - name: purity
         type: string
-        description: "Gold purity to get rate for"
+        description: "Gold purity to get rate for (optional, returns all if not specified)"
         required: false
         enum: ["24K", "22K", "18K"]
+      - name: weight_grams
+        type: number
+        description: "Optional weight in grams to calculate total value"
+        required: false
+        min: 0.1
 
-  compare_lenders:
-    name: compare_lenders
+  compare_providers:
+    name: compare_providers
     description: "Compare Kotak's gold loan offering with other lenders"
     parameters:
       - name: competitor
@@ -145,6 +158,38 @@ tools:
         required: false
         enum: ["voice_agent", "website", "branch_referral", "existing_customer"]
 
+  schedule_appointment:
+    name: schedule_appointment
+    description: "Schedule a branch visit appointment for gold valuation"
+    category: "scheduling"
+    parameters:
+      - name: customer_name
+        type: string
+        description: "Customer's name"
+        required: true
+      - name: phone_number
+        type: string
+        description: "Contact number (10 digits)"
+        required: true
+      - name: branch_id
+        type: string
+        description: "Branch ID or location"
+        required: true
+      - name: preferred_date
+        type: string
+        description: "Preferred date (YYYY-MM-DD)"
+        required: true
+      - name: preferred_time
+        type: string
+        description: "Preferred time slot"
+        required: true
+        enum: ["10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"]
+      - name: purpose
+        type: string
+        description: "Purpose of visit"
+        required: false
+        enum: ["New Gold Loan", "Gold Loan Transfer", "Top-up", "Closure", "Consultation"]
+
 # Tool usage guidelines for the LLM
 usage_guidelines:
   general: |
@@ -167,3 +212,128 @@ usage_guidelines:
 
   lead_capture: |
     Use capture_lead at conversation end when customer shows interest and provides contact info.
+
+# P16 FIX: Intent to Tool Mapping
+# Maps detected intents to appropriate tools with optional slot requirements
+# This replaces hardcoded intent-to-tool mappings in the agent code
+intent_to_tool:
+  # Eligibility checking
+  eligibility_check:
+    tool: check_eligibility
+    required_slots:
+      - gold_weight
+
+  # Balance transfer / switching lender
+  switch_lender:
+    tool: calculate_savings
+    required_slots:
+      - current_lender
+
+  balance_transfer:
+    tool: calculate_savings
+    required_slots:
+      - current_lender
+
+  # Branch/location inquiries
+  schedule_visit:
+    tool: find_locations
+    required_slots: []
+
+  branch_inquiry:
+    tool: find_locations
+    required_slots: []
+
+  # Lead capture when customer shows interest
+  capture_lead:
+    tool: capture_lead
+    required_slots:
+      - customer_name
+      - phone_number
+
+  interested:
+    tool: capture_lead
+    required_slots:
+      - phone_number
+
+  callback_request:
+    tool: capture_lead
+    required_slots:
+      - phone_number
+
+  # Appointment scheduling
+  schedule_appointment:
+    tool: schedule_appointment
+    required_slots:
+      - preferred_date
+    fallback_tool: find_locations
+
+  book_appointment:
+    tool: schedule_appointment
+    required_slots:
+      - preferred_date
+    fallback_tool: find_locations
+
+  visit_branch:
+    tool: schedule_appointment
+    required_slots:
+      - preferred_date
+    fallback_tool: find_locations
+
+  # Price inquiry
+  gold_price:
+    tool: get_price
+    required_slots: []
+
+  check_gold_price:
+    tool: get_price
+    required_slots: []
+
+  price_inquiry:
+    tool: get_price
+    required_slots: []
+
+  current_rate:
+    tool: get_price
+    required_slots: []
+
+  # Escalation to human
+  escalate:
+    tool: escalate_to_human
+    required_slots: []
+
+  human_agent:
+    tool: escalate_to_human
+    required_slots: []
+
+  speak_to_person:
+    tool: escalate_to_human
+    required_slots: []
+
+  talk_to_human:
+    tool: escalate_to_human
+    required_slots: []
+
+  real_person:
+    tool: escalate_to_human
+    required_slots: []
+
+  # SMS requests
+  send_sms:
+    tool: send_sms
+    required_slots: []
+
+  send_message:
+    tool: send_sms
+    required_slots: []
+
+  text_me:
+    tool: send_sms
+    required_slots: []
+
+  send_details:
+    tool: send_sms
+    required_slots: []
+
+  sms_info:
+    tool: send_sms
+    required_slots: []

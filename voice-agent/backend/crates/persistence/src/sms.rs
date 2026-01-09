@@ -108,34 +108,78 @@ pub struct SimulatedSmsService {
     client: ScyllaClient,
 }
 
+/// Brand context for SMS formatting
+/// P16 FIX: Renamed bank_name to company_name for domain-agnostic design.
+#[derive(Debug, Clone, Default)]
+pub struct SmsBrandContext {
+    pub company_name: String,
+    pub product_name: String,
+    pub helpline: String,
+}
+
 impl SimulatedSmsService {
     pub fn new(client: ScyllaClient) -> Self {
         Self { client }
     }
 
-    /// Generate appointment confirmation message
+    /// P16 FIX: Generate appointment confirmation message (domain-agnostic)
+    /// Brand context should come from domain config.
     pub fn format_appointment_confirmation(
         customer_name: &str,
         date: &str,
         time: &str,
         branch_name: &str,
         branch_address: &str,
+        brand: &SmsBrandContext,
     ) -> String {
+        let product = if brand.product_name.is_empty() {
+            "your appointment".to_string()
+        } else {
+            format!("your {} appointment", brand.product_name)
+        };
+        let helpline = if brand.helpline.is_empty() {
+            "our helpline".to_string()
+        } else {
+            brand.helpline.clone()
+        };
+        let sender = if brand.company_name.is_empty() {
+            "".to_string()
+        } else {
+            format!(" - {}", brand.company_name)
+        };
+
         format!(
-            "Dear {}, your Kotak Gold Loan appointment is confirmed for {} at {}. \
-             Branch: {}, {}. Please bring your gold and KYC documents. \
-             For queries, call 1800-xxx-xxxx. - Kotak Mahindra Bank",
-            customer_name, date, time, branch_name, branch_address
+            "Dear {}, {} is confirmed for {} at {}. \
+             Branch: {}, {}. Please bring required documents. \
+             For queries, call {}.{}",
+            customer_name, product, date, time, branch_name, branch_address, helpline, sender
         )
     }
 
-    /// Generate follow-up message
-    pub fn format_follow_up(customer_name: &str) -> String {
+    /// P16 FIX: Generate follow-up message (domain-agnostic)
+    /// Brand context should come from domain config.
+    pub fn format_follow_up(customer_name: &str, brand: &SmsBrandContext) -> String {
+        let product = if brand.product_name.is_empty() {
+            "our services".to_string()
+        } else {
+            brand.product_name.clone()
+        };
+        let helpline = if brand.helpline.is_empty() {
+            "our helpline".to_string()
+        } else {
+            brand.helpline.clone()
+        };
+        let sender = if brand.company_name.is_empty() {
+            "".to_string()
+        } else {
+            format!(" - {}", brand.company_name)
+        };
+
         format!(
-            "Dear {}, thank you for your interest in Kotak Gold Loan. \
-             Get up to 75% of gold value at competitive rates. \
-             Call 1800-xxx-xxxx or visit your nearest branch. - Kotak Mahindra Bank",
-            customer_name
+            "Dear {}, thank you for your interest in {}. \
+             We offer competitive rates and quick processing. \
+             Call {} or visit your nearest branch.{}",
+            customer_name, product, helpline, sender
         )
     }
 }
@@ -293,16 +337,54 @@ mod tests {
 
     #[test]
     fn test_format_appointment_confirmation() {
+        let brand = SmsBrandContext {
+            bank_name: "Test Bank".to_string(),
+            product_name: "Gold Loan".to_string(),
+            helpline: "1800-123-4567".to_string(),
+        };
         let msg = SimulatedSmsService::format_appointment_confirmation(
             "Rahul",
             "2024-01-15",
             "10:00 AM",
-            "Kotak Bank Andheri",
-            "123 Link Road, Mumbai",
+            "Test Branch",
+            "123 Main Road",
+            &brand,
         );
         assert!(msg.contains("Rahul"));
         assert!(msg.contains("2024-01-15"));
-        assert!(msg.contains("Kotak Bank Andheri"));
+        assert!(msg.contains("Test Branch"));
+        assert!(msg.contains("Gold Loan"));
+        assert!(msg.contains("Test Bank"));
+    }
+
+    #[test]
+    fn test_format_appointment_generic() {
+        // With empty brand (generic message)
+        let brand = SmsBrandContext::default();
+        let msg = SimulatedSmsService::format_appointment_confirmation(
+            "Customer",
+            "2024-01-20",
+            "2:00 PM",
+            "Branch A",
+            "Address",
+            &brand,
+        );
+        assert!(msg.contains("Customer"));
+        assert!(msg.contains("your appointment")); // Generic text
+        assert!(!msg.contains("Kotak")); // No hardcoded brand
+    }
+
+    #[test]
+    fn test_format_follow_up() {
+        let brand = SmsBrandContext {
+            bank_name: "Test Bank".to_string(),
+            product_name: "Personal Loan".to_string(),
+            helpline: "1800-999-8888".to_string(),
+        };
+        let msg = SimulatedSmsService::format_follow_up("John", &brand);
+        assert!(msg.contains("John"));
+        assert!(msg.contains("Personal Loan"));
+        assert!(msg.contains("Test Bank"));
     }
 
     #[test]

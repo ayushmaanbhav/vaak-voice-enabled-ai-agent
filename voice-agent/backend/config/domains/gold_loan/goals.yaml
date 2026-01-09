@@ -1,0 +1,157 @@
+# Goal Definitions for Domain
+# Each goal defines required slots, optional slots, and completion actions.
+# The DST (Dialog State Tracker) uses these to determine next-best-action.
+#
+# DESIGN: This config is domain-agnostic. Use generic slot names like:
+#   - asset_quantity (not gold_weight_grams)
+#   - asset_quality_tier (not gold_purity)
+#   - asset_type (not gold_item_type)
+
+# Action instruction templates (used by NextBestAction)
+# These replace hardcoded instructions in the agent code.
+# Placeholders: {slot_name}, {tool_name}, {brand.bank_name}, {brand.product_name}
+action_templates:
+  call_tool:
+    en: "CALL the {tool_name} tool now with available information"
+    hi: "{tool_name} tool अभी उपलब्ध जानकारी के साथ call करें"
+  ask_for:
+    en: "ASK customer for their {slot_display} (required to proceed)"
+    hi: "ग्राहक से उनका {slot_display} पूछें (आगे बढ़ने के लिए आवश्यक)"
+  offer_appointment:
+    en: "OFFER to schedule a branch visit appointment"
+    hi: "शाखा visit appointment शेड्यूल करने की पेशकश करें"
+  explain_process:
+    en: "EXPLAIN the transfer process: {brand.bank_name} pays off current lender directly, no cash needed from customer"
+    hi: "transfer प्रक्रिया समझाएं: {brand.bank_name} सीधे मौजूदा lender को भुगतान करता है, ग्राहक को cash की जरूरत नहीं"
+  discover_intent:
+    en: "ASK what brings them to {brand.bank_name} {brand.product_name} today"
+    hi: "पूछें कि आज उन्हें {brand.bank_name} {brand.product_name} में क्या लाया"
+  capture_lead:
+    en: "CAPTURE customer details for follow-up (name and phone)"
+    hi: "follow-up के लिए ग्राहक details capture करें (नाम और फोन)"
+
+goals:
+  exploration:
+    display_name: "Exploration"
+    description: "General exploration of options"
+    priority: 100  # Lowest priority (highest number)
+    required_slots: []
+    optional_slots: []
+
+  balance_transfer:
+    display_name: "Balance Transfer"
+    description: "Transfer existing loan from another lender"
+    priority: 20
+    required_slots:
+      - current_lender
+      - loan_amount
+    optional_slots:
+      - current_interest_rate
+    completion_tool: calculate_savings
+    slot_prompts:
+      current_lender:
+        en: "Which lender do you currently have your loan with?"
+        hi: "आपका मौजूदा लोन किस बैंक या NBFC से है?"
+      loan_amount:
+        en: "What is your current loan amount?"
+        hi: "आपकी वर्तमान लोन राशि क्या है?"
+      current_interest_rate:
+        en: "What interest rate are you currently paying?"
+        hi: "आप वर्तमान में कितना ब्याज दर दे रहे हैं?"
+
+  new_loan:
+    display_name: "New Loan"
+    description: "Apply for a new loan"
+    priority: 30
+    required_slots:
+      - asset_quantity
+      - loan_amount
+    optional_slots:
+      - asset_quality
+    completion_tool: check_eligibility
+    slot_prompts:
+      asset_quantity:
+        en: "How much gold do you have?"
+        hi: "आपके पास कितना सोना है?"
+      loan_amount:
+        en: "How much loan amount do you need?"
+        hi: "आपको कितनी लोन राशि चाहिए?"
+
+  eligibility_check:
+    display_name: "Eligibility Check"
+    description: "Check loan eligibility"
+    priority: 25
+    required_slots:
+      - asset_quantity
+    optional_slots:
+      - asset_quality
+    completion_tool: check_eligibility
+    slot_prompts:
+      asset_quantity:
+        en: "How much gold do you have to pledge?"
+        hi: "आपके पास गिरवी रखने के लिए कितना सोना है?"
+
+  branch_visit:
+    display_name: "Branch Visit"
+    description: "Schedule a branch visit"
+    priority: 40
+    required_slots:
+      - location
+    optional_slots:
+      - preferred_date
+      - preferred_time
+    completion_tool: find_branches
+    slot_prompts:
+      location:
+        en: "Which city or area are you located in?"
+        hi: "आप किस शहर या क्षेत्र में हैं?"
+
+  lead_capture:
+    display_name: "Lead Capture"
+    description: "Capture customer details for follow-up"
+    priority: 35
+    required_slots:
+      - customer_name
+      - phone_number
+    optional_slots:
+      - location
+    completion_tool: capture_lead
+    slot_prompts:
+      customer_name:
+        en: "May I have your name please?"
+        hi: "कृपया अपना नाम बताएं?"
+      phone_number:
+        en: "What is your phone number?"
+        hi: "आपका फोन नंबर क्या है?"
+
+# Intent to goal mappings
+# Maps detected intents to goal IDs
+intent_mappings:
+  # Balance transfer intents
+  balance_transfer: balance_transfer
+  switch_lender: balance_transfer
+  loan_transfer: balance_transfer
+
+  # Eligibility check intents
+  eligibility_inquiry: eligibility_check
+  eligibility_check: eligibility_check
+
+  # New loan intents
+  new_loan: new_loan
+  loan_inquiry: new_loan
+  gold_loan: new_loan
+
+  # Branch visit intents
+  branch_inquiry: branch_visit
+  find_branch: branch_visit
+  schedule_visit: branch_visit
+  appointment_request: branch_visit
+
+  # Lead capture intents
+  callback_request: lead_capture
+  capture_lead: lead_capture
+  interested: lead_capture
+  sms_request: lead_capture
+
+# Default goal when no intent is detected
+default_goal: exploration

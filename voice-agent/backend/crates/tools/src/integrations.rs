@@ -64,10 +64,10 @@ pub struct CrmLead {
     pub source: LeadSource,
     /// Interest level
     pub interest_level: InterestLevel,
-    /// Estimated gold weight
-    pub estimated_gold_grams: Option<f64>,
-    /// Current lender (if switching)
-    pub current_lender: Option<String>,
+    /// Estimated asset value/quantity (domain-specific interpretation)
+    pub estimated_asset_value: Option<f64>,
+    /// Current provider/lender (if switching)
+    pub current_provider: Option<String>,
     /// Notes from conversation
     pub notes: Option<String>,
     /// Assigned sales rep ID
@@ -189,8 +189,8 @@ impl CrmIntegration for StubCrmIntegration {
             city: Some("Mumbai".to_string()),
             source: LeadSource::VoiceAgent,
             interest_level: InterestLevel::Medium,
-            estimated_gold_grams: Some(50.0),
-            current_lender: None,
+            estimated_asset_value: Some(50.0),
+            current_provider: None,
             notes: None,
             assigned_to: None,
             status: LeadStatus::New,
@@ -251,16 +251,40 @@ pub struct Appointment {
     pub confirmation_sent: bool,
 }
 
-/// Appointment purpose
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum AppointmentPurpose {
-    #[default]
-    NewGoldLoan,
-    GoldLoanTransfer,
-    TopUp,
-    Closure,
-    Consultation,
+/// Appointment purpose - config-driven string type
+///
+/// Purpose values are loaded from domain config (e.g., service_types in documents.yaml).
+/// Common purposes: "new_loan", "balance_transfer", "top_up", "closure", "consultation"
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct AppointmentPurpose(pub String);
+
+impl AppointmentPurpose {
+    /// Create a new appointment purpose
+    pub fn new(purpose: impl Into<String>) -> Self {
+        Self(purpose.into())
+    }
+
+    /// Get the purpose as a string slice
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Check if this is a default/new application purpose
+    pub fn is_new_application(&self) -> bool {
+        self.0.is_empty() || self.0.contains("new")
+    }
+
+    /// Create from a service type ID (from config)
+    pub fn from_service_type(service_type: &str) -> Self {
+        Self(service_type.to_string())
+    }
+}
+
+impl std::fmt::Display for AppointmentPurpose {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 /// Appointment status
@@ -433,7 +457,7 @@ impl CalendarIntegration for StubCalendarIntegration {
             branch_id: "KMBL001".to_string(),
             date: "2024-12-30".to_string(),
             time_slot: "10:00 AM".to_string(),
-            purpose: AppointmentPurpose::NewGoldLoan,
+            purpose: AppointmentPurpose::new("new_loan"),
             notes: None,
             status: AppointmentStatus::Scheduled,
             confirmation_sent: true,
@@ -461,8 +485,8 @@ mod tests {
             city: Some("Mumbai".to_string()),
             source: LeadSource::VoiceAgent,
             interest_level: InterestLevel::High,
-            estimated_gold_grams: Some(100.0),
-            current_lender: Some("Muthoot".to_string()),
+            estimated_asset_value: Some(100.0),
+            current_provider: Some("Competitor".to_string()),
             notes: None,
             assigned_to: None,
             status: LeadStatus::New,
@@ -493,7 +517,7 @@ mod tests {
             branch_id: "KMBL001".to_string(),
             date: "2024-12-30".to_string(),
             time_slot: "10:00 AM".to_string(),
-            purpose: AppointmentPurpose::NewGoldLoan,
+            purpose: AppointmentPurpose::new("new_loan"),
             notes: None,
             status: AppointmentStatus::Scheduled,
             confirmation_sent: false,

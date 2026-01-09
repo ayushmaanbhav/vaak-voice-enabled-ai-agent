@@ -211,21 +211,23 @@ pub struct PersonaBlock {
 }
 
 impl Default for PersonaBlock {
+    /// Create a generic persona with no domain-specific references
+    ///
+    /// For domain-specific personas, use `PersonaBlock::from_config()`.
     fn default() -> Self {
-        let name = "Priya".to_string();
-        let role = "Gold Loan Advisor at Kotak Mahindra Bank".to_string();
+        let name = "Assistant".to_string();
+        let role = "Customer Service Specialist".to_string();
         let personality = "warm, professional, and helpful".to_string();
         let guidelines = vec![
             "Always be respectful and patient".to_string(),
-            "Explain gold loan benefits clearly".to_string(),
-            "Compare favorably with competitors when relevant".to_string(),
-            "Offer to schedule branch visits".to_string(),
+            "Explain benefits clearly".to_string(),
+            "Address customer concerns with empathy".to_string(),
+            "Guide customers to appropriate next steps".to_string(),
         ];
         let domain_expertise = vec![
-            "Gold loan products and interest rates".to_string(),
-            "Kotak Mahindra Bank services".to_string(),
-            "Gold purity assessment".to_string(),
-            "Loan documentation requirements".to_string(),
+            "Product information and benefits".to_string(),
+            "Service offerings".to_string(),
+            "Customer support".to_string(),
         ];
 
         // Calculate actual char count
@@ -259,6 +261,48 @@ impl PersonaBlock {
             personality: "professional and helpful".to_string(),
             guidelines: Vec::new(),
             domain_expertise: Vec::new(),
+            current_goals: Vec::new(),
+            char_count,
+        }
+    }
+
+    /// Create persona from brand configuration
+    ///
+    /// This is the recommended way to create domain-specific personas.
+    /// P16 FIX: Renamed bank_name to company_name for domain-agnostic design.
+    pub fn from_brand_config(
+        agent_name: &str,
+        agent_role: &str,
+        company_name: &str,
+        product_name: &str,
+    ) -> Self {
+        let name = agent_name.to_string();
+        let role = format!("{} at {}", agent_role, company_name);
+        let personality = "warm, professional, and helpful".to_string();
+        let guidelines = vec![
+            "Always be respectful and patient".to_string(),
+            format!("Explain {} benefits clearly", product_name),
+            "Compare favorably with competitors when relevant".to_string(),
+            "Offer to schedule visits or callbacks".to_string(),
+        ];
+        let domain_expertise = vec![
+            format!("{} products and rates", product_name),
+            format!("{} services", company_name),
+            "Documentation requirements".to_string(),
+        ];
+
+        let char_count = name.len()
+            + role.len()
+            + personality.len()
+            + guidelines.iter().map(|s| s.len()).sum::<usize>()
+            + domain_expertise.iter().map(|s| s.len()).sum::<usize>();
+
+        Self {
+            name,
+            role,
+            personality,
+            guidelines,
+            domain_expertise,
             current_goals: Vec::new(),
             char_count,
         }
@@ -598,15 +642,51 @@ mod tests {
 
     #[test]
     fn test_persona_block_basics() {
-        let mut persona = PersonaBlock::new("Priya", "Gold Loan Advisor");
+        let mut persona = PersonaBlock::new("TestAgent", "Service Advisor");
 
         persona.set_personality("warm and helpful");
         persona.add_guideline("Always greet customers warmly");
-        persona.add_goal("Help customer understand gold loan benefits");
+        persona.add_goal("Help customer understand benefits");
 
-        assert_eq!(persona.name, "Priya");
-        assert!(persona.guidelines.len() > 0);
-        assert!(persona.current_goals.len() > 0);
+        assert_eq!(persona.name, "TestAgent");
+        assert!(!persona.guidelines.is_empty());
+        assert!(!persona.current_goals.is_empty());
+    }
+
+    #[test]
+    fn test_persona_from_brand_config() {
+        let persona = PersonaBlock::from_brand_config(
+            "Maya",
+            "Product Specialist",
+            "Test Bank",
+            "Test Product",
+        );
+
+        assert_eq!(persona.name, "Maya");
+        assert!(persona.role.contains("Test Bank"));
+        assert!(persona.role.contains("Product Specialist"));
+        // Guidelines should mention the product
+        assert!(persona.guidelines.iter().any(|g| g.contains("Test Product")));
+        // Domain expertise should mention the bank
+        assert!(persona.domain_expertise.iter().any(|e| e.contains("Test Bank")));
+    }
+
+    #[test]
+    fn test_persona_default_is_generic() {
+        let persona = PersonaBlock::default();
+
+        // Default should not contain domain-specific references
+        assert!(!persona.name.to_lowercase().contains("priya"));
+        assert!(!persona.role.to_lowercase().contains("gold"));
+        assert!(!persona.role.to_lowercase().contains("kotak"));
+
+        for guideline in &persona.guidelines {
+            assert!(
+                !guideline.to_lowercase().contains("gold loan"),
+                "Guideline should not mention gold loan: {}",
+                guideline
+            );
+        }
     }
 
     #[test]
@@ -646,15 +726,16 @@ mod tests {
         let memory = CoreMemory::default();
 
         memory.set_customer_name("Rajesh");
-        memory.human_append("gold_weight", "50 grams").unwrap();
-        memory.add_persona_goal("Explain loan benefits");
+        memory.human_append("weight", "50 grams").unwrap();
+        memory.add_persona_goal("Explain benefits");
 
         let context = memory.format_for_context();
 
-        assert!(context.contains("Priya"));
+        // Default persona is "Assistant" now (generic)
+        assert!(context.contains("Assistant"));
         assert!(context.contains("Rajesh"));
         assert!(context.contains("50 grams"));
-        assert!(context.contains("Explain loan benefits"));
+        assert!(context.contains("Explain benefits"));
     }
 
     #[test]

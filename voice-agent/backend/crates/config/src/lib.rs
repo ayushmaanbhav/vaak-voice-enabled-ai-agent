@@ -5,66 +5,50 @@
 //! - Environment variables (VOICE_AGENT_ prefix)
 //! - Runtime overrides
 //!
-//! # Phase 6: Domain Configuration
+//! # Domain Configuration
 //!
-//! Comprehensive domain-specific configuration:
-//! - Branch/location information
-//! - Product features and eligibility
-//! - Competitor details and comparison
-//! - Prompt templates and scripts
-//! - Unified domain config loader
+//! All domain-specific configuration now lives in config/domains/{domain}/:
+//! - domain.yaml - Core rates, competitors, constants
+//! - branches.yaml - Branch locations
+//! - competitors.yaml - Competitor details
+//! - objections.yaml - Objection handling
+//! - prompts.yaml - Prompt templates
+//! - etc.
+//!
+//! Access via MasterDomainConfig and crate-specific views:
+//! - AgentDomainView for agent crate
+//! - LlmDomainView for llm crate
+//! - ToolsDomainView for tools crate
 
 pub mod agent;
-pub mod branch;
-pub mod competitor;
 // P1 FIX: Centralized constants module
 pub mod constants;
+// P13 FIX: All domain config now in domain/ submodule (YAML-driven)
 pub mod domain;
-pub mod domain_config;
-pub mod gold_loan;
 pub mod pipeline;
-pub mod product;
-pub mod prompts;
 pub mod settings;
 
 pub use agent::{AgentConfig, MemoryConfig, PersonaConfig};
-pub use gold_loan::{CompetitorRates, GoldLoanConfig, PurityFactors, TieredRates};
 pub use pipeline::PipelineConfig;
 pub use settings::{
     load_settings, AuthConfig, PersistenceConfig, RagConfig, RateLimitConfig, RuntimeEnvironment,
     ServerConfig, Settings, TurnServerConfig,
 };
 
-// Phase 6 exports
-pub use branch::{
-    Branch, BranchConfig, BranchFeatures, Coordinates, DoorstepServiceConfig, OperatingHours,
-};
-pub use competitor::{
-    BalanceTransferBenefits, ComparisonPoint, Competitor, CompetitorConfig, CompetitorType,
-    MonthlySavings, ObjectionHandler, SwitchingBenefits,
-};
-pub use domain::{domain_config, init_domain_config, DomainConfig, DomainConfigManager};
-// P5 FIX: Export new hierarchical domain configuration
+// P13 FIX: Domain configuration via MasterDomainConfig + views
 pub use domain::{
     MasterDomainConfig,
     // Sub-config types
     BranchDefaults, BranchEntry, BranchesConfig,
-    ComparisonPoint as DomainComparisonPoint, CompetitorDefaults, CompetitorEntry as DomainCompetitorEntry,
+    ComparisonPoint, CompetitorDefaults, CompetitorEntry,
     CompetitorsConfig, NumericThreshold, ObjectionDefinition, ObjectionResponse, ObjectionsConfig,
     PromptsConfig, QualificationThresholds, ScoringConfig, SegmentDefinition, SegmentDetection,
     SegmentsConfig, SlotDefinition, SlotsConfig, SmsTemplatesConfig, StageDefinition, StagesConfig,
     ToolParameter, ToolSchema, ToolsConfig,
+    // Goals and action templates (domain-agnostic action instructions)
+    ActionContext, ActionTemplate, ActionTemplatesConfig, GoalEntry, GoalsConfig,
     // View types
-    AgentDomainView, CompetitorInfo, LlmDomainView, ToolsDomainView,
-};
-pub use product::{
-    DigitalFeatures, DocumentationConfig, EligibilityConfig, ExistingCustomerBenefits,
-    FeeStructure, FeeType, FeesConfig, GoldPurityRequirements, ProductConfig, ProductFeatures,
-    ProductVariant, SellingPoint, TenureConfig,
-};
-pub use prompts::{
-    ClosingTemplates, FallbackTemplates, GreetingTemplates, PromptTemplates, ResponseTemplates,
-    StagePrompt, SystemPrompt,
+    AgentDomainView, CompetitorInfo, LlmDomainView, MonthlySavings, ToolsDomainView,
 };
 
 use thiserror::Error;

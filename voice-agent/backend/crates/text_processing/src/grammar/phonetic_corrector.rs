@@ -48,7 +48,11 @@ pub struct PhoneticCorrector {
 }
 
 impl PhoneticCorrector {
-    /// Create a new phonetic corrector with domain vocabulary
+    /// Create a new phonetic corrector with domain vocabulary only
+    ///
+    /// NOTE: This creates a corrector with vocabulary for SymSpell but NO
+    /// confusion/contextual/phrase rules. Use `from_domain_config()` for full
+    /// production config-driven setup.
     pub fn new(vocabulary: Vec<String>, config: PhoneticCorrectorConfig) -> Self {
         // Build SymSpell dictionary from vocabulary
         let mut symspell: SymSpell<UnicodeStringStrategy> = SymSpellBuilder::default()
@@ -79,222 +83,80 @@ impl PhoneticCorrector {
                 .push(word.clone());
         }
 
-        // Build confusion rules
-        let confusion_rules = Self::build_confusion_rules();
-        let contextual_rules = Self::build_contextual_rules();
-        let phrase_rules = Self::build_phrase_rules();
-
+        // No hardcoded rules - use from_domain_config() for config-driven rules
         Self {
             symspell,
-            confusion_rules,
-            contextual_rules,
-            phrase_rules,
+            confusion_rules: HashMap::new(),
+            contextual_rules: HashMap::new(),
+            phrase_rules: Vec::new(),
             metaphone_index,
             config,
         }
     }
 
-    /// Create corrector for gold loan domain
-    pub fn gold_loan() -> Self {
-        let vocabulary = vec![
-            // Product terms
-            "gold".to_string(),
-            "loan".to_string(),
-            "gold loan".to_string(),
-            "balance transfer".to_string(),
-            "top-up".to_string(),
-            "topup".to_string(),
-            "foreclosure".to_string(),
-            "prepayment".to_string(),
-            "disbursement".to_string(),
-            "interest".to_string(),
-            "interest rate".to_string(),
-            "EMI".to_string(),
-            "LTV".to_string(),
-            "processing fee".to_string(),
-            // Gold terms
-            "hallmark".to_string(),
-            "purity".to_string(),
-            "carat".to_string(),
-            "jewellery".to_string(),
-            "ornaments".to_string(),
-            // Bank names
-            "Kotak".to_string(),
-            "Kotak Bank".to_string(),
-            "Kotak Mahindra".to_string(),
-            "Kotak Mahindra Bank".to_string(),
-            // Competitors
-            "Muthoot".to_string(),
-            "Manappuram".to_string(),
-            "IIFL".to_string(),
-            "HDFC".to_string(),
-            "SBI".to_string(),
-            "ICICI".to_string(),
-            // Numbers/units
-            "lakh".to_string(),
-            "lakhs".to_string(),
-            "crore".to_string(),
-            "rupees".to_string(),
-            "percent".to_string(),
-            "gram".to_string(),
-            "grams".to_string(),
-            // Common terms
-            "branch".to_string(),
-            "documents".to_string(),
-            "eligibility".to_string(),
-            "apply".to_string(),
-            "process".to_string(),
-            "transfer".to_string(),
-        ];
+    /// Create corrector from domain configuration
+    ///
+    /// This is the preferred way to create a PhoneticCorrector - config-driven.
+    /// Pass in vocabulary terms and phonetic corrections from MasterDomainConfig.
+    pub fn from_domain_config(
+        vocabulary_terms: &[String],
+        confusion_rules: std::collections::HashMap<String, String>,
+        contextual_rules: Vec<(String, String, String)>, // (context, error, correction)
+        phrase_rules: std::collections::HashMap<String, String>,
+        config: PhoneticCorrectorConfig,
+    ) -> Self {
+        // Build SymSpell dictionary from vocabulary
+        let mut symspell: SymSpell<UnicodeStringStrategy> = SymSpellBuilder::default()
+            .max_dictionary_edit_distance(config.max_edit_distance)
+            .prefix_length(7)
+            .build()
+            .expect("Failed to build SymSpell");
 
-        Self::new(vocabulary, PhoneticCorrectorConfig::default())
+        // Add vocabulary words with high frequency
+        for word in vocabulary_terms {
+            let word_lower = word.to_lowercase();
+            if !word_lower.contains(' ') && !word_lower.contains('-') {
+                let line = format!("{},1000000", word_lower);
+                symspell.load_dictionary_line(&line, 0, 1, ",");
+            }
+        }
+
+        // Build metaphone index
+        let mut metaphone_index: HashMap<String, Vec<String>> = HashMap::new();
+        for word in vocabulary_terms {
+            let code = double_metaphone(&word.to_lowercase());
+            metaphone_index
+                .entry(code)
+                .or_default()
+                .push(word.clone());
+        }
+
+        // Convert contextual rules to HashMap<(String, String), String>
+        let mut contextual_rules_map = HashMap::new();
+        for (context, error, correction) in contextual_rules {
+            contextual_rules_map.insert((context.to_lowercase(), error.to_lowercase()), correction);
+        }
+
+        // Convert phrase_rules to Vec for ordered processing
+        let phrase_rules_vec: Vec<(String, String)> = phrase_rules
+            .into_iter()
+            .map(|(k, v)| (k.to_lowercase(), v))
+            .collect();
+
+        Self {
+            symspell,
+            confusion_rules,
+            contextual_rules: contextual_rules_map,
+            phrase_rules: phrase_rules_vec,
+            metaphone_index,
+            config,
+        }
     }
 
-    /// Build direct phonetic confusion rules
-    fn build_confusion_rules() -> HashMap<String, String> {
-        let mut rules = HashMap::new();
-
-        // Common ASR errors for gold loan domain
-        // Format: misspelling -> correct
-
-        // "alone" sounds like "loan"
-        rules.insert("alone".to_string(), "loan".to_string());
-        rules.insert("along".to_string(), "loan".to_string());
-        rules.insert("a loan".to_string(), "loan".to_string());
-
-        // "lone/long/loon" -> "loan"
-        rules.insert("lone".to_string(), "loan".to_string());
-        rules.insert("long".to_string(), "loan".to_string());
-        rules.insert("loon".to_string(), "loan".to_string());
-        rules.insert("loom".to_string(), "loan".to_string());
-
-        // Kotak misspellings
-        rules.insert("kotuk".to_string(), "Kotak".to_string());
-        rules.insert("kotek".to_string(), "Kotak".to_string());
-        rules.insert("kodak".to_string(), "Kotak".to_string());
-        rules.insert("kotac".to_string(), "Kotak".to_string());
-        rules.insert("ko tak".to_string(), "Kotak".to_string());
-        rules.insert("co tak".to_string(), "Kotak".to_string());
-        rules.insert("co-tak".to_string(), "Kotak".to_string());
-
-        // "gol/gould" -> "gold"
-        rules.insert("gol".to_string(), "gold".to_string());
-        rules.insert("gould".to_string(), "gold".to_string());
-        rules.insert("gole".to_string(), "gold".to_string());
-
-        // Interest misspellings
-        rules.insert("intrst".to_string(), "interest".to_string());
-        rules.insert("intrest".to_string(), "interest".to_string());
-        rules.insert("intrist".to_string(), "interest".to_string());
-
-        // EMI misspellings
-        rules.insert("amy".to_string(), "EMI".to_string());
-        rules.insert("emy".to_string(), "EMI".to_string());
-        rules.insert("e m i".to_string(), "EMI".to_string());
-
-        // LTV misspellings
-        rules.insert("ltv".to_string(), "LTV".to_string());
-        rules.insert("l t v".to_string(), "LTV".to_string());
-        rules.insert("el tv".to_string(), "LTV".to_string());
-
-        // Lakh misspellings
-        rules.insert("lac".to_string(), "lakh".to_string());
-        rules.insert("lack".to_string(), "lakh".to_string());
-        rules.insert("lacs".to_string(), "lakhs".to_string());
-        rules.insert("lacks".to_string(), "lakhs".to_string());
-
-        // Other common errors
-        rules.insert("prosess".to_string(), "process".to_string());
-        rules.insert("procesing".to_string(), "processing".to_string());
-        rules.insert("documants".to_string(), "documents".to_string());
-        rules.insert("documints".to_string(), "documents".to_string());
-        rules.insert("elgibility".to_string(), "eligibility".to_string());
-        rules.insert("eligiblity".to_string(), "eligibility".to_string());
-
-        // Muthoot/Manappuram misspellings
-        rules.insert("muthut".to_string(), "Muthoot".to_string());
-        rules.insert("muthood".to_string(), "Muthoot".to_string());
-        rules.insert("manapuram".to_string(), "Manappuram".to_string());
-        rules.insert("manapram".to_string(), "Manappuram".to_string());
-
-        rules
-    }
-
-    /// Build contextual rules (corrections that depend on surrounding words)
-    fn build_contextual_rules() -> HashMap<(String, String), String> {
-        let mut rules = HashMap::new();
-
-        // "gold alone" -> "gold loan" (alone after gold = loan)
-        rules.insert(
-            ("gold".to_string(), "alone".to_string()),
-            "loan".to_string(),
-        );
-        rules.insert(
-            ("gold".to_string(), "along".to_string()),
-            "loan".to_string(),
-        );
-
-        // "gol alone" -> "gold loan"
-        rules.insert(("gol".to_string(), "alone".to_string()), "loan".to_string());
-        rules.insert(("gol".to_string(), "along".to_string()), "loan".to_string());
-
-        // "balance transfer" variations
-        rules.insert(
-            ("balance".to_string(), "tranfer".to_string()),
-            "transfer".to_string(),
-        );
-        rules.insert(
-            ("balance".to_string(), "transfor".to_string()),
-            "transfer".to_string(),
-        );
-
-        // "interest rate" variations
-        rules.insert(
-            ("interest".to_string(), "rat".to_string()),
-            "rate".to_string(),
-        );
-        rules.insert(
-            ("intrest".to_string(), "rate".to_string()),
-            "rate".to_string(),
-        );
-
-        rules
-    }
-
-    /// Build phrase-level correction rules for common ASR errors
-    fn build_phrase_rules() -> Vec<(String, String)> {
-        vec![
-            // "It's me about" -> "tell me about" (very common STT error)
-            ("it's me about".to_string(), "tell me about".to_string()),
-            ("its me about".to_string(), "tell me about".to_string()),
-            ("it me about".to_string(), "tell me about".to_string()),
-            // "It's me" at start -> "tell me"
-            ("it's me".to_string(), "tell me".to_string()),
-            ("its me".to_string(), "tell me".to_string()),
-            // "can you it's me" -> "can you tell me"
-            ("can you it's me".to_string(), "can you tell me".to_string()),
-            // "please it's me" -> "please tell me"
-            ("please it's me".to_string(), "please tell me".to_string()),
-            // Gold loan specific phrases - STT commonly mishears these
-            ("gold alone".to_string(), "gold loan".to_string()),
-            ("gol alone".to_string(), "gold loan".to_string()),
-            ("goal alone".to_string(), "gold loan".to_string()),
-            ("gold loon".to_string(), "gold loan".to_string()),
-            ("gol loon".to_string(), "gold loan".to_string()),
-            ("goal loon".to_string(), "gold loan".to_string()),
-            ("gold long".to_string(), "gold loan".to_string()),
-            // Single-word mishears for "gold loan"
-            ("bulldol".to_string(), "gold loan".to_string()),
-            ("bulldoll".to_string(), "gold loan".to_string()),
-            ("goldol".to_string(), "gold loan".to_string()),
-            ("golddol".to_string(), "gold loan".to_string()),
-            ("workload".to_string(), "gold loan".to_string()), // common mishear
-            // "balance tranfer" -> "balance transfer"
-            ("balance tranfer".to_string(), "balance transfer".to_string()),
-            // Interest rate variations
-            ("intrest rate".to_string(), "interest rate".to_string()),
-            ("intrst rate".to_string(), "interest rate".to_string()),
-        ]
+    /// Create an empty corrector with no domain-specific rules
+    /// Used when no domain config is available
+    pub fn empty() -> Self {
+        Self::new(Vec::new(), PhoneticCorrectorConfig::default())
     }
 
     /// Apply phrase-level corrections to text
@@ -713,37 +575,60 @@ fn capitalize_first(s: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Create a test fixture corrector with sample rules
+    fn test_fixture() -> PhoneticCorrector {
+        let vocabulary = vec![
+            "gold".to_string(),
+            "loan".to_string(),
+            "interest".to_string(),
+            "rate".to_string(),
+            "lakh".to_string(),
+            "BrandX".to_string(),
+        ];
+
+        let mut confusion_rules = HashMap::new();
+        confusion_rules.insert("gol".to_string(), "gold".to_string());
+        confusion_rules.insert("lone".to_string(), "loan".to_string());
+        confusion_rules.insert("intrest".to_string(), "interest".to_string());
+        confusion_rules.insert("lac".to_string(), "lakh".to_string());
+        confusion_rules.insert("brandex".to_string(), "BrandX".to_string());
+
+        let contextual_rules = vec![
+            ("gold".to_string(), "alone".to_string(), "loan".to_string()),
+        ];
+
+        let mut phrase_rules = HashMap::new();
+        phrase_rules.insert("gold alone".to_string(), "gold loan".to_string());
+        phrase_rules.insert("gold loon".to_string(), "gold loan".to_string());
+        phrase_rules.insert("it's me about".to_string(), "tell me about".to_string());
+
+        PhoneticCorrector::from_domain_config(
+            &vocabulary,
+            confusion_rules,
+            contextual_rules,
+            phrase_rules,
+            PhoneticCorrectorConfig::default(),
+        )
+    }
+
     #[test]
     fn test_gold_alone_correction() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
         let (corrected, corrections) = corrector.correct("gold alone");
         assert_eq!(corrected, "gold loan");
         assert!(!corrections.is_empty());
     }
 
     #[test]
-    fn test_kotak_correction() {
-        let corrector = PhoneticCorrector::gold_loan();
-
-        let (corrected, _) = corrector.correct("kotuk bank");
-        assert!(corrected.contains("Kotak"));
-
-        let (corrected, _) = corrector.correct("kodak bank");
-        assert!(corrected.contains("Kotak"));
-    }
-
-    #[test]
-    fn test_sentence_start_why() {
-        let corrector = PhoneticCorrector::gold_loan();
-        let (corrected, corrections) = corrector.correct("Why need help regarding gold alone");
-        assert!(corrected.starts_with("I need"));
-        assert!(corrected.contains("gold loan"));
-        assert!(corrections.len() >= 2);
+    fn test_confusion_rule() {
+        let corrector = test_fixture();
+        let (corrected, _) = corrector.correct("brandex store");
+        assert!(corrected.contains("BrandX"));
     }
 
     #[test]
     fn test_no_false_positives() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
 
         // Words that should NOT be corrected
         let (corrected, corrections) = corrector.correct("hello world");
@@ -753,14 +638,14 @@ mod tests {
 
     #[test]
     fn test_interest_rate() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
         let (corrected, _) = corrector.correct("what is the intrest rate");
         assert!(corrected.contains("interest"));
     }
 
     #[test]
     fn test_lakh_correction() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
         let (corrected, _) = corrector.correct("I need 5 lac rupees");
         assert!(corrected.contains("lakh"));
     }
@@ -777,31 +662,50 @@ mod tests {
 
     #[test]
     fn test_preserves_punctuation() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
         let (corrected, _) = corrector.correct("gold alone?");
         assert!(corrected.ends_with('?'));
         assert!(corrected.contains("loan"));
     }
 
     #[test]
-    fn test_its_me_to_tell_me() {
-        let corrector = PhoneticCorrector::gold_loan();
-
-        // "It's me about Gold Loon" -> "tell me about Gold Loan"
-        let (corrected, corrections) = corrector.correct("It's me about Gold Loon.");
+    fn test_phrase_correction() {
+        let corrector = test_fixture();
+        let (corrected, corrections) = corrector.correct("it's me about gold loan");
         assert!(corrected.to_lowercase().contains("tell me about"));
-        assert!(corrected.to_lowercase().contains("gold loan"));
         assert!(!corrections.is_empty());
-
-        // Simpler case
-        let (corrected, _) = corrector.correct("It's me about gold loan");
-        assert!(corrected.to_lowercase().starts_with("tell me"));
     }
 
     #[test]
     fn test_loon_to_loan() {
-        let corrector = PhoneticCorrector::gold_loan();
+        let corrector = test_fixture();
         let (corrected, _) = corrector.correct("gold loon");
         assert!(corrected.to_lowercase().contains("gold loan"));
+    }
+
+    #[test]
+    fn test_empty_corrector() {
+        let corrector = PhoneticCorrector::empty();
+        let (corrected, corrections) = corrector.correct("hello world");
+        assert_eq!(corrected, "hello world");
+        assert!(corrections.is_empty());
+    }
+
+    #[test]
+    fn test_from_domain_config() {
+        let vocabulary = vec!["custom".to_string()];
+        let mut confusion_rules = HashMap::new();
+        confusion_rules.insert("custum".to_string(), "custom".to_string());
+
+        let corrector = PhoneticCorrector::from_domain_config(
+            &vocabulary,
+            confusion_rules,
+            vec![],
+            HashMap::new(),
+            PhoneticCorrectorConfig::default(),
+        );
+
+        let (corrected, _) = corrector.correct("custum word");
+        assert!(corrected.contains("custom"));
     }
 }

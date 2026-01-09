@@ -369,7 +369,7 @@ mod tests {
         let apt = Appointment::new(
             "+919876543210",
             "branch-001",
-            "Kotak Andheri",
+            "Test Branch Andheri",
             "123 Link Road",
             date,
             "10:00 AM",

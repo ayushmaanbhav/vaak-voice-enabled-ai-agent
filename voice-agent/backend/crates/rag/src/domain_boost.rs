@@ -1,19 +1,20 @@
 //! Domain-specific term boosting for retrieval
 //!
-//! Provides boosting for domain-specific terms to improve retrieval relevance.
-//! Optimized for the gold loan domain with Kotak-specific terminology.
+//! P16 FIX: Terms are now config-driven via MasterDomainConfig.domain_boost.
+//! No hardcoded domain-specific terminology.
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
 
 /// Domain booster configuration
+/// P16 FIX: Now uses config values, not hardcoded defaults
 #[derive(Debug, Clone)]
 pub struct DomainBoostConfig {
     /// Base boost multiplier for domain terms
     pub base_boost: f32,
     /// Additional boost for exact matches
     pub exact_match_boost: f32,
-    /// Boost for Kotak-specific terms
+    /// Boost for brand terms
     pub brand_boost: f32,
     /// Enable category-based boosting
     pub category_boost_enabled: bool,
@@ -43,10 +44,11 @@ pub struct DomainTerm {
     pub related: Vec<String>,
 }
 
-/// Term category for gold loan domain
+/// Term category for domain boosting
+/// P16 FIX: Generic categories, not domain-specific
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TermCategory {
-    /// Product terms (gold loan, jewel loan)
+    /// Product/service terms
     Product,
     /// Rate/pricing terms (interest, emi, fees)
     Rate,
@@ -54,27 +56,45 @@ pub enum TermCategory {
     Process,
     /// Eligibility terms (criteria, requirements)
     Eligibility,
-    /// Brand/competitor terms
+    /// Brand terms
     Brand,
-    /// Gold-specific terms (purity, weight, karat)
-    Gold,
+    /// Asset-specific terms (for valuation)
+    Asset,
     /// Customer terms (account, kyc)
     Customer,
+    /// Competitor terms
+    Competitor,
     /// General/other
     General,
 }
 
 impl TermCategory {
-    /// Get category boost multiplier
-    pub fn boost_multiplier(&self) -> f32 {
+    /// Parse category from config string
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "product" => Self::Product,
+            "rate" => Self::Rate,
+            "process" => Self::Process,
+            "eligibility" => Self::Eligibility,
+            "brand" => Self::Brand,
+            "asset" | "gold" => Self::Asset,
+            "customer" => Self::Customer,
+            "competitor" => Self::Competitor,
+            _ => Self::General,
+        }
+    }
+
+    /// Get default category boost multiplier
+    pub fn default_boost_multiplier(&self) -> f32 {
         match self {
             Self::Product => 1.5,
             Self::Rate => 1.4,
             Self::Eligibility => 1.3,
             Self::Process => 1.2,
             Self::Brand => 1.5,
-            Self::Gold => 1.4,
+            Self::Asset => 1.4,
             Self::Customer => 1.1,
+            Self::Competitor => 1.3,
             Self::General => 1.0,
         }
     }
@@ -109,13 +129,13 @@ pub struct MatchedTerm {
 /// Detected query intent
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryIntent {
-    /// Asking about interest rates
+    /// Asking about rates/pricing
     RateInquiry,
     /// Checking eligibility
     EligibilityCheck,
     /// Application process
     ApplicationProcess,
-    /// Loan amount calculation
+    /// Amount calculation
     AmountCalculation,
     /// Branch/location inquiry
     BranchLocator,
@@ -123,236 +143,153 @@ pub enum QueryIntent {
     DocumentInquiry,
     /// Competitor comparison
     CompetitorComparison,
-    /// Repayment/EMI query
+    /// Repayment query
     RepaymentInquiry,
     /// General inquiry
     General,
 }
 
-/// Domain booster for gold loan retrieval
+/// Domain booster for retrieval relevance
+/// P16 FIX: Now accepts terms from config instead of hardcoding
 pub struct DomainBooster {
     config: DomainBoostConfig,
     /// Domain terms dictionary
     terms: RwLock<HashMap<String, DomainTerm>>,
-    /// Intent patterns
-    intent_patterns: Vec<(Vec<&'static str>, QueryIntent)>,
+    /// Category boost multipliers from config
+    category_boosts: HashMap<String, f32>,
+    /// Intent patterns (config-driven in the future)
+    intent_patterns: Vec<(Vec<String>, QueryIntent)>,
 }
 
 impl DomainBooster {
-    /// Create a new domain booster
+    /// Create a new domain booster with local config
     pub fn new(config: DomainBoostConfig) -> Self {
-        let booster = Self {
+        Self {
             config,
             terms: RwLock::new(HashMap::new()),
+            category_boosts: HashMap::new(),
+            intent_patterns: Self::default_intent_patterns(),
+        }
+    }
+
+    /// P16 FIX: Create from MasterDomainConfig
+    pub fn from_config(master: &voice_agent_config::MasterDomainConfig) -> Self {
+        let config_boost = &master.domain_boost;
+
+        let config = DomainBoostConfig {
+            base_boost: config_boost.default_boost as f32,
+            exact_match_boost: 2.0,
+            brand_boost: 1.3,
+            category_boost_enabled: true,
+        };
+
+        let mut booster = Self {
+            config,
+            terms: RwLock::new(HashMap::new()),
+            category_boosts: config_boost.category_boosts.iter()
+                .map(|(k, v)| (k.clone(), *v as f32))
+                .collect(),
             intent_patterns: Self::default_intent_patterns(),
         };
-        booster.load_gold_loan_terms();
+
+        // Load terms from config
+        booster.load_terms_from_config(&config_boost.terms);
+
         booster
     }
 
-    /// Create with default gold loan configuration
-    pub fn gold_loan() -> Self {
-        Self::new(DomainBoostConfig::default())
-    }
-
-    /// Load gold loan domain terms
-    fn load_gold_loan_terms(&self) {
-        let terms = vec![
-            // Product terms
-            DomainTerm {
-                term: "gold loan".to_string(),
-                category: TermCategory::Product,
-                boost: 2.0,
-                related: vec!["sona loan".to_string(), "jewel loan".to_string()],
-            },
-            DomainTerm {
-                term: "jewel loan".to_string(),
-                category: TermCategory::Product,
-                boost: 1.8,
-                related: vec!["gold loan".to_string(), "ornament loan".to_string()],
-            },
-            // Rate terms
-            DomainTerm {
-                term: "interest rate".to_string(),
-                category: TermCategory::Rate,
-                boost: 1.8,
-                related: vec!["byaj dar".to_string(), "rate".to_string()],
-            },
-            DomainTerm {
-                term: "emi".to_string(),
-                category: TermCategory::Rate,
-                boost: 1.6,
-                related: vec!["kist".to_string(), "installment".to_string()],
-            },
-            DomainTerm {
-                term: "processing fee".to_string(),
-                category: TermCategory::Rate,
-                boost: 1.5,
-                related: vec!["charges".to_string(), "fees".to_string()],
-            },
-            // Eligibility terms
-            DomainTerm {
-                term: "eligibility".to_string(),
-                category: TermCategory::Eligibility,
-                boost: 1.7,
-                related: vec!["patrta".to_string(), "qualify".to_string()],
-            },
-            DomainTerm {
-                term: "criteria".to_string(),
-                category: TermCategory::Eligibility,
-                boost: 1.5,
-                related: vec!["requirements".to_string(), "conditions".to_string()],
-            },
-            // Process terms
-            DomainTerm {
-                term: "apply".to_string(),
-                category: TermCategory::Process,
-                boost: 1.5,
-                related: vec!["aavedan".to_string(), "application".to_string()],
-            },
-            DomainTerm {
-                term: "disbursal".to_string(),
-                category: TermCategory::Process,
-                boost: 1.6,
-                related: vec!["disbursement".to_string(), "sanction".to_string()],
-            },
-            DomainTerm {
-                term: "prepayment".to_string(),
-                category: TermCategory::Process,
-                boost: 1.5,
-                related: vec!["foreclosure".to_string(), "early payment".to_string()],
-            },
-            // Gold terms
-            DomainTerm {
-                term: "purity".to_string(),
-                category: TermCategory::Gold,
-                boost: 1.6,
-                related: vec![
-                    "karat".to_string(),
-                    "carat".to_string(),
-                    "hallmark".to_string(),
-                ],
-            },
-            DomainTerm {
-                term: "weight".to_string(),
-                category: TermCategory::Gold,
-                boost: 1.4,
-                related: vec!["gram".to_string(), "tola".to_string(), "vajan".to_string()],
-            },
-            DomainTerm {
-                term: "valuation".to_string(),
-                category: TermCategory::Gold,
-                boost: 1.5,
-                related: vec!["assessment".to_string(), "appraisal".to_string()],
-            },
-            // Brand terms
-            DomainTerm {
-                term: "kotak".to_string(),
-                category: TermCategory::Brand,
-                boost: 1.8,
-                related: vec!["kotak mahindra".to_string(), "kmb".to_string()],
-            },
-            DomainTerm {
-                term: "muthoot".to_string(),
-                category: TermCategory::Brand,
-                boost: 1.3,
-                related: vec!["muthoot finance".to_string()],
-            },
-            DomainTerm {
-                term: "manappuram".to_string(),
-                category: TermCategory::Brand,
-                boost: 1.3,
-                related: vec!["manappuram finance".to_string()],
-            },
-            DomainTerm {
-                term: "iifl".to_string(),
-                category: TermCategory::Brand,
-                boost: 1.3,
-                related: vec!["iifl finance".to_string()],
-            },
-            // Customer terms
-            DomainTerm {
-                term: "kyc".to_string(),
-                category: TermCategory::Customer,
-                boost: 1.4,
-                related: vec!["documents".to_string(), "identity".to_string()],
-            },
-            DomainTerm {
-                term: "account".to_string(),
-                category: TermCategory::Customer,
-                boost: 1.2,
-                related: vec!["khata".to_string(), "savings".to_string()],
-            },
-        ];
-
+    /// P16 FIX: Load terms from config
+    fn load_terms_from_config(&self, config_terms: &[voice_agent_config::domain::DomainBoostTermEntry]) {
         let mut term_map = self.terms.write();
-        for term in terms {
+
+        for entry in config_terms {
+            let category = TermCategory::from_str(&entry.category);
+
+            let term = DomainTerm {
+                term: entry.term.clone(),
+                category,
+                boost: entry.boost as f32,
+                related: entry.related.clone(),
+            };
+
             // Add main term
             term_map.insert(term.term.to_lowercase(), term.clone());
+
             // Add related terms with lower boost
-            for related in &term.related {
+            for related in &entry.related {
                 if let std::collections::hash_map::Entry::Vacant(e) =
                     term_map.entry(related.to_lowercase())
                 {
                     e.insert(DomainTerm {
                         term: related.clone(),
-                        category: term.category,
-                        boost: term.boost * 0.8,
-                        related: vec![term.term.clone()],
+                        category,
+                        boost: entry.boost as f32 * 0.8,
+                        related: vec![entry.term.clone()],
                     });
                 }
             }
         }
     }
 
-    /// Default intent patterns
-    fn default_intent_patterns() -> Vec<(Vec<&'static str>, QueryIntent)> {
+    /// Create with default config (no terms loaded - use from_config for production)
+    pub fn with_defaults() -> Self {
+        Self::new(DomainBoostConfig::default())
+    }
+
+    /// Default intent patterns (generic, not domain-specific)
+    fn default_intent_patterns() -> Vec<(Vec<String>, QueryIntent)> {
         vec![
             // Rate inquiry
-            (vec!["interest", "rate"], QueryIntent::RateInquiry),
-            (vec!["byaj", "dar"], QueryIntent::RateInquiry),
-            (vec!["emi", "calculate"], QueryIntent::RateInquiry),
-            (vec!["kitna", "interest"], QueryIntent::RateInquiry),
+            (vec!["interest".into(), "rate".into()], QueryIntent::RateInquiry),
+            (vec!["emi".into(), "calculate".into()], QueryIntent::RateInquiry),
             // Eligibility
-            (vec!["eligible", "loan"], QueryIntent::EligibilityCheck),
-            (
-                vec!["eligibility", "criteria"],
-                QueryIntent::EligibilityCheck,
-            ),
-            (vec!["patr", "loan"], QueryIntent::EligibilityCheck),
-            (vec!["can", "get", "loan"], QueryIntent::EligibilityCheck),
+            (vec!["eligible".into()], QueryIntent::EligibilityCheck),
+            (vec!["eligibility".into()], QueryIntent::EligibilityCheck),
+            (vec!["criteria".into()], QueryIntent::EligibilityCheck),
             // Application
-            (vec!["apply", "loan"], QueryIntent::ApplicationProcess),
-            (vec!["how", "apply"], QueryIntent::ApplicationProcess),
-            (vec!["kaise", "apply"], QueryIntent::ApplicationProcess),
-            (
-                vec!["application", "process"],
-                QueryIntent::ApplicationProcess,
-            ),
+            (vec!["apply".into()], QueryIntent::ApplicationProcess),
+            (vec!["application".into(), "process".into()], QueryIntent::ApplicationProcess),
             // Amount
-            (vec!["loan", "amount"], QueryIntent::AmountCalculation),
-            (vec!["kitna", "milega"], QueryIntent::AmountCalculation),
-            (vec!["maximum", "loan"], QueryIntent::AmountCalculation),
-            (vec!["how", "much", "loan"], QueryIntent::AmountCalculation),
+            (vec!["amount".into()], QueryIntent::AmountCalculation),
+            (vec!["maximum".into()], QueryIntent::AmountCalculation),
+            (vec!["how".into(), "much".into()], QueryIntent::AmountCalculation),
             // Branch
-            (vec!["branch", "near"], QueryIntent::BranchLocator),
-            (vec!["kahan", "branch"], QueryIntent::BranchLocator),
-            (vec!["nearest", "branch"], QueryIntent::BranchLocator),
+            (vec!["branch".into()], QueryIntent::BranchLocator),
+            (vec!["nearest".into()], QueryIntent::BranchLocator),
+            (vec!["location".into()], QueryIntent::BranchLocator),
             // Documents
-            (vec!["document", "required"], QueryIntent::DocumentInquiry),
-            (vec!["kyc", "document"], QueryIntent::DocumentInquiry),
-            (vec!["papers", "needed"], QueryIntent::DocumentInquiry),
+            (vec!["document".into()], QueryIntent::DocumentInquiry),
+            (vec!["papers".into()], QueryIntent::DocumentInquiry),
+            (vec!["kyc".into()], QueryIntent::DocumentInquiry),
             // Competitor
-            (vec!["muthoot", "kotak"], QueryIntent::CompetitorComparison),
-            (vec!["compare", "loan"], QueryIntent::CompetitorComparison),
-            (vec!["better", "than"], QueryIntent::CompetitorComparison),
-            (vec!["switch", "from"], QueryIntent::CompetitorComparison),
+            (vec!["compare".into()], QueryIntent::CompetitorComparison),
+            (vec!["better".into(), "than".into()], QueryIntent::CompetitorComparison),
+            (vec!["switch".into()], QueryIntent::CompetitorComparison),
             // Repayment
-            (vec!["repay", "loan"], QueryIntent::RepaymentInquiry),
-            (vec!["prepay", "loan"], QueryIntent::RepaymentInquiry),
-            (vec!["foreclosure"], QueryIntent::RepaymentInquiry),
-            (vec!["chukana", "loan"], QueryIntent::RepaymentInquiry),
+            (vec!["repay".into()], QueryIntent::RepaymentInquiry),
+            (vec!["prepay".into()], QueryIntent::RepaymentInquiry),
+            (vec!["foreclosure".into()], QueryIntent::RepaymentInquiry),
         ]
+    }
+
+    /// Get category boost multiplier (from config or default)
+    fn category_boost_multiplier(&self, category: TermCategory) -> f32 {
+        let category_name = match category {
+            TermCategory::Product => "product",
+            TermCategory::Rate => "rate",
+            TermCategory::Process => "process",
+            TermCategory::Eligibility => "eligibility",
+            TermCategory::Brand => "brand",
+            TermCategory::Asset => "asset",
+            TermCategory::Customer => "customer",
+            TermCategory::Competitor => "competitor",
+            TermCategory::General => "general",
+        };
+
+        self.category_boosts
+            .get(category_name)
+            .copied()
+            .unwrap_or_else(|| category.default_boost_multiplier())
     }
 
     /// Calculate boost for a query
@@ -407,7 +344,7 @@ impl DomainBooster {
             let base: f32 =
                 matched_terms.iter().map(|m| m.boost).sum::<f32>() / matched_terms.len() as f32;
             let category_bonus: f32 = if self.config.category_boost_enabled {
-                categories.iter().map(|c| c.boost_multiplier()).sum::<f32>()
+                categories.iter().map(|c| self.category_boost_multiplier(*c)).sum::<f32>()
                     / categories.len().max(1) as f32
             } else {
                 1.0
@@ -452,9 +389,12 @@ impl DomainBooster {
                 }
             }
 
-            // Apply brand boost for Kotak mentions
-            if doc_text.contains("kotak") {
-                doc_boost *= self.config.brand_boost;
+            // Apply brand boost for brand terms in document
+            for matched in &boost_result.matched_terms {
+                if matched.category == TermCategory::Brand && doc_text.contains(&matched.term.to_lowercase()) {
+                    doc_boost *= self.config.brand_boost;
+                    break;
+                }
             }
 
             *score *= doc_boost;
@@ -470,16 +410,26 @@ impl DomainBooster {
     /// Get intent label for display
     pub fn intent_label(intent: QueryIntent) -> &'static str {
         match intent {
-            QueryIntent::RateInquiry => "Interest Rate Inquiry",
+            QueryIntent::RateInquiry => "Rate/Pricing Inquiry",
             QueryIntent::EligibilityCheck => "Eligibility Check",
             QueryIntent::ApplicationProcess => "Application Process",
-            QueryIntent::AmountCalculation => "Loan Amount Calculation",
-            QueryIntent::BranchLocator => "Branch Locator",
+            QueryIntent::AmountCalculation => "Amount Calculation",
+            QueryIntent::BranchLocator => "Location Finder",
             QueryIntent::DocumentInquiry => "Document Requirements",
-            QueryIntent::CompetitorComparison => "Competitor Comparison",
-            QueryIntent::RepaymentInquiry => "Repayment/EMI Query",
+            QueryIntent::CompetitorComparison => "Provider Comparison",
+            QueryIntent::RepaymentInquiry => "Repayment Query",
             QueryIntent::General => "General Inquiry",
         }
+    }
+
+    /// Check if booster has any terms loaded
+    pub fn has_terms(&self) -> bool {
+        !self.terms.read().is_empty()
+    }
+
+    /// Get number of loaded terms
+    pub fn term_count(&self) -> usize {
+        self.terms.read().len()
     }
 }
 
@@ -489,84 +439,67 @@ mod tests {
 
     #[test]
     fn test_basic_boost() {
-        let booster = DomainBooster::gold_loan();
-        let result = booster.boost("gold loan interest rate");
+        let booster = DomainBooster::with_defaults();
+        // Add some test terms
+        booster.add_term(DomainTerm {
+            term: "service".to_string(),
+            category: TermCategory::Product,
+            boost: 2.0,
+            related: vec![],
+        });
+        booster.add_term(DomainTerm {
+            term: "interest".to_string(),
+            category: TermCategory::Rate,
+            boost: 1.8,
+            related: vec![],
+        });
+
+        let result = booster.boost("service interest rate");
 
         assert!(!result.matched_terms.is_empty());
         assert!(result.total_boost > 1.0);
     }
 
     #[test]
-    fn test_category_detection() {
-        let booster = DomainBooster::gold_loan();
-
-        let rate_result = booster.boost("interest rate");
-        assert!(rate_result.categories.contains(&TermCategory::Rate));
-
-        let eligibility_result = booster.boost("eligibility criteria");
-        assert!(eligibility_result
-            .categories
-            .contains(&TermCategory::Eligibility));
+    fn test_term_category_parsing() {
+        assert_eq!(TermCategory::from_str("product"), TermCategory::Product);
+        assert_eq!(TermCategory::from_str("rate"), TermCategory::Rate);
+        assert_eq!(TermCategory::from_str("gold"), TermCategory::Asset);
+        assert_eq!(TermCategory::from_str("unknown"), TermCategory::General);
     }
 
     #[test]
     fn test_intent_detection() {
-        let booster = DomainBooster::gold_loan();
+        let booster = DomainBooster::with_defaults();
 
+        // Test rate inquiry
         let result = booster.boost("what is the interest rate");
         assert_eq!(result.intent, Some(QueryIntent::RateInquiry));
 
-        let result = booster.boost("am I eligible for loan");
+        // Test eligibility
+        let result = booster.boost("am I eligible for this");
         assert_eq!(result.intent, Some(QueryIntent::EligibilityCheck));
 
-        let result = booster.boost("how to apply for gold loan");
-        assert_eq!(result.intent, Some(QueryIntent::ApplicationProcess));
+        // Test branch
+        let result = booster.boost("find nearest branch");
+        assert_eq!(result.intent, Some(QueryIntent::BranchLocator));
     }
 
     #[test]
-    fn test_competitor_terms() {
-        let booster = DomainBooster::gold_loan();
-        let result = booster.boost("muthoot vs kotak gold loan");
+    fn test_empty_query() {
+        let booster = DomainBooster::with_defaults();
+        let result = booster.boost("");
 
-        assert!(result.categories.contains(&TermCategory::Brand));
-        assert_eq!(result.intent, Some(QueryIntent::CompetitorComparison));
+        assert!(result.matched_terms.is_empty());
+        assert!((result.total_boost - 1.0).abs() < 0.001);
     }
 
     #[test]
-    fn test_hindi_terms() {
-        let booster = DomainBooster::gold_loan();
-        let result = booster.boost("byaj dar kitna hai");
+    fn test_custom_category_boosts() {
+        let booster = DomainBooster::with_defaults();
 
-        assert!(result.intent == Some(QueryIntent::RateInquiry));
-    }
-
-    #[test]
-    fn test_apply_boost() {
-        let booster = DomainBooster::gold_loan();
-
-        let mut results = vec![
-            (
-                "Kotak gold loan offers competitive rates".to_string(),
-                0.8f32,
-            ),
-            ("Weather forecast for today".to_string(), 0.9f32),
-        ];
-
-        booster.apply_boost(&mut results, "gold loan rate kotak");
-
-        // Kotak gold loan doc should be boosted higher
-        assert!(results[0].1 > results[1].1);
-    }
-
-    #[test]
-    fn test_multi_word_terms() {
-        let booster = DomainBooster::gold_loan();
-        let result = booster.boost("gold loan eligibility");
-
-        // Should match "gold loan" as a phrase
-        assert!(result
-            .matched_terms
-            .iter()
-            .any(|m| m.term.contains("gold loan") || m.term == "gold"));
+        // Check default boost multiplier
+        let boost = booster.category_boost_multiplier(TermCategory::Product);
+        assert!((boost - 1.5).abs() < 0.001);
     }
 }

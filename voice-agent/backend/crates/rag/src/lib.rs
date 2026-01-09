@@ -67,8 +67,7 @@ pub use domain_boost::{
 pub use embeddings::{Embedder, EmbeddingConfig, SimpleEmbedder};
 pub use knowledge_loader::{KnowledgeDocument, KnowledgeFile, KnowledgeLoader};
 pub use query_expansion::{
-    gold_loan_stopwords, ExpandedQuery, ExpansionStats, QueryExpander, QueryExpansionConfig,
-    TermSource, WeightedTerm,
+    ExpandedQuery, ExpansionStats, QueryExpander, QueryExpansionConfig, TermSource, WeightedTerm,
 };
 pub use reranker::{EarlyExitReranker, ExitStrategy, RerankerConfig};
 pub use retriever::{HybridRetriever, RetrieverConfig, SearchResult};

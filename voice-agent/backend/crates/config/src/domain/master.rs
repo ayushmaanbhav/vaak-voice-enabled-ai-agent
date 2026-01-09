@@ -12,6 +12,7 @@ use std::path::Path;
 use crate::ConfigError;
 use super::branches::BranchesConfig;
 use super::competitors::CompetitorsConfig;
+use super::documents::DocumentsConfig;
 use super::features::FeaturesConfig;
 use super::goals::GoalsConfig;
 use super::objections::ObjectionsConfig;
@@ -23,15 +24,27 @@ use super::sms_templates::SmsTemplatesConfig;
 use super::stages::StagesConfig;
 use super::tools::ToolsConfig;
 
-/// Brand configuration
+/// Brand configuration - domain-agnostic
+///
+/// P16 FIX: Renamed bank_name to company_name for domain-agnostic design.
+/// The company_name field is the organization offering the service.
+/// The product_name field is the specific product/service being offered.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BrandConfig {
-    pub bank_name: String,
+    /// Company/organization name (e.g., "Kotak Mahindra Bank", "ABC Corp")
+    #[serde(alias = "bank_name")]  // Backwards compatibility
+    pub company_name: String,
+    /// Product/service name (e.g., "Gold Loan", "Insurance")
+    #[serde(default)]
+    pub product_name: String,
+    /// AI agent name
     pub agent_name: String,
-    /// P13 FIX: Agent role/title for persona goal (e.g., "Gold Loan Advisor")
+    /// Agent role/title for persona (e.g., "Advisor", "Assistant")
     #[serde(default)]
     pub agent_role: String,
+    /// Contact helpline number
     pub helpline: String,
+    /// Website URL
     #[serde(default)]
     pub website: String,
 }
@@ -75,10 +88,24 @@ pub struct DomainConstants {
     pub loan_limits: LoanLimitsConfig,
     #[serde(default)]
     pub processing_fee_percent: f64,
-    #[serde(default)]
-    pub gold_price_per_gram: f64,
-    #[serde(default)]
-    pub purity_factors: HashMap<String, f64>,
+    /// Asset price per unit (e.g., gold price per gram for gold loan domain)
+    #[serde(default, alias = "gold_price_per_gram")]
+    pub asset_price_per_unit: f64,
+    /// Variant factors (e.g., purity factors for gold: K24=1.0, K22=0.916)
+    #[serde(default, alias = "purity_factors")]
+    pub variant_factors: HashMap<String, f64>,
+}
+
+impl DomainConstants {
+    /// Legacy accessor for gold_price_per_gram
+    pub fn gold_price_per_gram(&self) -> f64 {
+        self.asset_price_per_unit
+    }
+
+    /// Legacy accessor for purity_factors
+    pub fn purity_factors(&self) -> &HashMap<String, f64> {
+        &self.variant_factors
+    }
 }
 
 /// Competitor configuration
@@ -137,6 +164,144 @@ pub struct VocabularyConfig {
     pub preserve_entities: Vec<String>,
 }
 
+/// Contextual correction rule for phonetic corrector
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextualRule {
+    /// Previous word context
+    pub context: String,
+    /// Error word to correct
+    pub error: String,
+    /// Corrected value
+    pub correction: String,
+}
+
+/// Phonetic corrector configuration parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhoneticCorrectorParams {
+    /// Maximum edit distance for fuzzy matching
+    #[serde(default = "default_max_edit_distance")]
+    pub max_edit_distance: i64,
+    /// Minimum word length to attempt correction
+    #[serde(default = "default_min_word_length")]
+    pub min_word_length: usize,
+    /// Whether to fix sentence-start errors (e.g., "Why" -> "I")
+    #[serde(default = "default_true")]
+    pub fix_sentence_start: bool,
+}
+
+fn default_max_edit_distance() -> i64 { 2 }
+fn default_min_word_length() -> usize { 3 }
+fn default_true() -> bool { true }
+
+impl Default for PhoneticCorrectorParams {
+    fn default() -> Self {
+        Self {
+            max_edit_distance: 2,
+            min_word_length: 3,
+            fix_sentence_start: true,
+        }
+    }
+}
+
+/// P16 FIX: Phonetic ASR error correction configuration
+/// Moved from hardcoded PhoneticCorrector::gold_loan() to config-driven
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PhoneticCorrectionsConfig {
+    /// Direct confusion rules: misspelling -> correct
+    #[serde(default)]
+    pub confusion_rules: HashMap<String, String>,
+    /// Contextual rules: (prev_word, error_word) -> correction
+    #[serde(default)]
+    pub contextual_rules: Vec<ContextualRule>,
+    /// Phrase-level corrections: phrase -> replacement
+    #[serde(default)]
+    pub phrase_rules: HashMap<String, String>,
+    /// Configuration parameters
+    #[serde(default)]
+    pub config: PhoneticCorrectorParams,
+}
+
+/// Query expansion configuration settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryExpansionSettings {
+    /// Maximum number of expansions per term
+    #[serde(default = "default_max_expansions")]
+    pub max_expansions: usize,
+    /// Enable synonym expansion
+    #[serde(default = "default_true")]
+    pub use_synonyms: bool,
+    /// Enable transliteration expansion
+    #[serde(default = "default_true")]
+    pub use_transliterations: bool,
+    /// Enable stopword filtering
+    #[serde(default = "default_true")]
+    pub enable_stopword_filter: bool,
+}
+
+fn default_max_expansions() -> usize {
+    3
+}
+
+impl Default for QueryExpansionSettings {
+    fn default() -> Self {
+        Self {
+            max_expansions: 3,
+            use_synonyms: true,
+            use_transliterations: true,
+            enable_stopword_filter: true,
+        }
+    }
+}
+
+/// Query expansion configuration for RAG
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QueryExpansionConfig {
+    /// Configuration settings
+    #[serde(default)]
+    pub config: QueryExpansionSettings,
+    /// Stopwords to filter from queries
+    #[serde(default)]
+    pub stopwords: Vec<String>,
+    /// Synonym mappings (term -> list of synonyms)
+    #[serde(default)]
+    pub synonyms: HashMap<String, Vec<String>>,
+    /// Hindi-Roman transliterations
+    #[serde(default)]
+    pub transliterations: HashMap<String, Vec<String>>,
+}
+
+/// Domain boost term entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainBoostTermEntry {
+    /// The term to boost
+    pub term: String,
+    /// Category of the term
+    pub category: String,
+    /// Boost multiplier
+    pub boost: f64,
+    /// Related terms
+    #[serde(default)]
+    pub related: Vec<String>,
+}
+
+/// Domain boosting configuration for RAG
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DomainBoostConfig {
+    /// Default boost multiplier
+    #[serde(default = "default_boost")]
+    pub default_boost: f64,
+    /// Category-specific boost multipliers
+    #[serde(default)]
+    pub category_boosts: HashMap<String, f64>,
+    /// Domain-specific terms with boosting
+    #[serde(default)]
+    pub terms: Vec<DomainBoostTermEntry>,
+}
+
+fn default_boost() -> f64 {
+    1.0
+}
+
 /// Master domain configuration - the complete config for a domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterDomainConfig {
@@ -165,6 +330,19 @@ pub struct MasterDomainConfig {
     /// P15 FIX: Domain vocabulary for text processing
     #[serde(default)]
     pub vocabulary: VocabularyConfig,
+    /// P16 FIX: Phonetic ASR error correction rules (loaded from domain.yaml)
+    #[serde(default)]
+    pub phonetic_corrections: PhoneticCorrectionsConfig,
+    /// P16 FIX: Domain-specific terms for LLM relevance scoring in speculative execution
+    /// Used by SpeculativeExecutor.estimate_domain_relevance()
+    #[serde(default)]
+    pub relevance_terms: Vec<String>,
+    /// P17 FIX: Query expansion configuration for RAG
+    #[serde(default)]
+    pub query_expansion: QueryExpansionConfig,
+    /// P17 FIX: Domain boosting configuration for RAG
+    #[serde(default)]
+    pub domain_boost: DomainBoostConfig,
     /// Slot definitions for DST (loaded from slots.yaml)
     #[serde(skip)]
     pub slots: SlotsConfig,
@@ -201,6 +379,9 @@ pub struct MasterDomainConfig {
     /// Features configuration (loaded from features.yaml)
     #[serde(skip)]
     pub features: FeaturesConfig,
+    /// P16 FIX: Document requirements (loaded from tools/documents.yaml)
+    #[serde(skip)]
+    pub documents: DocumentsConfig,
     /// Raw JSON for dynamic access
     #[serde(skip)]
     raw_config: Option<JsonValue>,
@@ -211,10 +392,12 @@ fn default_version() -> String {
 }
 
 impl Default for MasterDomainConfig {
+    /// Creates an unconfigured default - should only be used for testing.
+    /// In production, always load from YAML config files.
     fn default() -> Self {
         Self {
-            domain_id: "gold_loan".to_string(),
-            display_name: "Kotak Gold Loan".to_string(),
+            domain_id: "unconfigured".to_string(),
+            display_name: "Unconfigured Domain".to_string(),
             version: default_version(),
             brand: BrandConfig::default(),
             constants: DomainConstants::default(),
@@ -222,6 +405,10 @@ impl Default for MasterDomainConfig {
             products: HashMap::new(),
             high_value: HighValueConfig::default(),
             vocabulary: VocabularyConfig::default(),
+            phonetic_corrections: PhoneticCorrectionsConfig::default(),
+            relevance_terms: Vec::new(),
+            query_expansion: QueryExpansionConfig::default(),
+            domain_boost: DomainBoostConfig::default(),
             slots: SlotsConfig::default(),
             stages: StagesConfig::default(),
             scoring: ScoringConfig::default(),
@@ -234,6 +421,7 @@ impl Default for MasterDomainConfig {
             segments: SegmentsConfig::default(),
             goals: GoalsConfig::default(),
             features: FeaturesConfig::default(),
+            documents: DocumentsConfig::default(),
             raw_config: None,
         }
     }
@@ -519,6 +707,27 @@ impl MasterDomainConfig {
             tracing::debug!("No features config found at {:?}", features_path);
         }
 
+        // 17. Load documents configuration (optional)
+        let documents_path = config_dir.join(format!("domains/{}/tools/documents.yaml", domain_id));
+        if documents_path.exists() {
+            match DocumentsConfig::load(&documents_path) {
+                Ok(documents) => {
+                    tracing::info!(
+                        service_types = documents.service_types.len(),
+                        customer_types = documents.customer_types.len(),
+                        mandatory_docs = documents.mandatory_documents.len(),
+                        "Loaded documents configuration"
+                    );
+                    config.documents = documents;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load documents config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No documents config found at {:?}", documents_path);
+        }
+
         tracing::info!(
             domain_id = %config.domain_id,
             display_name = %config.display_name,
@@ -528,9 +737,25 @@ impl MasterDomainConfig {
         Ok(config)
     }
 
-    /// Load from environment variable DOMAIN_ID or default
+    /// Load from environment variable DOMAIN_ID (required, no default)
+    ///
+    /// P16 FIX: DOMAIN_ID is now REQUIRED - this is a domain-agnostic system.
+    /// Returns an error if DOMAIN_ID is not set.
     pub fn load_from_env(config_dir: impl AsRef<Path>) -> Result<Self, ConfigError> {
-        let domain_id = std::env::var("DOMAIN_ID").unwrap_or_else(|_| "gold_loan".to_string());
+        let domain_id = std::env::var("DOMAIN_ID")
+            .map_err(|_| ConfigError::MissingField(
+                "DOMAIN_ID environment variable is not set. \
+                 This is a domain-agnostic system - you MUST specify which domain to use. \
+                 Set DOMAIN_ID to the name of the domain config directory \
+                 (e.g., DOMAIN_ID=gold_loan for config/domains/gold_loan/).".to_string()
+            ))?;
+
+        if domain_id.is_empty() {
+            return Err(ConfigError::MissingField(
+                "DOMAIN_ID environment variable is empty. Please specify a domain ID.".to_string()
+            ));
+        }
+
         Self::load(&domain_id, config_dir)
     }
 
@@ -626,7 +851,9 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = MasterDomainConfig::default();
-        assert_eq!(config.domain_id, "gold_loan");
+        // Default is now "unconfigured" to enforce explicit domain configuration
+        assert_eq!(config.domain_id, "unconfigured");
+        assert_eq!(config.display_name, "Unconfigured Domain");
     }
 
     #[test]

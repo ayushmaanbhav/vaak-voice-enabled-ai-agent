@@ -10,7 +10,7 @@ branches:
     address: "Ground Floor, Kora Kendra, S.V. Road, Andheri West, Mumbai - 400058"
     pincode: "400058"
     phone: "022-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -23,7 +23,7 @@ branches:
     address: "Hill Road, Bandra West, Mumbai - 400050"
     pincode: "400050"
     phone: "022-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -37,7 +37,7 @@ branches:
     address: "Hiranandani Gardens, Powai, Mumbai - 400076"
     pincode: "400076"
     phone: "022-66006062"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 6:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -51,7 +51,7 @@ branches:
     address: "M-Block, Connaught Place, New Delhi - 110001"
     pincode: "110001"
     phone: "011-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -64,7 +64,7 @@ branches:
     address: "LSC Complex, Nehru Place, New Delhi - 110019"
     pincode: "110019"
     phone: "011-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -77,7 +77,7 @@ branches:
     address: "Central Market, Lajpat Nagar, New Delhi - 110024"
     pincode: "110024"
     phone: "011-66006062"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -90,7 +90,7 @@ branches:
     address: "Church Street, MG Road, Bangalore - 560001"
     pincode: "560001"
     phone: "080-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -103,7 +103,7 @@ branches:
     address: "80 Feet Road, Koramangala, Bangalore - 560034"
     pincode: "560034"
     phone: "080-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -117,7 +117,7 @@ branches:
     address: "100 Feet Road, Indiranagar, Bangalore - 560038"
     pincode: "560038"
     phone: "080-66006062"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 6:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -131,7 +131,7 @@ branches:
     address: "Usman Road, T Nagar, Chennai - 600017"
     pincode: "600017"
     phone: "044-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -144,7 +144,7 @@ branches:
     address: "2nd Avenue, Anna Nagar, Chennai - 600040"
     pincode: "600040"
     phone: "044-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -157,7 +157,7 @@ branches:
     address: "Sector V, Salt Lake City, Kolkata - 700091"
     pincode: "700091"
     phone: "033-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -170,7 +170,7 @@ branches:
     address: "Park Street, Kolkata - 700016"
     pincode: "700016"
     phone: "033-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -184,7 +184,7 @@ branches:
     address: "Road No. 10, Banjara Hills, Hyderabad - 500034"
     pincode: "500034"
     phone: "040-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -197,7 +197,7 @@ branches:
     address: "Cyber Towers, Hitech City, Hyderabad - 500081"
     pincode: "500081"
     phone: "040-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 6:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -211,7 +211,7 @@ branches:
     address: "FC Road, Shivajinagar, Pune - 411004"
     pincode: "411004"
     phone: "020-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -224,7 +224,7 @@ branches:
     address: "Phase 1, Hinjewadi IT Park, Pune - 411057"
     pincode: "411057"
     phone: "020-66006061"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 6:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -238,7 +238,7 @@ branches:
     address: "C.G. Road, Navrangpura, Ahmedabad - 380009"
     pincode: "380009"
     phone: "079-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -251,7 +251,7 @@ branches:
     address: "Hazratganj, Lucknow - 226001"
     pincode: "226001"
     phone: "0522-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -264,7 +264,7 @@ branches:
     address: "MI Road, Civil Lines, Jaipur - 302001"
     pincode: "302001"
     phone: "0141-66006060"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM (Mon-Sat)"
     facilities:
       - "Gold Valuation"
@@ -274,4 +274,4 @@ branches:
 defaults:
   max_results: 5
   sort_by: "distance"  # distance | name | city
-  filter_gold_loan_only: true
+  filter_service_only: true

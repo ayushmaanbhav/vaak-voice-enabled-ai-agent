@@ -60,6 +60,9 @@ pub struct VoiceSessionConfig {
     pub vad_model_path: Option<std::path::PathBuf>,
     /// Path to IndicConformer model directory
     pub stt_model_path: Option<std::path::PathBuf>,
+    /// Domain vocabulary entities for STT biasing (loaded from config)
+    /// If empty, uses generic fallback entities
+    pub stt_entities: Vec<String>,
 }
 
 impl Default for VoiceSessionConfig {
@@ -86,6 +89,36 @@ impl Default for VoiceSessionConfig {
             use_silero_vad: false, // Default to energy-based (simpler, no model needed)
             vad_model_path: None,
             stt_model_path: None,
+            stt_entities: Vec::new(), // Will be loaded from domain config
+        }
+    }
+}
+
+impl VoiceSessionConfig {
+    /// Get STT entities for entity boosting
+    ///
+    /// Returns config-driven entities if available, otherwise falls back
+    /// to generic entities suitable for voice agent use cases.
+    pub fn get_stt_entities(&self) -> Vec<&str> {
+        if !self.stt_entities.is_empty() {
+            self.stt_entities.iter().map(|s| s.as_str()).collect()
+        } else {
+            // Generic fallback entities for voice agent use cases
+            // These are locale-agnostic terms commonly used in voice agents
+            vec![
+                // Currency/numbers (India locale)
+                "lakh",
+                "lakhs",
+                "crore",
+                "rupees",
+                "percent",
+                // Common voice agent terms
+                "appointment",
+                "branch",
+                "documents",
+                "eligibility",
+                "apply",
+            ]
         }
     }
 }
@@ -180,20 +213,11 @@ impl VoiceSession {
         // Create STT
         let stt = Arc::new(StreamingStt::simple(config.stt.clone()));
 
-        // Add domain vocabulary for entity boosting
-        stt.add_entities([
-            "kotak",
-            "mahindra",
-            "muthoot",
-            "manappuram",
-            "iifl",
-            "gold loan",
-            "interest rate",
-            "processing fee",
-            "lakh",
-            "rupees",
-            "percent",
-        ]);
+        // Add domain vocabulary for entity boosting (loaded from config)
+        let entities = config.get_stt_entities();
+        if !entities.is_empty() {
+            stt.add_entities(entities);
+        }
 
         // Create TTS
         let tts = Arc::new(StreamingTts::simple(config.tts.clone()));

@@ -1,20 +1,21 @@
-//! Branch Configuration
+//! Location Configuration
 //!
-//! Defines branch data loaded from YAML for the branch locator tool.
+//! Defines service location data loaded from YAML for the location finder tool.
+//! All location data comes from configuration - no hardcoded defaults.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Branches configuration loaded from branches.yaml
+/// Location configuration loaded from branches.yaml (or locations.yaml)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BranchesConfig {
-    /// List of branch locations
-    #[serde(default)]
+    /// List of service locations
+    #[serde(default, alias = "locations")]
     pub branches: Vec<BranchEntry>,
     /// Default search settings
     #[serde(default)]
     pub defaults: BranchDefaults,
-    /// Doorstep service configuration
+    /// Mobile/doorstep service configuration
     #[serde(default)]
     pub doorstep_service: DoorstepServiceConfig,
 }
@@ -40,7 +41,7 @@ impl BranchesConfig {
             .map_err(|e| BranchesConfigError::ParseError(e.to_string()))
     }
 
-    /// Get branches by city
+    /// Get locations by city
     pub fn find_by_city(&self, city: &str) -> Vec<&BranchEntry> {
         let city_lower = city.to_lowercase();
         self.branches
@@ -49,7 +50,7 @@ impl BranchesConfig {
             .collect()
     }
 
-    /// Get branches by pincode
+    /// Get locations by pincode
     pub fn find_by_pincode(&self, pincode: &str) -> Vec<&BranchEntry> {
         self.branches
             .iter()
@@ -57,20 +58,25 @@ impl BranchesConfig {
             .collect()
     }
 
-    /// Get branch by ID
+    /// Get location by ID
     pub fn get_branch(&self, branch_id: &str) -> Option<&BranchEntry> {
         self.branches.iter().find(|b| b.branch_id == branch_id)
     }
 
-    /// Get branches with gold loan service
-    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+    /// Get locations where service is available
+    pub fn service_locations(&self) -> Vec<&BranchEntry> {
         self.branches
             .iter()
-            .filter(|b| b.gold_loan_available)
+            .filter(|b| b.service_available)
             .collect()
     }
 
-    /// Check if doorstep service is available in a city
+    /// Backwards compatibility alias
+    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+        self.service_locations()
+    }
+
+    /// Check if mobile/doorstep service is available in a city
     pub fn doorstep_available(&self, city: &str) -> bool {
         if !self.doorstep_service.enabled {
             return false;
@@ -83,21 +89,32 @@ impl BranchesConfig {
     }
 }
 
-/// Single branch entry
+/// Single location entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BranchEntry {
+    /// Unique location identifier
+    #[serde(alias = "location_id")]
     pub branch_id: String,
+    /// Display name
     pub name: String,
+    /// City
     pub city: String,
+    /// Area/locality
     pub area: String,
+    /// Full address
     pub address: String,
+    /// Postal/PIN code
     #[serde(default)]
     pub pincode: String,
+    /// Contact phone
     pub phone: String,
-    #[serde(default = "default_true")]
-    pub gold_loan_available: bool,
+    /// Whether the primary service is available at this location
+    #[serde(default = "default_true", alias = "gold_loan_available")]
+    pub service_available: bool,
+    /// Operating hours
     #[serde(default)]
     pub timing: String,
+    /// List of available facilities/services
     #[serde(default)]
     pub facilities: Vec<String>,
 }
@@ -106,15 +123,18 @@ fn default_true() -> bool {
     true
 }
 
-/// Default branch search settings
+/// Default location search settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BranchDefaults {
+    /// Maximum results to return
     #[serde(default = "default_max_results")]
     pub max_results: usize,
+    /// Sort order
     #[serde(default = "default_sort_by")]
     pub sort_by: String,
-    #[serde(default = "default_true")]
-    pub filter_gold_loan_only: bool,
+    /// Whether to filter to only show locations with service available
+    #[serde(default = "default_true", alias = "filter_gold_loan_only")]
+    pub filter_service_only: bool,
 }
 
 fn default_max_results() -> usize {
@@ -130,49 +150,36 @@ impl Default for BranchDefaults {
         Self {
             max_results: default_max_results(),
             sort_by: default_sort_by(),
-            filter_gold_loan_only: true,
+            filter_service_only: true,
         }
     }
 }
 
-/// Doorstep service configuration
+/// Mobile/doorstep service configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DoorstepServiceConfig {
-    /// Whether doorstep service is enabled
-    #[serde(default = "default_true")]
+    /// Whether mobile service is enabled
+    #[serde(default)]
     pub enabled: bool,
-    /// List of cities where doorstep service is available
-    #[serde(default = "default_doorstep_cities")]
+    /// List of cities where mobile service is available (from config)
+    #[serde(default)]
     pub available_cities: Vec<String>,
-    /// Timing description for doorstep service
+    /// Timing description for mobile service
     #[serde(default)]
     pub timing: String,
-}
-
-fn default_doorstep_cities() -> Vec<String> {
-    vec![
-        "Mumbai".to_string(),
-        "Delhi".to_string(),
-        "Bangalore".to_string(),
-        "Chennai".to_string(),
-        "Hyderabad".to_string(),
-        "Pune".to_string(),
-        "Kolkata".to_string(),
-        "Ahmedabad".to_string(),
-    ]
 }
 
 impl Default for DoorstepServiceConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            available_cities: default_doorstep_cities(),
-            timing: "10:00 AM - 6:00 PM".to_string(),
+            enabled: false,
+            available_cities: Vec::new(),
+            timing: String::new(),
         }
     }
 }
 
-/// Errors when loading branches configuration
+/// Errors when loading location configuration
 #[derive(Debug)]
 pub enum BranchesConfigError {
     FileNotFound(String, String),
@@ -183,9 +190,9 @@ impl std::fmt::Display for BranchesConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FileNotFound(path, err) => {
-                write!(f, "Branches config not found at {}: {}", path, err)
+                write!(f, "Location config not found at {}: {}", path, err)
             }
-            Self::ParseError(err) => write!(f, "Failed to parse branches config: {}", err),
+            Self::ParseError(err) => write!(f, "Failed to parse location config: {}", err),
         }
     }
 }
@@ -197,27 +204,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_branches_deserialization() {
+    fn test_locations_deserialization() {
         let yaml = r#"
 branches:
-  - branch_id: "KMBL001"
-    name: "Test Branch"
+  - branch_id: "LOC001"
+    name: "Test Location"
     city: "Mumbai"
     area: "Andheri"
     address: "Test Address"
     pincode: "400058"
     phone: "022-12345678"
-    gold_loan_available: true
+    service_available: true
     timing: "10:00 AM - 5:00 PM"
     facilities:
-      - "Gold Valuation"
+      - "Service A"
 defaults:
   max_results: 10
 "#;
         let config: BranchesConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(config.branches.len(), 1);
-        assert_eq!(config.branches[0].branch_id, "KMBL001");
+        assert_eq!(config.branches[0].branch_id, "LOC001");
+        assert!(config.branches[0].service_available);
         assert_eq!(config.defaults.max_results, 10);
+    }
+
+    #[test]
+    fn test_legacy_gold_loan_available_alias() {
+        let yaml = r#"
+branches:
+  - branch_id: "LOC001"
+    name: "Test Location"
+    city: "Mumbai"
+    area: "Andheri"
+    address: "Test Address"
+    phone: "022-12345678"
+    gold_loan_available: true
+"#;
+        let config: BranchesConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(config.branches[0].service_available);
     }
 
     #[test]
@@ -225,35 +249,74 @@ defaults:
         let config = BranchesConfig {
             branches: vec![
                 BranchEntry {
-                    branch_id: "B1".to_string(),
-                    name: "Branch 1".to_string(),
+                    branch_id: "L1".to_string(),
+                    name: "Location 1".to_string(),
                     city: "Mumbai".to_string(),
                     area: "Andheri".to_string(),
                     address: "Address 1".to_string(),
                     pincode: "400001".to_string(),
                     phone: "1234567890".to_string(),
-                    gold_loan_available: true,
+                    service_available: true,
                     timing: "10-5".to_string(),
                     facilities: vec![],
                 },
                 BranchEntry {
-                    branch_id: "B2".to_string(),
-                    name: "Branch 2".to_string(),
+                    branch_id: "L2".to_string(),
+                    name: "Location 2".to_string(),
                     city: "Delhi".to_string(),
                     area: "CP".to_string(),
                     address: "Address 2".to_string(),
                     pincode: "110001".to_string(),
                     phone: "0987654321".to_string(),
-                    gold_loan_available: true,
+                    service_available: true,
                     timing: "10-5".to_string(),
                     facilities: vec![],
                 },
             ],
             defaults: BranchDefaults::default(),
+            doorstep_service: DoorstepServiceConfig::default(),
         };
 
         let mumbai = config.find_by_city("mumbai");
         assert_eq!(mumbai.len(), 1);
-        assert_eq!(mumbai[0].branch_id, "B1");
+        assert_eq!(mumbai[0].branch_id, "L1");
+    }
+
+    #[test]
+    fn test_service_locations() {
+        let config = BranchesConfig {
+            branches: vec![
+                BranchEntry {
+                    branch_id: "L1".to_string(),
+                    name: "Location 1".to_string(),
+                    city: "Mumbai".to_string(),
+                    area: "Andheri".to_string(),
+                    address: "Address 1".to_string(),
+                    pincode: "400001".to_string(),
+                    phone: "1234567890".to_string(),
+                    service_available: true,
+                    timing: "10-5".to_string(),
+                    facilities: vec![],
+                },
+                BranchEntry {
+                    branch_id: "L2".to_string(),
+                    name: "Location 2".to_string(),
+                    city: "Delhi".to_string(),
+                    area: "CP".to_string(),
+                    address: "Address 2".to_string(),
+                    pincode: "110001".to_string(),
+                    phone: "0987654321".to_string(),
+                    service_available: false, // Service not available
+                    timing: "10-5".to_string(),
+                    facilities: vec![],
+                },
+            ],
+            defaults: BranchDefaults::default(),
+            doorstep_service: DoorstepServiceConfig::default(),
+        };
+
+        let service_locs = config.service_locations();
+        assert_eq!(service_locs.len(), 1);
+        assert_eq!(service_locs[0].branch_id, "L1");
     }
 }

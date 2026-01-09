@@ -215,21 +215,23 @@ pub fn create_registry_with_view(
     let mut registry = ToolRegistry::new();
 
     // P15: Register gold loan tools - ALL require ToolsDomainView
-    registry.register(crate::gold_loan::EligibilityCheckTool::new(view.clone()));
-    registry.register(crate::gold_loan::SavingsCalculatorTool::new(view.clone()));
-    registry.register(crate::gold_loan::GetGoldPriceTool::new(view.clone()));
-    registry.register(crate::gold_loan::CompetitorComparisonTool::new(view.clone()));
+    registry.register(crate::domain_tools::EligibilityCheckTool::new(view.clone()));
+    registry.register(crate::domain_tools::SavingsCalculatorTool::new(view.clone()));
+    registry.register(crate::domain_tools::GetGoldPriceTool::new(view.clone()));
+    registry.register(crate::domain_tools::CompetitorComparisonTool::new(view.clone()));
 
     // Tools that don't need domain config (CRM/calendar integrations only)
-    registry.register(crate::gold_loan::LeadCaptureTool::new());
-    registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
-    registry.register(crate::gold_loan::BranchLocatorTool::new());
-    registry.register(crate::gold_loan::EscalateToHumanTool::new());
-    registry.register(crate::gold_loan::SendSmsTool::new());
-    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::domain_tools::LeadCaptureTool::new());
+    // P16 FIX: Appointment tool uses view for config-driven purposes/times
+    registry.register(crate::domain_tools::AppointmentSchedulerTool::with_view(view.clone()));
+    registry.register(crate::domain_tools::BranchLocatorTool::new());
+    registry.register(crate::domain_tools::EscalateToHumanTool::new());
+    // P16 FIX: SMS and Document tools now use view for config-driven content
+    registry.register(crate::domain_tools::SendSmsTool::with_view(view.clone()));
+    registry.register(crate::domain_tools::DocumentChecklistTool::with_view(view.clone()));
 
     tracing::info!(
-        bank_name = view.bank_name(),
+        bank_name = view.company_name(),
         base_rate = view.base_interest_rate(),
         ltv = view.ltv_percent(),
         "Created tool registry with ToolsDomainView (domain config required)"
@@ -409,34 +411,36 @@ pub fn create_registry_with_integrations(config: IntegrationConfig) -> ToolRegis
     let mut registry = ToolRegistry::new();
 
     // P15: All tools that need domain config use the REQUIRED view
-    registry.register(crate::gold_loan::EligibilityCheckTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::SavingsCalculatorTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::GetGoldPriceTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::CompetitorComparisonTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::BranchLocatorTool::new());
+    registry.register(crate::domain_tools::EligibilityCheckTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::SavingsCalculatorTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::GetGoldPriceTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::CompetitorComparisonTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::BranchLocatorTool::new());
 
     // LeadCaptureTool with optional CRM integration
     if let Some(crm) = config.crm {
-        registry.register(crate::gold_loan::LeadCaptureTool::with_crm(crm));
+        registry.register(crate::domain_tools::LeadCaptureTool::with_crm(crm));
     } else {
-        registry.register(crate::gold_loan::LeadCaptureTool::new());
+        registry.register(crate::domain_tools::LeadCaptureTool::new());
     }
 
-    // AppointmentSchedulerTool with optional calendar integration
+    // P16 FIX: AppointmentSchedulerTool with optional calendar integration and view
     if let Some(calendar) = config.calendar {
-        registry.register(crate::gold_loan::AppointmentSchedulerTool::with_calendar(
+        registry.register(crate::domain_tools::AppointmentSchedulerTool::with_calendar_and_view(
             calendar,
+            config.view.clone(),
         ));
     } else {
-        registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
+        registry.register(crate::domain_tools::AppointmentSchedulerTool::with_view(config.view.clone()));
     }
 
-    registry.register(crate::gold_loan::EscalateToHumanTool::new());
-    registry.register(crate::gold_loan::SendSmsTool::new());
-    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    registry.register(crate::domain_tools::EscalateToHumanTool::new());
+    // P16 FIX: SMS and Document tools now use view for config-driven content
+    registry.register(crate::domain_tools::SendSmsTool::with_view(config.view.clone()));
+    registry.register(crate::domain_tools::DocumentChecklistTool::with_view(config.view.clone()));
 
     tracing::info!(
-        bank_name = config.view.bank_name(),
+        bank_name = config.view.company_name(),
         base_rate = config.view.base_interest_rate(),
         "Created tool registry with integrations (domain config required)"
     );
@@ -533,52 +537,57 @@ pub fn create_registry_with_persistence(config: FullIntegrationConfig) -> ToolRe
     let mut registry = ToolRegistry::new();
 
     // P15: All tools that need domain config use the REQUIRED view
-    registry.register(crate::gold_loan::EligibilityCheckTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::SavingsCalculatorTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::CompetitorComparisonTool::new(config.view.clone()));
-    registry.register(crate::gold_loan::BranchLocatorTool::new());
+    registry.register(crate::domain_tools::EligibilityCheckTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::SavingsCalculatorTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::CompetitorComparisonTool::new(config.view.clone()));
+    registry.register(crate::domain_tools::BranchLocatorTool::new());
 
     // LeadCaptureTool with optional CRM integration
     if let Some(crm) = config.crm {
-        registry.register(crate::gold_loan::LeadCaptureTool::with_crm(crm));
+        registry.register(crate::domain_tools::LeadCaptureTool::with_crm(crm));
     } else {
-        registry.register(crate::gold_loan::LeadCaptureTool::new());
+        registry.register(crate::domain_tools::LeadCaptureTool::new());
     }
 
-    // AppointmentSchedulerTool with optional calendar integration
+    // P16 FIX: AppointmentSchedulerTool with optional calendar integration and view
     if let Some(calendar) = config.calendar {
-        registry.register(crate::gold_loan::AppointmentSchedulerTool::with_calendar(
+        registry.register(crate::domain_tools::AppointmentSchedulerTool::with_calendar_and_view(
             calendar,
+            config.view.clone(),
         ));
     } else {
-        registry.register(crate::gold_loan::AppointmentSchedulerTool::new());
+        registry.register(crate::domain_tools::AppointmentSchedulerTool::with_view(config.view.clone()));
     }
 
     // GetGoldPriceTool with REQUIRED view and optional price service
     if let Some(service) = config.gold_price_service {
-        registry.register(crate::gold_loan::GetGoldPriceTool::with_price_service(
+        registry.register(crate::domain_tools::GetGoldPriceTool::with_price_service(
             service,
             config.view.clone(),
         ));
     } else {
-        registry.register(crate::gold_loan::GetGoldPriceTool::new(config.view.clone()));
+        registry.register(crate::domain_tools::GetGoldPriceTool::new(config.view.clone()));
     }
 
     // EscalateToHumanTool (no domain config needed)
-    registry.register(crate::gold_loan::EscalateToHumanTool::new());
+    registry.register(crate::domain_tools::EscalateToHumanTool::new());
 
-    // SendSmsTool with optional persistence service
+    // P16 FIX: SendSmsTool with view and optional persistence service
     if let Some(sms_service) = config.sms_service {
-        registry.register(crate::gold_loan::SendSmsTool::with_sms_service(sms_service));
+        registry.register(crate::domain_tools::SendSmsTool::with_service_and_view(
+            sms_service,
+            config.view.clone(),
+        ));
     } else {
-        registry.register(crate::gold_loan::SendSmsTool::new());
+        registry.register(crate::domain_tools::SendSmsTool::with_view(config.view.clone()));
     }
 
-    registry.register(crate::gold_loan::DocumentChecklistTool::new());
+    // P16 FIX: Document tool uses view for config-driven content
+    registry.register(crate::domain_tools::DocumentChecklistTool::with_view(config.view.clone()));
 
     tracing::info!(
         tools = registry.len(),
-        bank_name = config.view.bank_name(),
+        bank_name = config.view.company_name(),
         base_rate = config.view.base_interest_rate(),
         ltv = config.view.ltv_percent(),
         "Created tool registry with persistence (domain config required)"
@@ -604,7 +613,7 @@ mod tests {
 
         // P15 FIX: Tools now require view
         let view = test_view();
-        registry.register(crate::gold_loan::EligibilityCheckTool::new(view));
+        registry.register(crate::domain_tools::EligibilityCheckTool::new(view));
         assert_eq!(registry.len(), 1);
         assert!(registry.has("check_eligibility"));
     }

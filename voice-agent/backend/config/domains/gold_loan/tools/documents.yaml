@@ -1,0 +1,117 @@
+# Gold Loan Domain - Document Requirements Configuration
+# Defines documents required for different service types and customer categories
+
+# Service types (enum values for tool schema)
+service_types:
+  - id: new_loan
+    display_name: "New Loan"
+  - id: top_up
+    display_name: "Top-up"
+  - id: balance_transfer
+    display_name: "Balance Transfer"
+  - id: renewal
+    display_name: "Renewal"
+
+# Customer types (enum values for tool schema)
+customer_types:
+  - id: individual
+    display_name: "Individual"
+  - id: self_employed
+    display_name: "Self Employed"
+  - id: business
+    display_name: "Business"
+  - id: nri
+    display_name: "NRI"
+
+# Mandatory documents for all applications
+mandatory_documents:
+  - document: "Valid Photo ID"
+    accepted:
+      - "Aadhaar Card"
+      - "PAN Card"
+      - "Passport"
+      - "Voter ID"
+      - "Driving License"
+    copies: 1
+    notes: "Original required for verification"
+
+  - document: "Address Proof"
+    accepted:
+      - "Aadhaar Card"
+      - "Utility Bill (last 3 months)"
+      - "Bank Statement"
+      - "Rent Agreement"
+    copies: 1
+    notes: "Should match current residence"
+
+  - document: "Passport Size Photographs"
+    copies: 2
+    notes: "Recent photographs (within 6 months)"
+
+  - document: "PAN Card"
+    copies: 1
+    notes: "Mandatory for loans above ₹50,000"
+
+# Domain-specific documents (gold-related for gold loan)
+domain_specific_documents:
+  - document: "Gold Items"
+    notes: "Bring gold jewelry/items for valuation. Remove any non-gold attachments (stones, pearls)"
+
+  - document: "Gold Purchase Invoice (if available)"
+    notes: "Helps with valuation and authenticity verification"
+
+# Additional documents by service type
+service_type_documents:
+  balance_transfer:
+    - document: "Existing Loan Statement"
+      notes: "From current lender showing outstanding amount"
+    - document: "Loan Account Details"
+      notes: "Loan account number and lender details"
+    - document: "NOC from Current Lender"
+      notes: "May be obtained after approval"
+
+  top_up:
+    - document: "Existing Loan Details"
+      notes: "Loan account number for top-up"
+
+  renewal:
+    - document: "Previous Loan Details"
+      notes: "Loan account number for renewal"
+
+# Additional documents by customer type
+customer_type_documents:
+  self_employed:
+    - document: "Business Proof"
+      accepted:
+        - "GST Registration"
+        - "Shop & Establishment Certificate"
+        - "Trade License"
+      notes: "Any one document for business verification"
+
+  business:
+    - document: "Business Proof"
+      accepted:
+        - "GST Registration"
+        - "Shop & Establishment Certificate"
+        - "Trade License"
+      notes: "Any one document for business verification"
+
+  nri:
+    - document: "Passport with Valid Visa"
+      notes: "Required for NRI customers"
+    - document: "NRE/NRO Bank Account Statement"
+      notes: "Last 6 months statement"
+
+# Important notes
+important_notes:
+  existing_customer: "As an existing customer, some documents may already be on file. Please bring originals for verification."
+  new_customer: "Please bring original documents along with photocopies."
+  general:
+    - "Original documents are required for verification at the branch."
+    - "Items should be free of non-related attachments for accurate valuation."
+    - "Processing time: Same day disbursement subject to document verification."
+
+# Tool schema configuration
+tool_config:
+  name: get_document_checklist
+  description: "Get the list of documents required for Gold Loan application based on loan type and customer category"

@@ -1,15 +1,15 @@
-//! MCP Tools for Gold Loan Voice Agent
+//! MCP Tools for Voice Agent
 //!
 //! Implements MCP (Model Context Protocol) compatible tool interface
-//! with domain-specific tools for gold loan operations.
+//! with domain-specific tools. All tool schemas are config-driven.
 
-pub mod gold_loan;
+pub mod domain_tools;
 pub mod integrations;
 pub mod mcp;
 pub mod registry;
 
-pub use gold_loan::{
-    // Branch data management
+pub use domain_tools::{
+    // Location data management
     get_branches, get_mock_branches, load_branches_from_file, reload_branches, BranchData,
     // Utility functions
     calculate_emi, calculate_total_interest,

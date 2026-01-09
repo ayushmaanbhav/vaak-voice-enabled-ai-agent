@@ -115,77 +115,13 @@ impl ToolBuilder {
     }
 }
 
-/// Create standard gold loan tool definitions using JSON Schema format
-pub fn gold_loan_tools() -> Vec<ToolDefinition> {
-    vec![
-        ToolBuilder::new(
-            "check_eligibility",
-            "Check if customer is eligible for a gold loan based on their gold weight and purity",
-        )
-        .param("gold_weight", "number", "Weight of gold in grams", true)
-        .param(
-            "gold_purity",
-            "string",
-            "Purity of gold (e.g., '22K', '18K')",
-            false,
-        )
-        .string_enum("gold_purity", &["24K", "22K", "18K", "14K"])
-        .number_range("gold_weight", Some(1.0), Some(10000.0))
-        .build(),
-        ToolBuilder::new(
-            "calculate_savings",
-            "Calculate monthly savings when switching from competitor to Kotak",
-        )
-        .param(
-            "current_lender",
-            "string",
-            "Name of current lender (e.g., 'Muthoot', 'Manappuram')",
-            true,
-        )
-        .param(
-            "current_interest_rate",
-            "number",
-            "Current interest rate in percentage",
-            false,
-        )
-        .param(
-            "current_loan_amount",
-            "number",
-            "Current loan amount in INR",
-            false,
-        )
-        .param(
-            "remaining_tenure_months",
-            "integer",
-            "Remaining tenure in months",
-            false,
-        )
-        .number_range("current_interest_rate", Some(0.0), Some(50.0))
-        .number_range("current_loan_amount", Some(1000.0), Some(100000000.0))
-        .number_range("remaining_tenure_months", Some(1.0), Some(360.0))
-        .build(),
-        ToolBuilder::new(
-            "find_branches",
-            "Find nearby Kotak Mahindra Bank branches that offer gold loans",
-        )
-        .param("city", "string", "City name to search branches in", true)
-        .param(
-            "area",
-            "string",
-            "Specific area or locality (optional)",
-            false,
-        )
-        .build(),
-        ToolBuilder::new(
-            "schedule_callback",
-            "Schedule a callback from Kotak branch team",
-        )
-        .param("phone", "string", "Customer phone number (10 digits)", true)
-        .param("preferred_time", "string", "Preferred callback time", false)
-        .string_enum("preferred_time", &["morning", "afternoon", "evening"])
-        .build(),
-    ]
-}
+// P16 FIX: gold_loan_tools() REMOVED - tools are now loaded from domain config
+// Use voice_agent_config::domain::ToolsConfig::to_tool_definitions() instead
+//
+// Example usage:
+//   let tools_config = master_domain_config.tools.clone();
+//   let tools = tools_config.to_tool_definitions();
+//   prompt_builder.with_tools(&tools);
 
 /// P4 FIX: Parse tool call from LLM response
 ///
@@ -240,10 +176,46 @@ pub struct ParsedToolCall {
 // Use Message::system(), Message::user(), Message::assistant(), Message::tool()
 // directly from voice_agent_core::llm_types (re-exported above)
 
-/// Prompt builder for gold loan agent
+/// P13 FIX: Key product facts for system prompt (config-driven)
+#[derive(Debug, Clone)]
+pub struct ProductFacts {
+    /// Our best interest rate (e.g., 9.5)
+    pub our_rate: f64,
+    /// Typical NBFC rate range (e.g., 18.0)
+    pub nbfc_rate_low: f64,
+    /// Higher end of NBFC range (e.g., 24.0)
+    pub nbfc_rate_high: f64,
+    /// LTV percentage (e.g., 75.0)
+    pub ltv_percent: f64,
+}
+
+impl Default for ProductFacts {
+    fn default() -> Self {
+        Self {
+            our_rate: 10.5,
+            nbfc_rate_low: 18.0,
+            nbfc_rate_high: 24.0,
+            ltv_percent: 75.0,
+        }
+    }
+}
+
+/// Prompt builder for voice agent (domain-agnostic)
 pub struct PromptBuilder {
     messages: Vec<Message>,
     persona: PersonaConfig,
+    /// P13 FIX: Config-driven product facts
+    product_facts: ProductFacts,
+}
+
+/// P16 FIX: Brand configuration for config-driven prompts
+/// Renamed bank_name to company_name for domain-agnostic design.
+#[derive(Debug, Clone, Default)]
+pub struct BrandConfig {
+    pub agent_name: String,
+    pub company_name: String,
+    pub agent_role: String,
+    pub helpline: String,
 }
 
 // PersonaConfig is now imported from voice_agent_config (see re-export above)
@@ -254,7 +226,14 @@ impl PromptBuilder {
         Self {
             messages: Vec::new(),
             persona: PersonaConfig::default(),
+            product_facts: ProductFacts::default(),
         }
+    }
+
+    /// P13 FIX: Set product facts from config
+    pub fn with_product_facts(mut self, facts: ProductFacts) -> Self {
+        self.product_facts = facts;
+        self
     }
 
     /// Set persona configuration
@@ -263,20 +242,63 @@ impl PromptBuilder {
         self
     }
 
-    /// Build system prompt for gold loan agent
+    /// P16 FIX: Build system prompt from config (domain-agnostic)
+    ///
+    /// Uses PromptsConfig templates instead of hardcoded text.
+    /// This is the preferred method for domain-agnostic operation.
+    pub fn system_prompt_from_config(
+        mut self,
+        prompts_config: &voice_agent_config::domain::PromptsConfig,
+        brand: &BrandConfig,
+        language: &str,
+    ) -> Self {
+        let persona_traits = prompts_config.build_persona_traits(
+            self.persona.warmth,
+            self.persona.empathy,
+            self.persona.formality,
+            self.persona.urgency,
+        );
+
+        // Build key facts from product_facts
+        let key_facts = format!(
+            "- Interest rates: Starting from {:.1}% p.a. (vs {:.0}-{:.0}% competitor rates)\n\
+             - LTV: Up to {:.0}% of collateral value\n\
+             - Processing: Same-day disbursement\n\
+             - Safety: RBI-regulated bank with insured storage",
+            self.product_facts.our_rate,
+            self.product_facts.nbfc_rate_low,
+            self.product_facts.nbfc_rate_high,
+            self.product_facts.ltv_percent,
+        );
+
+        let system = prompts_config.build_system_prompt(
+            &brand.agent_name,
+            &brand.company_name,
+            &persona_traits,
+            language,
+            &key_facts,
+            &brand.helpline,
+        );
+
+        self.messages.push(Message::system(system));
+        self
+    }
+
+    /// Build system prompt for agent (DEPRECATED - use system_prompt_from_config)
+    #[deprecated(since = "1.0.0", note = "Use system_prompt_from_config() with PromptsConfig for domain-agnostic operation")]
     pub fn system_prompt(mut self, language: &str) -> Self {
         let persona_traits = self.build_persona_traits();
 
         let system = format!(
-            r#"You are {name}, a friendly and knowledgeable Gold Loan specialist at Kotak Mahindra Bank.
+            r#"You are {name}, a friendly and knowledgeable specialist.
 
 ## Your Persona
 {traits}
 
 ## Your Role
-- Help customers understand gold loan products and benefits
-- Guide customers through the Switch & Save program
-- Answer questions about interest rates, LTV, and documentation
+- Help customers understand products and benefits
+- Guide customers through the process
+- Answer questions about rates and documentation
 - Address concerns and objections with empathy
 - Collect lead information when appropriate
 
@@ -289,11 +311,9 @@ impl PromptBuilder {
 - Use the customer's name when known
 
 ## Key Product Information
-- Interest rates: Starting from 10.5% (vs 18-24% NBFC rates)
-- LTV: Up to 75% of gold value
+- Interest rates: Starting from {our_rate:.1}% (vs {nbfc_rate_low:.0}-{nbfc_rate_high:.0}% competitor rates)
+- LTV: Up to {ltv_percent:.0}% of collateral value
 - Processing: Same-day disbursement
-- Safety: RBI-regulated bank with insured vault storage
-- Bridge loan available for seamless transfer
 
 ## Response Format
 Respond naturally as if speaking on a phone call. Do not use bullet points, headers, or markdown formatting. Keep responses brief and conversational."#,
@@ -304,6 +324,10 @@ Respond naturally as if speaking on a phone call. Do not use bullet points, head
             } else {
                 "English"
             },
+            our_rate = self.product_facts.our_rate,
+            nbfc_rate_low = self.product_facts.nbfc_rate_low,
+            nbfc_rate_high = self.product_facts.nbfc_rate_high,
+            ltv_percent = self.product_facts.ltv_percent,
         );
 
         self.messages.push(Message::system(system));
@@ -384,13 +408,34 @@ Respond naturally as if speaking on a phone call. Do not use bullet points, head
         self
     }
 
-    /// Add stage guidance
+    /// P16 FIX: Add stage guidance from config (domain-agnostic)
+    pub fn with_stage_guidance_from_config(
+        mut self,
+        stage: &str,
+        prompts_config: &voice_agent_config::domain::PromptsConfig,
+    ) -> Self {
+        if let Some(guidance) = prompts_config.get_stage_guidance(stage) {
+            let wrapper = prompts_config.build_stage_guidance(guidance);
+            if !wrapper.is_empty() {
+                self.messages.push(Message::system(wrapper));
+            } else {
+                self.messages.push(Message::system(format!(
+                    "## Current Stage Guidance\n{}",
+                    guidance
+                )));
+            }
+        }
+        self
+    }
+
+    /// Add stage guidance (DEPRECATED - use with_stage_guidance_from_config)
+    #[deprecated(since = "1.0.0", note = "Use with_stage_guidance_from_config() with PromptsConfig for domain-agnostic operation")]
     pub fn with_stage_guidance(mut self, stage: &str) -> Self {
         let guidance = match stage {
             "greeting" => "Warmly greet the customer and introduce yourself. Build rapport before discussing products.",
-            "discovery" => "Ask open questions to understand their gold loan needs and current situation with competitors.",
-            "qualification" => "Assess their eligibility and readiness to switch. Understand loan amount and timeline.",
-            "presentation" => "Present Kotak's gold loan benefits, focusing on their specific needs and concerns.",
+            "discovery" => "Ask open questions to understand customer needs and current situation.",
+            "qualification" => "Assess eligibility and readiness. Understand timeline.",
+            "presentation" => "Present benefits, focusing on their specific needs and concerns.",
             "objection_handling" => "Address concerns with empathy. Use social proof and guarantees to build confidence.",
             "closing" => "Summarize benefits and guide them to next steps. Create urgency if appropriate.",
             "farewell" => "Thank them warmly and confirm next steps. Leave the door open for future conversations.",
@@ -660,18 +705,84 @@ impl Default for PromptBuilder {
 }
 
 /// Quick response templates
+///
+/// P10 FIX: These templates provide fallback values when LlmDomainView is not available.
+/// P16 FIX: Added config-driven methods - prefer using these for domain-agnostic operation.
 pub struct ResponseTemplates;
 
 impl ResponseTemplates {
-    /// Greeting template
+    /// P16 FIX: Greeting from PromptsConfig (domain-agnostic)
+    /// Renamed bank_name to company_name for domain-agnostic design.
+    pub fn greeting_from_prompts_config(
+        prompts_config: &voice_agent_config::domain::PromptsConfig,
+        agent_name: &str,
+        company_name: &str,
+        language: &str,
+    ) -> String {
+        let template = prompts_config.get_greeting(language);
+        template
+            .replace("{agent_name}", agent_name)
+            .replace("{company_name}", company_name)
+            .replace("{bank_name}", company_name) // Legacy support
+    }
+
+    /// P16 FIX: Farewell from PromptsConfig (domain-agnostic)
+    pub fn farewell_from_prompts_config(
+        prompts_config: &voice_agent_config::domain::PromptsConfig,
+        helpline: &str,
+        language: &str,
+    ) -> String {
+        let template = prompts_config.get_farewell(language);
+        template.replace("{helpline}", helpline)
+    }
+
+    /// Greeting template (DEPRECATED - use greeting_from_prompts_config)
+    #[deprecated(since = "1.0.0", note = "Use greeting_from_prompts_config() with PromptsConfig for domain-agnostic operation")]
     pub fn greeting(name: &str, language: &str) -> String {
         if language == "hi" {
-            format!("Namaste! Main {} hoon, Kotak Mahindra Bank se. Aapki madad karne ke liye yahan hoon.", name)
+            format!("Namaste! Main {} hoon. Aapki madad karne ke liye yahan hoon.", name)
         } else {
             format!(
-                "Hello! I'm {} from Kotak Mahindra Bank. I'm here to help you today.",
+                "Hello! I'm {}. I'm here to help you today.",
                 name
             )
+        }
+    }
+
+    /// P10 FIX: Greeting using domain view configuration
+    ///
+    /// Uses the hierarchical domain config to get localized greetings.
+    /// Falls back to hardcoded values if the config doesn't have a greeting for the language.
+    pub fn greeting_from_view(
+        view: &voice_agent_config::LlmDomainView,
+        name: &str,
+        language: &str,
+    ) -> String {
+        let base_greeting = view.get_greeting(language);
+        // The view returns a template-like greeting, personalize with name
+        if base_greeting.contains("{name}") {
+            base_greeting.replace("{name}", name)
+        } else if base_greeting.contains("I'm") || base_greeting.contains("Main") {
+            // Already has a name placeholder pattern, return as-is since it's from config
+            base_greeting
+        } else {
+            // Append name if greeting doesn't mention agent name
+            format!("{} I'm {}.", base_greeting, name)
+        }
+    }
+
+    /// P10 FIX: Time-of-day aware greeting using domain view
+    pub fn greeting_with_time_from_view(
+        view: &voice_agent_config::LlmDomainView,
+        name: &str,
+        language: &str,
+        hour: u32,
+    ) -> String {
+        let base_greeting = view.get_greeting_with_time(language, hour);
+        if base_greeting.contains("{name}") {
+            base_greeting.replace("{name}", name)
+        } else {
+            format!("{} I'm {}.", base_greeting, name)
         }
     }
 
@@ -702,7 +813,8 @@ impl ResponseTemplates {
         }
     }
 
-    /// Closing
+    /// Closing (DEPRECATED - use farewell_from_prompts_config)
+    #[deprecated(since = "1.0.0", note = "Use farewell_from_prompts_config() with PromptsConfig for domain-agnostic operation")]
     pub fn closing(language: &str) -> String {
         if language == "hi" {
             "Dhanyavaad aapka samay dene ke liye. Koi bhi sawal ho toh zaroor call karein."
@@ -711,6 +823,16 @@ impl ResponseTemplates {
             "Thank you for your time. Please feel free to call if you have any questions."
                 .to_string()
         }
+    }
+
+    /// P10 FIX: Closing/farewell using domain view configuration
+    ///
+    /// Uses the hierarchical domain config to get localized farewells.
+    pub fn closing_from_view(
+        view: &voice_agent_config::LlmDomainView,
+        language: &str,
+    ) -> String {
+        view.get_farewell(language)
     }
 }
 
@@ -827,28 +949,30 @@ mod tests {
     }
 
     #[test]
-    fn test_gold_loan_tools() {
-        let tools = gold_loan_tools();
+    fn test_tool_builder_creates_valid_definition() {
+        // P16 FIX: gold_loan_tools() removed - test ToolBuilder directly
+        let tool = ToolBuilder::new("check_eligibility", "Check eligibility")
+            .param("weight", "number", "Weight in grams", true)
+            .param("purity", "string", "Purity level", false)
+            .string_enum("purity", &["24K", "22K", "18K", "14K"])
+            .number_range("weight", Some(1.0), Some(10000.0))
+            .build();
 
-        assert_eq!(tools.len(), 4);
-        assert!(tools.iter().any(|t| t.name == "check_eligibility"));
-        assert!(tools.iter().any(|t| t.name == "calculate_savings"));
-        assert!(tools.iter().any(|t| t.name == "find_branches"));
-        assert!(tools.iter().any(|t| t.name == "schedule_callback"));
+        assert_eq!(tool.name, "check_eligibility");
 
-        // Verify check_eligibility has proper schema
-        let eligibility_tool = tools
-            .iter()
-            .find(|t| t.name == "check_eligibility")
-            .unwrap();
-        let props = eligibility_tool
+        // Verify schema structure
+        let props = tool
             .parameters
             .get("properties")
             .unwrap()
             .as_object()
             .unwrap();
-        assert!(props.contains_key("gold_weight"));
-        assert!(props.contains_key("gold_purity"));
+        assert!(props.contains_key("weight"));
+        assert!(props.contains_key("purity"));
+
+        // Verify enum constraint
+        let purity_schema = props.get("purity").unwrap();
+        assert!(purity_schema.get("enum").is_some());
     }
 
     #[test]
@@ -880,7 +1004,16 @@ mod tests {
 
     #[test]
     fn test_with_tools() {
-        let tools = gold_loan_tools();
+        // P16 FIX: Tools created via ToolBuilder instead of hardcoded gold_loan_tools()
+        let tools = vec![
+            ToolBuilder::new("check_eligibility", "Check eligibility")
+                .param("weight", "number", "Weight in grams", true)
+                .build(),
+            ToolBuilder::new("calculate_savings", "Calculate savings")
+                .param("amount", "number", "Loan amount", true)
+                .build(),
+        ];
+
         let messages = PromptBuilder::new()
             .system_prompt("en")
             .with_tools(&tools)

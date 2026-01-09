@@ -1,7 +1,7 @@
 //! Abbreviation Expander for TTS
 //!
 //! Expands common abbreviations for clear pronunciation in TTS.
-//! Handles domain-specific (banking) and general abbreviations.
+//! Handles industry-specific and general abbreviations.
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -69,7 +69,7 @@ static ABBREVIATIONS: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     map.insert("APR", "A P R");
     map.insert("apr", "A P R");
 
-    // Gold Loan Specific
+    // Certification / Standards
     map.insert("BIS", "B I S");
     map.insert("bis", "B I S");
     map.insert("HUID", "H U I D");
@@ -312,10 +312,10 @@ mod tests {
     #[test]
     fn test_custom_abbreviation() {
         let mut expander = AbbreviationExpander::new();
-        expander.add_abbreviation("KMBL", "Kotak Mahindra Bank Limited");
+        expander.add_abbreviation("ACME", "Acme Corporation Limited");
         assert!(expander
-            .expand("Welcome to KMBL")
-            .contains("Kotak Mahindra Bank Limited"));
+            .expand("Welcome to ACME")
+            .contains("Acme Corporation Limited"));
     }
 
     #[test]

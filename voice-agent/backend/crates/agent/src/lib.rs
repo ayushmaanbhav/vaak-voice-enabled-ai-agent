@@ -19,6 +19,8 @@ pub mod memory;
 // Legacy memory module for backward compatibility
 pub mod memory_legacy;
 pub mod stage;
+// Config-driven stage provider
+pub mod stage_config;
 pub mod voice_session;
 // P2 FIX: Persuasion engine for objection handling
 pub mod persuasion;
@@ -61,11 +63,8 @@ pub use stage::{
 pub use voice_agent_text_processing::intent::{
     DetectedIntent, Intent, IntentDetector, Slot, SlotType,
 };
-// Phase 2: Export renamed DomainAgent (formerly GoldLoanAgent)
+// Primary agent export
 pub use agent::DomainAgent;
-/// Backwards compatibility alias for GoldLoanAgent
-#[deprecated(since = "0.2.0", note = "Use DomainAgent instead")]
-pub type GoldLoanAgent = DomainAgent;
 // P1-SRP: Export agent config types
 pub use agent_config::{
     AgentConfig, AgentEvent, PersonaTraits, SmallModelConfig, SpeculativeDecodingConfig,
@@ -81,13 +80,12 @@ pub use voice_session::{VoiceSession, VoiceSessionConfig, VoiceSessionEvent, Voi
 pub use traits::{Agent, PersonalizableAgent, PrefetchingAgent};
 // P3 FIX: Export FSM adapter
 pub use fsm_adapter::{create_fsm_adapter, StageManagerAdapter};
-// Phase 5: Export DST types
-// Phase 2: DialogueState and DialogueStateTracking traits for domain-agnostic agents
+// Dialogue State Tracking (DST) exports
 pub use dst::{
-    ChangeSource, DialogueStateTracker, DstConfig, GoldLoanDialogueState, SlotExtractor,
+    ChangeSource, DialogueStateTracker, DstConfig, SlotExtractor,
     SlotValue, StateChange, UrgencyLevel,
-    // Phase 2: Domain-agnostic traits
-    DialogueState, DialogueStateTracking,
+    // Domain-agnostic traits and types
+    DialogueState, DialogueStateTracking, DynamicDialogueState,
     // Config-driven purity types
     PurityId, purity_ids, parse_purity_id, format_purity_display,
 };

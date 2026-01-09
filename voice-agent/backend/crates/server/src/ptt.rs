@@ -743,39 +743,101 @@ fn format_fallback_response(user_text: &str, language: &str) -> String {
     }
 }
 
-/// Language-specific greeting messages
-fn get_greeting(language: &str) -> (&'static str, &'static str) {
-    // Returns (greeting in target language, English translation)
-    match language.to_lowercase().as_str() {
-        "en" | "english" => (
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        "hi" | "hindi" => (
-            "नमस्ते! मैं आपका कोटक गोल्ड लोन सहायक हूं। आज मैं आपकी कैसे मदद कर सकता हूं?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        "ta" | "tamil" => (
-            "வணக்கம்! நான் உங்கள் கோடக் கோல்ட் லோன் உதவியாளர். இன்று நான் உங்களுக்கு எப்படி உதவ முடியும்?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        "te" | "telugu" => (
-            "నమస్కారం! నేను మీ కోటక్ గోల్డ్ లోన్ అసిస్టెంట్. ఈ రోజు నేను మీకు ఎలా సహాయం చేయగలను?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        "kn" | "kannada" => (
-            "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಕೋಟಕ್ ಗೋಲ್ಡ್ ಲೋನ್ ಸಹಾಯಕ. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        "ml" | "malayalam" => (
-            "നമസ്കാരം! ഞാൻ നിങ്ങളുടെ കോട്ടക് ഗോൾഡ് ലോൺ അസിസ്റ്റന്റ് ആണ്. ഇന്ന് ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കാം?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
-        _ => (
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?",
-            "Hello! I'm your Kotak Gold Loan assistant. How can I help you today?"
-        ),
+/// P16 FIX: Brand context for greeting generation
+/// Renamed bank_name to company_name for domain-agnostic design.
+#[derive(Debug, Clone)]
+struct GreetingBrandContext {
+    agent_name: String,
+    company_name: String,
+    product_name: String,
+}
+
+impl GreetingBrandContext {
+    fn from_config(config: &voice_agent_config::domain::MasterDomainConfig) -> Self {
+        Self {
+            agent_name: config.brand.agent_name.clone(),
+            company_name: config.brand.company_name.clone(),
+            product_name: config.display_name.clone(),
+        }
     }
+}
+
+/// P16 FIX: Language-specific greeting messages (config-driven)
+/// Loads greetings from domain config, falls back to generic templates.
+fn get_greeting_from_config(
+    config: &voice_agent_config::domain::MasterDomainConfig,
+    language: &str,
+) -> (String, String) {
+    let brand = GreetingBrandContext::from_config(config);
+
+    // Try to get greeting from config with brand substitution
+    let greeting = config.prompts.get_greeting_with_brand(
+        language,
+        &brand.agent_name,
+        &brand.company_name,
+        &brand.product_name,
+    );
+
+    // English greeting for translation reference
+    let greeting_en = config.prompts.get_greeting_with_brand(
+        "en",
+        &brand.agent_name,
+        &brand.company_name,
+        &brand.product_name,
+    );
+
+    // If config returned the template unchanged (no greeting defined), use fallback
+    if greeting.contains("{agent_name}") || greeting.contains("{bank_name}") {
+        return get_greeting_fallback(language, &brand);
+    }
+
+    (greeting, greeting_en)
+}
+
+/// Fallback greeting templates (generic, domain-agnostic)
+fn get_greeting_fallback(language: &str, brand: &GreetingBrandContext) -> (String, String) {
+    // Build brand suffix
+    let brand_suffix = if !brand.company_name.is_empty() && !brand.product_name.is_empty() {
+        format!(" from {}. How can I help you with your {} needs today?", brand.company_name, brand.product_name)
+    } else if !brand.company_name.is_empty() {
+        format!(" from {}. How can I help you today?", brand.company_name)
+    } else {
+        ". How can I help you today?".to_string()
+    };
+
+    let agent = if brand.agent_name.is_empty() {
+        "your assistant".to_string()
+    } else {
+        brand.agent_name.clone()
+    };
+
+    let greeting_en = format!("Hello! I'm {}{}", agent, brand_suffix);
+
+    let greeting = match language.to_lowercase().as_str() {
+        "hi" | "hindi" => {
+            let hindi_suffix = if !brand.company_name.is_empty() {
+                format!(" {} से। आज मैं आपकी कैसे मदद कर सकता/सकती हूं?", brand.company_name)
+            } else {
+                " हूं। आज मैं आपकी कैसे मदद कर सकता/सकती हूं?".to_string()
+            };
+            format!("नमस्ते! मैं {}{}", agent, hindi_suffix)
+        }
+        "ta" | "tamil" => {
+            format!("வணக்கம்! நான் {}. இன்று நான் உங்களுக்கு எப்படி உதவ முடியும்?", agent)
+        }
+        "te" | "telugu" => {
+            format!("నమస్కారం! నేను {}. ఈ రోజు నేను మీకు ఎలా సహాయం చేయగలను?", agent)
+        }
+        "kn" | "kannada" => {
+            format!("ನಮಸ್ಕಾರ! ನಾನು {}. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?", agent)
+        }
+        "ml" | "malayalam" => {
+            format!("നമസ്കാരം! ഞാൻ {} ആണ്. ഇന്ന് ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കാം?", agent)
+        }
+        _ => greeting_en.clone(),
+    };
+
+    (greeting, greeting_en)
 }
 
 /// Request for greeting
@@ -796,17 +858,21 @@ pub struct GreetingResponse {
     pub language: String,
 }
 
-/// Get language-specific greeting
+/// P16 FIX: Get language-specific greeting (config-driven)
 pub async fn get_greeting_handler(
+    State(state): State<AppState>,
     Json(request): Json<GreetingRequest>,
 ) -> impl IntoResponse {
-    let (greeting, greeting_english) = get_greeting(&request.language);
+    let (greeting, greeting_english) = get_greeting_from_config(
+        state.get_master_domain_config(),
+        &request.language,
+    );
 
     (
         StatusCode::OK,
         Json(GreetingResponse {
-            greeting: greeting.to_string(),
-            greeting_english: greeting_english.to_string(),
+            greeting,
+            greeting_english,
             language: request.language,
         }),
     )

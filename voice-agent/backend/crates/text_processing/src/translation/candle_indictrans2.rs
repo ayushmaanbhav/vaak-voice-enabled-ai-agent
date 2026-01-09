@@ -1027,15 +1027,6 @@ mod candle_impl {
             };
 
             let input_ids = tokenizer.encode_source(text, src_code, tgt_code)?;
-
-            tracing::debug!(
-                text = %text,
-                src = %src_code,
-                tgt = %tgt_code,
-                input_ids = ?&input_ids[..input_ids.len().min(10)],
-                "Translating"
-            );
-
             let input_tensor = Tensor::new(input_ids.as_slice(), &self.device)
                 .map_err(to_translation_error)?
                 .unsqueeze(0)
@@ -1044,11 +1035,6 @@ mod candle_impl {
             let output_ids = model
                 .generate(&input_tensor, None, self.config.max_length)
                 .map_err(to_translation_error)?;
-
-            tracing::debug!(
-                output_ids = ?&output_ids[..output_ids.len().min(10)],
-                "Generated tokens"
-            );
 
             Ok(tokenizer.decode_target(&output_ids))
         }

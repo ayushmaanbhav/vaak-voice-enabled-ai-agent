@@ -15,6 +15,9 @@ pub struct CompetitorsConfig {
     /// Comparison talking points
     #[serde(default)]
     pub comparison_points: Vec<ComparisonPoint>,
+    /// Our (Kotak) features for comparison
+    #[serde(default)]
+    pub our_features: Vec<String>,
     /// Default assumptions
     #[serde(default)]
     pub defaults: CompetitorDefaults,
@@ -25,6 +28,7 @@ impl Default for CompetitorsConfig {
         Self {
             competitors: HashMap::new(),
             comparison_points: Vec::new(),
+            our_features: Vec::new(),
             defaults: CompetitorDefaults::default(),
         }
     }
@@ -105,6 +109,16 @@ impl CompetitorsConfig {
     /// Get highlighted comparison points
     pub fn highlighted_points(&self) -> Vec<&ComparisonPoint> {
         self.comparison_points.iter().filter(|p| p.highlight).collect()
+    }
+
+    /// Get our features for comparison
+    pub fn our_features(&self) -> &[String] {
+        &self.our_features
+    }
+
+    /// Get all competitor IDs
+    pub fn competitor_ids(&self) -> Vec<&str> {
+        self.competitors.keys().map(|k| k.as_str()).collect()
     }
 }
 
@@ -251,6 +265,7 @@ comparison_points:
         let config = CompetitorsConfig {
             competitors,
             comparison_points: vec![],
+            our_features: vec![],
             defaults: CompetitorDefaults::default(),
         };
 

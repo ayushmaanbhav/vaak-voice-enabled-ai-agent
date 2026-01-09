@@ -14,8 +14,8 @@
 use std::sync::Arc;
 
 use crate::{
-    query_expansion::QueryExpander, HybridRetriever, RagError, RerankerConfig, RetrieverConfig,
-    SearchResult, VectorStore,
+    query_expansion::{QueryExpander, QueryExpansionConfig},
+    HybridRetriever, RagError, RerankerConfig, RetrieverConfig, SearchResult, VectorStore,
 };
 
 use voice_agent_llm::{LlmBackend, Message, Role};
@@ -156,6 +156,9 @@ pub struct AgenticRetriever {
 
 impl AgenticRetriever {
     /// Create a new agentic retriever
+    ///
+    /// NOTE: Query expansion starts with an empty expander. Use `with_query_expander()`
+    /// to configure domain-specific expansion from config.
     pub fn new(config: AgenticRagConfig) -> Self {
         let retriever = HybridRetriever::new(
             RetrieverConfig {
@@ -170,18 +173,21 @@ impl AgenticRetriever {
             config,
             retriever,
             query_rewriter: None,
-            query_expander: QueryExpander::gold_loan(),
+            query_expander: QueryExpander::new(QueryExpansionConfig::default()),
             sufficiency_checker: SufficiencyChecker::new(),
         }
     }
 
     /// Create with custom retriever
+    ///
+    /// NOTE: Query expansion starts with an empty expander. Use `with_query_expander()`
+    /// to configure domain-specific expansion from config.
     pub fn with_retriever(config: AgenticRagConfig, retriever: HybridRetriever) -> Self {
         Self {
             config,
             retriever,
             query_rewriter: None,
-            query_expander: QueryExpander::gold_loan(),
+            query_expander: QueryExpander::new(QueryExpansionConfig::default()),
             sufficiency_checker: SufficiencyChecker::new(),
         }
     }

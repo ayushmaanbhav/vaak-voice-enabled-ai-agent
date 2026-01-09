@@ -10,6 +10,7 @@ use futures::StreamExt;
 use super::{find_sentence_end, DomainAgent};
 use crate::agent_config::AgentEvent;
 use crate::conversation::ConversationEvent;
+use crate::dst::DialogueStateTrait;
 use crate::lead_scoring::{EscalationTrigger, LeadRecommendation};
 use crate::memory::{ConversationTurn, TurnRole};
 use crate::AgentError;
@@ -85,25 +86,45 @@ impl DomainAgent {
             "Added user turn to agentic memory"
         );
 
-        // Extract and store customer facts from intent slots in core memory
+        // P16 FIX: Extract and store customer facts from intent slots using config-driven aliases
         for (key, slot) in &intent.slots {
             if let Some(ref value) = slot.value {
-                let fact_key = match key.as_str() {
-                    "gold_weight" | "weight" => Some("gold_weight"),
-                    "gold_purity" | "purity" | "karat" => Some("gold_purity"),
-                    "loan_amount" | "amount" => Some("loan_amount"),
-                    "current_lender" | "lender" => Some("current_lender"),
-                    "interest_rate" | "rate" => Some("current_interest_rate"),
-                    "city" | "location" => Some("city"),
-                    "customer_name" | "name" => {
-                        self.set_customer_name(value);
-                        None
+                // Check if this is a customer name slot (special handling)
+                let is_name_slot = self.domain_view
+                    .as_ref()
+                    .map(|v| v.is_customer_name_slot(key))
+                    .unwrap_or_else(|| key == "customer_name" || key == "name");
+
+                if is_name_slot {
+                    self.set_customer_name(value);
+                } else {
+                    // Use config-driven slot alias resolution, with fallback to legacy mappings
+                    let fact_key = self.domain_view
+                        .as_ref()
+                        .and_then(|v| {
+                            if v.has_slot_aliases() {
+                                Some(v.canonical_fact_key(key))
+                            } else {
+                                None
+                            }
+                        })
+                        .or_else(|| {
+                            // Legacy fallback mappings (used when no config aliases)
+                            match key.as_str() {
+                                "gold_weight" | "weight" => Some("asset_quantity"),
+                                "gold_purity" | "purity" | "karat" => Some("asset_quality"),
+                                "loan_amount" | "amount" => Some("requested_amount"),
+                                "current_lender" | "lender" => Some("current_provider"),
+                                "interest_rate" | "rate" => Some("current_rate"),
+                                "city" | "location" => Some("location"),
+                                "phone_number" | "phone" | "mobile" => Some("phone"),
+                                _ => None,
+                            }
+                        });
+
+                    if let Some(k) = fact_key {
+                        let _ = self.conversation.agentic_memory().core_memory_append(k, value);
                     }
-                    "phone_number" | "phone" | "mobile" => Some("phone"),
-                    _ => None,
-                };
-                if let Some(k) = fact_key {
-                    let _ = self.conversation.agentic_memory().core_memory_append(k, value);
                 }
             }
         }

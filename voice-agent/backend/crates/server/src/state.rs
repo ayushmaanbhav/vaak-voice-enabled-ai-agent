@@ -61,13 +61,62 @@ pub struct AppState {
 
 impl AppState {
     /// Create default text processing components, phonetic corrector, and translator
+    /// Uses empty phonetic corrector when no domain config provided
     fn create_text_processing() -> (Arc<TextProcessingPipeline>, Arc<TextSimplifier>, Arc<PhoneticCorrector>, Arc<dyn Translator>) {
         let text_config = TextProcessingConfig::default();
         let text_processing = Arc::new(TextProcessingPipeline::new(text_config, None));
         let text_simplifier = Arc::new(TextSimplifier::default_config());
-        // Deterministic phonetic corrector for gold loan domain
-        let phonetic_corrector = Arc::new(PhoneticCorrector::gold_loan());
-        tracing::info!("Initialized deterministic phonetic corrector for gold_loan domain");
+        // Empty phonetic corrector - no domain config available
+        let phonetic_corrector = Arc::new(PhoneticCorrector::empty());
+        tracing::warn!("Initialized empty phonetic corrector (no domain config). Use create_text_processing_with_domain() instead.");
+        // Translator for language conversion
+        let translator = create_translator(&TranslationConfig::default());
+        (text_processing, text_simplifier, phonetic_corrector, translator)
+    }
+
+    /// Create text processing components using domain configuration
+    /// P16 FIX: Config-driven phonetic corrector - no more hardcoded domain-specific rules
+    fn create_text_processing_with_domain(master_config: &MasterDomainConfig) -> (Arc<TextProcessingPipeline>, Arc<TextSimplifier>, Arc<PhoneticCorrector>, Arc<dyn Translator>) {
+        use voice_agent_text_processing::grammar::PhoneticCorrectorConfig;
+
+        let text_config = TextProcessingConfig::default();
+        let text_processing = Arc::new(TextProcessingPipeline::new(text_config, None));
+        let text_simplifier = Arc::new(TextSimplifier::default_config());
+
+        // Config-driven phonetic corrector from domain.yaml
+        let phonetic_config = &master_config.phonetic_corrections;
+        let vocabulary = &master_config.vocabulary;
+
+        // Convert contextual rules from config format to tuple format
+        let contextual_rules: Vec<(String, String, String)> = phonetic_config
+            .contextual_rules
+            .iter()
+            .map(|r| (r.context.clone(), r.error.clone(), r.correction.clone()))
+            .collect();
+
+        // Create PhoneticCorrectorConfig from domain config
+        let corrector_config = PhoneticCorrectorConfig {
+            max_edit_distance: phonetic_config.config.max_edit_distance,
+            min_word_length: phonetic_config.config.min_word_length,
+            fix_sentence_start: phonetic_config.config.fix_sentence_start,
+        };
+
+        let phonetic_corrector = Arc::new(PhoneticCorrector::from_domain_config(
+            &vocabulary.terms,
+            phonetic_config.confusion_rules.clone(),
+            contextual_rules,
+            phonetic_config.phrase_rules.clone(),
+            corrector_config,
+        ));
+
+        tracing::info!(
+            domain_id = %master_config.domain_id,
+            vocabulary_terms = vocabulary.terms.len(),
+            confusion_rules = phonetic_config.confusion_rules.len(),
+            phrase_rules = phonetic_config.phrase_rules.len(),
+            "Initialized config-driven phonetic corrector"
+        );
+
         // Translator for language conversion
         let translator = create_translator(&TranslationConfig::default());
         (text_processing, text_simplifier, phonetic_corrector, translator)
@@ -112,7 +161,8 @@ impl AppState {
         config: Settings,
         master_domain_config: Arc<MasterDomainConfig>,
     ) -> Self {
-        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        // P16 FIX: Use config-driven phonetic corrector
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing_with_domain(&master_domain_config);
         let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
         // P15 FIX: Create tools before moving tools_view into struct
         let tools = Arc::new(voice_agent_tools::registry::create_registry_with_view(tools_view.clone()));
@@ -201,7 +251,8 @@ impl AppState {
         sms_service: Arc<dyn voice_agent_persistence::SmsService>,
         gold_price_service: Arc<dyn voice_agent_persistence::GoldPriceService>,
     ) -> Self {
-        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing();
+        // P16 FIX: Use config-driven phonetic corrector
+        let (text_processing, text_simplifier, phonetic_corrector, translator) = Self::create_text_processing_with_domain(&master_domain_config);
         let (agent_view, llm_view, tools_view) = Self::create_views(&master_domain_config);
 
         // P15 FIX: Create tool registry with REQUIRED tools_view and persistence services

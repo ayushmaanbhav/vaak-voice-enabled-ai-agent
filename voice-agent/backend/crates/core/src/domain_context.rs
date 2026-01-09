@@ -40,89 +40,58 @@ impl DomainContext {
         }
     }
 
-    /// Create context for gold loan domain
-    pub fn gold_loan() -> Self {
+    /// Create DomainContext from config values
+    ///
+    /// This is the preferred way to create a DomainContext - all values
+    /// come from config files rather than hardcoded defaults.
+    ///
+    /// # Arguments
+    /// * `domain` - Domain identifier (e.g., "gold_loan")
+    /// * `vocabulary` - Domain-specific terms to preserve
+    /// * `phrases` - Common phrases in this domain
+    /// * `abbreviations` - Abbreviation mappings as (short, full) tuples
+    /// * `preserve_entities` - Entity types to preserve
+    /// * `competitors` - Competitor names for detection
+    pub fn from_config(
+        domain: &str,
+        vocabulary: Vec<String>,
+        phrases: Vec<String>,
+        abbreviations: Vec<(String, String)>,
+        preserve_entities: Vec<String>,
+        competitors: Vec<String>,
+    ) -> Self {
         Self {
-            domain: "gold_loan".to_string(),
+            domain: domain.to_string(),
+            vocabulary,
+            phrases,
+            preserve_entities,
+            abbreviations: abbreviations
+                .into_iter()
+                .map(|(short, full)| Abbreviation { short, full })
+                .collect(),
+            competitors,
+        }
+    }
+
+    /// Create a test fixture context (for tests only)
+    ///
+    /// Production code should use `from_config()` with config-driven values.
+    #[cfg(test)]
+    pub(crate) fn test_fixture() -> Self {
+        Self {
+            domain: "test_domain".to_string(),
             vocabulary: vec![
-                // Product terms
-                "gold loan".to_string(),
-                "balance transfer".to_string(),
-                "top-up".to_string(),
-                "foreclosure".to_string(),
-                "prepayment".to_string(),
-                "disbursement".to_string(),
+                "term1".to_string(),
+                "term2".to_string(),
                 "LTV".to_string(),
-                "loan-to-value".to_string(),
-                // Rates and fees
-                "interest rate".to_string(),
-                "processing fee".to_string(),
-                "per gram".to_string(),
-                "per annum".to_string(),
-                "ROI".to_string(),
-                // Gold terms
-                "gold ornaments".to_string(),
-                "gold jewellery".to_string(),
-                "purity".to_string(),
-                "carat".to_string(),
-                "hallmark".to_string(),
-                // Bank names (preserve exact spelling)
-                "Kotak".to_string(),
-                "Kotak Mahindra".to_string(),
-                "Kotak Mahindra Bank".to_string(),
             ],
-            phrases: vec![
-                // Hindi phrases (preserve)
-                "Kotak Bank se baat kar rahe hain".to_string(),
-                "gold loan balance transfer".to_string(),
-                "kam interest rate".to_string(),
-                "jaldi disbursement".to_string(),
-                "aapka gold safe rahega".to_string(),
-                // Common patterns
-                "aapka naam kya hai".to_string(),
-                "kitna loan chahiye".to_string(),
-                "konsi branch".to_string(),
-            ],
-            preserve_entities: vec![
-                "PersonName".to_string(),
-                "PhoneNumber".to_string(),
-                "LoanAmount".to_string(),
-                "InterestRate".to_string(),
-                "BankName".to_string(),
-            ],
-            abbreviations: vec![
-                Abbreviation {
-                    short: "LTV".to_string(),
-                    full: "Loan to Value".to_string(),
-                },
-                Abbreviation {
-                    short: "ROI".to_string(),
-                    full: "Rate of Interest".to_string(),
-                },
-                Abbreviation {
-                    short: "EMI".to_string(),
-                    full: "Equated Monthly Installment".to_string(),
-                },
-                Abbreviation {
-                    short: "KYC".to_string(),
-                    full: "Know Your Customer".to_string(),
-                },
-                Abbreviation {
-                    short: "PAN".to_string(),
-                    full: "Permanent Account Number".to_string(),
-                },
-            ],
-            competitors: vec![
-                "Muthoot".to_string(),
-                "Muthoot Finance".to_string(),
-                "Manappuram".to_string(),
-                "IIFL".to_string(),
-                "HDFC".to_string(),
-                "SBI".to_string(),
-                "ICICI".to_string(),
-                "Axis".to_string(),
-                "Federal Bank".to_string(),
-            ],
+            phrases: vec!["test phrase".to_string()],
+            preserve_entities: vec!["PersonName".to_string()],
+            abbreviations: vec![Abbreviation {
+                short: "LTV".to_string(),
+                full: "Loan to Value".to_string(),
+            }],
+            competitors: vec!["Competitor A".to_string(), "Competitor B".to_string()],
         }
     }
 
@@ -175,26 +144,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gold_loan_context() {
-        let ctx = DomainContext::gold_loan();
-        assert_eq!(ctx.domain, "gold_loan");
-        assert!(ctx.is_vocabulary("Kotak"));
+    fn test_domain_context_fixture() {
+        let ctx = DomainContext::test_fixture();
+        assert_eq!(ctx.domain, "test_domain");
+        assert!(ctx.is_vocabulary("term1"));
         assert!(ctx.is_vocabulary("LTV"));
     }
 
     #[test]
     fn test_competitor_detection() {
-        let ctx = DomainContext::gold_loan();
-        // Returns the first matching competitor (Muthoot matches before Muthoot Finance)
-        let competitor = ctx.contains_competitor("I have loan from Muthoot Finance");
+        let ctx = DomainContext::test_fixture();
+        let competitor = ctx.contains_competitor("I talked to Competitor A");
         assert!(competitor.is_some());
-        assert!(competitor.unwrap().contains("Muthoot"));
-        assert!(ctx.contains_competitor("I have no existing loan").is_none());
+        assert!(competitor.unwrap().contains("Competitor A"));
+        assert!(ctx.contains_competitor("no competitor here").is_none());
     }
 
     #[test]
     fn test_abbreviation_expansion() {
-        let ctx = DomainContext::gold_loan();
+        let ctx = DomainContext::test_fixture();
         assert_eq!(ctx.expand_abbreviation("LTV"), Some("Loan to Value"));
         assert_eq!(ctx.expand_abbreviation("ltv"), Some("Loan to Value"));
         assert!(ctx.expand_abbreviation("XYZ").is_none());
@@ -210,5 +178,21 @@ mod tests {
         assert_eq!(ctx.domain, "insurance");
         assert!(ctx.is_vocabulary("premium"));
         assert!(ctx.contains_competitor("LIC policy").is_some());
+    }
+
+    #[test]
+    fn test_from_config() {
+        let ctx = DomainContext::from_config(
+            "test",
+            vec!["vocab1".to_string()],
+            vec!["phrase1".to_string()],
+            vec![("ABC".to_string(), "Always Be Closing".to_string())],
+            vec!["Entity".to_string()],
+            vec!["CompX".to_string()],
+        );
+        assert_eq!(ctx.domain, "test");
+        assert!(ctx.is_vocabulary("vocab1"));
+        assert_eq!(ctx.expand_abbreviation("ABC"), Some("Always Be Closing"));
+        assert!(ctx.contains_competitor("CompX is good").is_some());
     }
 }

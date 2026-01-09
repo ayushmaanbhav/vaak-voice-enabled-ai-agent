@@ -39,6 +39,25 @@ pub struct PromptsConfig {
     /// Error response templates
     #[serde(default)]
     pub error_templates: HashMap<String, HashMap<String, String>>,
+    /// P13 FIX: DST instruction templates by action type and language
+    #[serde(default)]
+    pub dst_instructions: HashMap<String, HashMap<String, String>>,
+    /// P16 FIX: Stage-specific guidance messages (keyed by stage name)
+    #[serde(default)]
+    pub stage_guidance: HashMap<String, String>,
+    /// P16 FIX: Greeting templates by language
+    #[serde(default)]
+    pub greetings: HashMap<String, String>,
+    /// P16 FIX: Farewell templates by language
+    #[serde(default)]
+    pub farewells: HashMap<String, String>,
+    /// P16 FIX: Agent role description (e.g., "Gold Loan specialist", "Insurance advisor")
+    #[serde(default)]
+    pub agent_role: String,
+    /// Stage-specific fallback response templates (keyed by stage name, then language)
+    /// Used when LLM is unavailable. Supports brand placeholders.
+    #[serde(default)]
+    pub stage_fallback_responses: HashMap<String, HashMap<String, String>>,
 }
 
 impl Default for PromptsConfig {
@@ -54,6 +73,12 @@ impl Default for PromptsConfig {
             tool_injection_template: String::new(),
             response_templates: HashMap::new(),
             error_templates: HashMap::new(),
+            dst_instructions: HashMap::new(),
+            stage_guidance: HashMap::new(),
+            greetings: HashMap::new(),
+            farewells: HashMap::new(),
+            agent_role: String::new(),
+            stage_fallback_responses: HashMap::new(),
         }
     }
 }
@@ -95,6 +120,18 @@ impl PromptsConfig {
             .and_then(|lang_map| lang_map.get(language).map(|s| s.as_str()))
     }
 
+    /// P13 FIX: Get DST instruction for an action type and language
+    /// Falls back to English if the language-specific instruction is not found
+    pub fn dst_instruction(&self, action_type: &str, language: &str) -> Option<&str> {
+        self.dst_instructions
+            .get(action_type)
+            .and_then(|lang_map| {
+                lang_map.get(language)
+                    .or_else(|| lang_map.get("en"))
+                    .map(|s| s.as_str())
+            })
+    }
+
     /// Build persona traits string from config values
     pub fn build_persona_traits(&self, warmth: f32, empathy: f32, formality: f32, urgency: f32) -> String {
         let mut traits = Vec::new();
@@ -130,10 +167,11 @@ impl PromptsConfig {
     }
 
     /// Build system prompt with substitutions
+    /// P16 FIX: Renamed bank_name to company_name for domain-agnostic design
     pub fn build_system_prompt(
         &self,
         agent_name: &str,
-        bank_name: &str,
+        company_name: &str,
         persona_traits: &str,
         language: &str,
         key_facts: &str,
@@ -143,7 +181,9 @@ impl PromptsConfig {
 
         self.system_prompt
             .replace("{agent_name}", agent_name)
-            .replace("{bank_name}", bank_name)
+            .replace("{company_name}", company_name)
+            // Support legacy placeholder for backwards compatibility
+            .replace("{bank_name}", company_name)
             .replace("{persona_traits}", persona_traits)
             .replace("{language_style}", language_style)
             .replace("{key_facts}", key_facts)
@@ -164,6 +204,103 @@ impl PromptsConfig {
             return String::new();
         }
         self.stage_guidance_template.replace("{guidance}", guidance)
+    }
+
+    /// P16 FIX: Get stage-specific guidance by stage name
+    pub fn get_stage_guidance(&self, stage: &str) -> Option<&str> {
+        self.stage_guidance.get(stage).map(|s| s.as_str())
+    }
+
+    /// P16 FIX: Get greeting template for a language
+    pub fn get_greeting(&self, language: &str) -> &str {
+        self.greetings
+            .get(language)
+            .or_else(|| self.greetings.get("en"))
+            .map(|s| s.as_str())
+            .unwrap_or("Hello!")
+    }
+
+    /// P16 FIX: Get farewell template for a language
+    pub fn get_farewell(&self, language: &str) -> &str {
+        self.farewells
+            .get(language)
+            .or_else(|| self.farewells.get("en"))
+            .map(|s| s.as_str())
+            .unwrap_or("Thank you for your time.")
+    }
+
+    /// P16 FIX: Get agent role description
+    pub fn get_agent_role(&self) -> &str {
+        if self.agent_role.is_empty() {
+            "specialist"
+        } else {
+            &self.agent_role
+        }
+    }
+
+    /// Get stage-specific fallback response template
+    ///
+    /// Returns the raw template with placeholders like {bank_name}, {agent_name}.
+    /// Caller is responsible for substitution.
+    pub fn get_stage_fallback(&self, stage: &str, language: &str) -> Option<&str> {
+        self.stage_fallback_responses
+            .get(stage)
+            .and_then(|lang_map| {
+                lang_map
+                    .get(language)
+                    .or_else(|| lang_map.get("en"))
+                    .map(|s| s.as_str())
+            })
+    }
+
+    /// Get stage-specific fallback response with brand substitution
+    ///
+    /// P16 FIX: Renamed bank_name to company_name. Supports both placeholders for backwards compatibility.
+    pub fn get_stage_fallback_with_brand(
+        &self,
+        stage: &str,
+        language: &str,
+        agent_name: &str,
+        company_name: &str,
+        helpline: &str,
+        product_name: &str,
+    ) -> Option<String> {
+        self.get_stage_fallback(stage, language).map(|template| {
+            template
+                .replace("{agent_name}", agent_name)
+                .replace("{company_name}", company_name)
+                .replace("{bank_name}", company_name) // Legacy support
+                .replace("{helpline}", helpline)
+                .replace("{product_name}", product_name)
+        })
+    }
+
+    /// Get greeting with brand substitution
+    ///
+    /// P16 FIX: Renamed bank_name to company_name for domain-agnostic design.
+    pub fn get_greeting_with_brand(
+        &self,
+        language: &str,
+        agent_name: &str,
+        company_name: &str,
+        product_name: &str,
+    ) -> String {
+        let template = self.get_greeting(language);
+        template
+            .replace("{agent_name}", agent_name)
+            .replace("{company_name}", company_name)
+            .replace("{bank_name}", company_name) // Legacy support
+            .replace("{product_name}", product_name)
+    }
+
+    /// Get farewell with brand substitution
+    pub fn get_farewell_with_brand(
+        &self,
+        language: &str,
+        helpline: &str,
+    ) -> String {
+        let template = self.get_farewell(language);
+        template.replace("{helpline}", helpline)
     }
 }
 

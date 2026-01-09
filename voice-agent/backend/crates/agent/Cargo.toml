@@ -39,6 +39,7 @@ uuid = { version = "1.0", features = ["v4"] }  # For memory note IDs
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 criterion = { version = "0.5", features = ["async_tokio"] }
+serde_yaml.workspace = true  # P16 FIX: For DynamicDialogueState tests
 
 [[bench]]
 name = "voice_pipeline_bench"

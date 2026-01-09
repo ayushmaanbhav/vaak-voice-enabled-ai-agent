@@ -234,7 +234,7 @@ impl Default for VADState {
 /// Implementations:
 /// - `SileroVAD` - High accuracy neural VAD
 /// - `WebRTCVAD` - Fast, lightweight VAD
-/// - `MagicNetVAD` - Kotak's custom trained VAD
+/// - `MagicNetVAD` - Custom trained VAD model
 ///
 /// # Example
 ///

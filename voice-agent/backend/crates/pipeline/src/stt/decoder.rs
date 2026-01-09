@@ -177,23 +177,22 @@ impl EnhancedDecoder {
                 // Add token
                 new_hyp.tokens.push(token_id);
                 if let Some(token_text) = self.vocab.get(token_id as usize) {
-                    // Handle word pieces - use chars().skip() for proper Unicode handling
-                    // "##" prefix (BERT-style) and "▁" prefix (SentencePiece) indicate continuation
+                    // Handle word pieces for SentencePiece vocabulary (used by IndicConformer)
+                    // - Tokens starting with ▁ (U+2581) indicate word boundaries
+                    // - Other tokens are character continuations (no space)
                     if token_text.starts_with("##") {
-                        // BERT-style: "##" is 2 ASCII chars = 2 bytes
+                        // BERT-style: "##" prefix indicates continuation
                         new_hyp.text.push_str(&token_text[2..]);
                     } else if token_text.starts_with('▁') {
-                        // SentencePiece: "▁" is U+2581 = 3 bytes in UTF-8
-                        // Skip the first char and add the rest (with leading space for word boundary)
+                        // SentencePiece: ▁ indicates word start - add space before if not at start
                         let rest: String = token_text.chars().skip(1).collect();
                         if !new_hyp.text.is_empty() {
                             new_hyp.text.push(' ');
                         }
                         new_hyp.text.push_str(&rest);
                     } else {
-                        if !new_hyp.text.is_empty() && !new_hyp.text.ends_with(' ') {
-                            new_hyp.text.push(' ');
-                        }
+                        // Continuation token (no ▁ prefix) - append directly without space
+                        // This is correct for Hindi/Indic scripts where characters combine
                         new_hyp.text.push_str(token_text);
                     }
 
@@ -414,9 +413,9 @@ mod tests {
     #[test]
     fn test_entity_boosting() {
         let decoder = EnhancedDecoder::simple(DecoderConfig::default());
-        decoder.add_entities(["Kotak Mahindra", "gold loan"]);
+        decoder.add_entities(["Test Provider", "test service"]);
 
-        let boost = decoder.entity_boost("I want a gold loan");
+        let boost = decoder.entity_boost("I want a test service");
         assert!(boost > 0.0);
     }
 

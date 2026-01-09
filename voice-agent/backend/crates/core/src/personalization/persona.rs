@@ -105,7 +105,7 @@ pub struct Persona {
 impl Default for Persona {
     fn default() -> Self {
         Self {
-            name: "kotak_advisor".to_string(),
+            name: "default_advisor".to_string(),
             tone: Tone::Professional,
             warmth: 0.8,
             empathy: 0.7,
@@ -376,8 +376,8 @@ impl Persona {
 pub struct PersonaTemplates;
 
 impl PersonaTemplates {
-    /// Default Kotak advisor
-    pub fn kotak_advisor() -> Persona {
+    /// Default advisor persona
+    pub fn default_advisor() -> Persona {
         Persona::default()
     }
 

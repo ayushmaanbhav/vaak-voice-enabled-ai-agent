@@ -62,31 +62,34 @@ impl ConversationStage {
         self.allowed_transitions().contains(&target)
     }
 
-    /// Get stage-specific prompt guidance
+    /// Get generic stage-specific prompt guidance
+    ///
+    /// Note: For domain-specific guidance, load from domain config.
+    /// This method provides generic fallback guidance.
     pub fn prompt_guidance(&self) -> &'static str {
         match self {
             ConversationStage::Greeting => {
-                "Introduce yourself warmly. Acknowledge any previous relationship with the bank. \
-                 Ask an open question to understand their current situation."
+                "Introduce yourself warmly. Ask an open question to understand their \
+                 current situation."
             },
             ConversationStage::Discovery => {
-                "Ask about their current gold loan situation. Understand pain points with \
-                 current lender. Identify gold quantity and purpose of loan."
+                "Ask about their current situation. Understand pain points and needs. \
+                 Identify what they're looking for."
             },
             ConversationStage::Qualification => {
-                "Assess eligibility based on gold quantity and purity. Understand loan amount \
-                 needs. Check for any documentation requirements."
+                "Assess eligibility and fit. Understand their requirements \
+                 and decision timeline."
             },
             ConversationStage::Presentation => {
-                "Present personalized benefits. Show savings calculator results. Emphasize \
-                 trust and safety of Kotak. Mention the Switch & Save program."
+                "Present personalized benefits. Show how you can address their needs. \
+                 Emphasize value and differentiation."
             },
             ConversationStage::ObjectionHandling => {
                 "Listen empathetically. Address specific concerns. Provide evidence and \
                  testimonials. Never be pushy or dismissive."
             },
             ConversationStage::Closing => {
-                "Summarize benefits. Ask for commitment. Offer to schedule appointment. \
+                "Summarize benefits. Ask for commitment. Offer clear next steps. \
                  Create appropriate urgency without pressure."
             },
             ConversationStage::Farewell => {

@@ -247,6 +247,18 @@ comparison_points:
     our_advantage: "Full online loan management via mobile app"
     highlight: false
 
+# Our (Kotak) features for comparison
+our_features:
+  - "Competitive interest rate from 10.49% p.a."
+  - "Up to 75% LTV (Loan-to-Value)"
+  - "Same day disbursement"
+  - "No hidden charges"
+  - "Flexible repayment options"
+  - "Part payment facility"
+  - "Online loan management"
+  - "Wide branch network"
+  - "Transparent valuation process"
+
 # Default competitor assumptions when not specified
 defaults:
   nbfc_rate: 18.0

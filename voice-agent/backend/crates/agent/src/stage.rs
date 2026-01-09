@@ -1,6 +1,12 @@
 //! Stage-Based Dialog Management
 //!
-//! Manages conversation stages and transitions for gold loan sales flow.
+//! Manages conversation stages and transitions for sales conversations.
+//!
+//! ## Domain Agnosticism
+//!
+//! This module provides generic stage management for any sales domain.
+//! Domain-specific guidance and questions come from config via `StageConfigProvider`.
+//! The enum values (Greeting, Discovery, etc.) are generic sales stages.
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -150,54 +156,60 @@ impl ConversationStage {
         }
     }
 
-    /// Get guidance for this stage
+    /// Get generic guidance for this stage
+    ///
+    /// Note: For domain-specific guidance, use `StageConfigProvider` which loads
+    /// guidance from config. This method provides generic fallback guidance.
     pub fn guidance(&self) -> &'static str {
         match self {
             ConversationStage::Greeting =>
                 "Warmly greet the customer. Introduce yourself. Build initial rapport before discussing products.",
             ConversationStage::Discovery =>
-                "Ask open questions to understand their gold loan needs. Learn about current lender, loan amount, and pain points.",
+                "Ask open questions to understand their needs. Learn about their current situation and pain points.",
             ConversationStage::Qualification =>
-                "Assess eligibility and readiness to switch. Understand timeline and decision-making process.",
+                "Assess eligibility and readiness. Understand timeline and decision-making process.",
             ConversationStage::Presentation =>
-                "Present Kotak's gold loan benefits tailored to their needs. Focus on rate savings and trust.",
+                "Present tailored benefits based on their needs. Focus on value and address their specific situation.",
             ConversationStage::ObjectionHandling =>
-                "Address concerns with empathy. Use social proof and guarantees. Don't be pushy.",
+                "Address concerns with empathy. Use evidence and social proof. Don't be pushy.",
             ConversationStage::Closing =>
-                "Summarize benefits and guide to next steps. Schedule appointment or capture lead.",
+                "Summarize benefits and guide to next steps. Schedule appointment or capture contact info.",
             ConversationStage::Farewell =>
                 "Thank warmly and confirm next steps. Leave door open for future conversations.",
         }
     }
 
-    /// Get suggested questions for this stage
+    /// Get generic suggested questions for this stage
+    ///
+    /// Note: For domain-specific questions, use `StageConfigProvider` which loads
+    /// questions from config. This method provides generic fallback questions.
     pub fn suggested_questions(&self) -> Vec<&'static str> {
         match self {
             ConversationStage::Greeting => {
                 vec!["How are you doing today?", "Is this a good time to talk?"]
             },
             ConversationStage::Discovery => vec![
-                "Can you tell me about your current gold loan?",
-                "What interest rate are you paying currently?",
-                "How has your experience been with your current lender?",
+                "Can you tell me about your current situation?",
+                "What brought you to us today?",
+                "What are you looking for?",
                 "What would make you consider switching?",
             ],
             ConversationStage::Qualification => vec![
-                "How much gold do you have pledged currently?",
-                "When does your current loan come up for renewal?",
+                "What timeline are you working with?",
                 "Are you the primary decision maker?",
+                "What are your key requirements?",
             ],
             ConversationStage::Presentation => vec![
-                "Would you like to know how much you could save?",
-                "Have you heard about our Switch & Save program?",
+                "Would you like to know more about our offering?",
+                "Can I show you how this could benefit you?",
             ],
             ConversationStage::ObjectionHandling => vec![
-                "What concerns do you have about switching?",
+                "What concerns do you have?",
                 "Is there anything holding you back?",
             ],
             ConversationStage::Closing => vec![
-                "Would you like me to schedule a branch visit?",
-                "Can I have someone call you with more details?",
+                "Would you like to proceed?",
+                "Can I schedule a follow-up for you?",
             ],
             ConversationStage::Farewell => vec![
                 "Is there anything else I can help with?",

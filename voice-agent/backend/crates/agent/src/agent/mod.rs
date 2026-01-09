@@ -138,7 +138,7 @@ impl DomainAgent {
         // P15 FIX: Use domain config for bank name and role instead of hardcoded values
         conversation.agentic_memory().core.add_persona_goal(&format!(
             "Represent {} as a {} with warmth: {:.0}%, formality: {:.0}%, empathy: {:.0}%",
-            agent_view.bank_name(),
+            agent_view.company_name(),
             agent_view.agent_role(),
             config.persona.warmth * 100.0,
             config.persona.formality * 100.0,
@@ -278,7 +278,7 @@ impl DomainAgent {
             user_language,
             persuasion,
             speculative,
-            dialogue_state: RwLock::new(DialogueStateTracker::with_config(dst_config)),
+            dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(dst_config)),
             lead_scoring: RwLock::new(lead_scoring),
             domain_view: None,
         }
@@ -326,7 +326,7 @@ impl DomainAgent {
             .set_persona_name(&config.persona.name);
         conversation.agentic_memory().core.add_persona_goal(&format!(
             "Represent {} as a {} with warmth: {:.0}%, formality: {:.0}%, empathy: {:.0}%",
-            agent_view.bank_name(),
+            agent_view.company_name(),
             agent_view.agent_role(),
             config.persona.warmth * 100.0,
             config.persona.formality * 100.0,
@@ -402,7 +402,7 @@ impl DomainAgent {
             user_language,
             persuasion,
             speculative,
-            dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
+            dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(config.dst_config.clone())),
             lead_scoring: RwLock::new(lead_scoring),
             domain_view: None,
         }
@@ -428,7 +428,7 @@ impl DomainAgent {
             .set_persona_name(&config.persona.name);
         conversation.agentic_memory().core.add_persona_goal(&format!(
             "Represent {} as a {} with warmth: {:.0}%, formality: {:.0}%, empathy: {:.0}%",
-            agent_view.bank_name(),
+            agent_view.company_name(),
             agent_view.agent_role(),
             config.persona.warmth * 100.0,
             config.persona.formality * 100.0,
@@ -484,7 +484,7 @@ impl DomainAgent {
             user_language,
             persuasion,
             speculative: None, // P1-2 FIX: No speculative without LLM
-            dialogue_state: RwLock::new(DialogueStateTracker::with_config(config.dst_config)),
+            dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(config.dst_config.clone())),
             lead_scoring: RwLock::new(lead_scoring),
             domain_view: None,
         }
@@ -527,14 +527,15 @@ impl DomainAgent {
         self.persuasion = Arc::new(PersuasionEngine::from_view(&view));
 
         // P13 FIX: Update persona goal with brand names from config
-        let bank_name = view.bank_name();
+        // P16 FIX: Renamed bank_name to company_name
+        let company_name = view.company_name();
         let agent_role = view.agent_role();
         self.conversation
             .agentic_memory()
             .core
             .add_persona_goal(&format!(
                 "Represent {} as a {} with warmth: {:.0}%, formality: {:.0}%, empathy: {:.0}%",
-                bank_name,
+                company_name,
                 agent_role,
                 self.config.persona.warmth * 100.0,
                 self.config.persona.formality * 100.0,
@@ -667,9 +668,6 @@ impl DomainAgent {
         &self.config.persona.name
     }
 }
-
-// Backwards compatibility alias
-pub type GoldLoanAgent = DomainAgent;
 
 // P1-1 FIX: Implement Agent trait for DomainAgent
 use crate::traits::{Agent, PersonalizableAgent, PrefetchingAgent};

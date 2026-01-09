@@ -2,10 +2,12 @@
 //!
 //! Provides grammar correction that preserves domain-specific vocabulary.
 
+mod edit_distance;
 mod llm_corrector;
 mod noop;
 mod phonetic_corrector;
 
+pub use edit_distance::{Correction as EditDistanceCorrection, EditDistanceConfig, EditDistanceCorrector};
 pub use llm_corrector::LLMGrammarCorrector;
 pub use noop::NoopCorrector;
 pub use phonetic_corrector::{Correction, PhoneticCorrector, PhoneticCorrectorConfig};

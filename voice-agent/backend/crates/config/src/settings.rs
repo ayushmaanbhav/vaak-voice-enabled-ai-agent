@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::constants::{endpoints, rag};
-use crate::{AgentConfig, ConfigError, GoldLoanConfig, PipelineConfig};
+// P13 FIX: GoldLoanConfig removed - use MasterDomainConfig + views instead
+use crate::{AgentConfig, ConfigError, PipelineConfig};
 
 /// P1 FIX: Runtime environment enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -51,9 +52,8 @@ pub struct Settings {
     #[serde(default)]
     pub agent: AgentConfig,
 
-    /// Gold loan business configuration
-    #[serde(default)]
-    pub gold_loan: GoldLoanConfig,
+    // P13 FIX: gold_loan field removed - use MasterDomainConfig + views instead
+    // Business config now loaded from config/domains/{domain}/domain.yaml
 
     /// Model paths
     #[serde(default)]

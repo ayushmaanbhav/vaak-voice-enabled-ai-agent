@@ -1,0 +1,95 @@
+# Domain Vocabulary Configuration
+# Defines abbreviations, synonyms, and domain-specific terms
+
+# Brand/company abbreviations
+abbreviations:
+  KMBL: "Kotak Mahindra Bank Limited"
+  KMB: "Kotak Mahindra Bank"
+
+# Competitor abbreviations (for recognition)
+competitor_abbreviations:
+  MFL: "Muthoot Finance Limited"
+  MGFL: "Manappuram Gold Finance Limited"
+  IIFL: "IIFL Finance"
+
+# Domain-specific terms for speech recognition boost
+domain_terms:
+  # Asset terms
+  - term: "gold"
+    boost: 2.0
+    aliases: ["sona", "swarna"]
+  - term: "karat"
+    boost: 1.5
+    aliases: ["carat", "kt", "k"]
+  - term: "purity"
+    boost: 1.5
+    aliases: ["shudhta"]
+  - term: "22k"
+    boost: 2.0
+    aliases: ["22 karat", "bais karat"]
+  - term: "24k"
+    boost: 2.0
+    aliases: ["24 karat", "chaubis karat"]
+
+  # Service terms
+  - term: "loan"
+    boost: 2.0
+    aliases: ["karz", "rin"]
+  - term: "interest"
+    boost: 1.5
+    aliases: ["byaj", "rate"]
+  - term: "eligibility"
+    boost: 1.5
+    aliases: ["patrta", "qualification"]
+  - term: "valuation"
+    boost: 1.5
+    aliases: ["mulyankan"]
+
+  # Process terms
+  - term: "disbursement"
+    boost: 1.5
+    aliases: ["vitaran"]
+  - term: "transfer"
+    boost: 1.5
+    aliases: ["balance transfer", "switch"]
+  - term: "top-up"
+    boost: 1.5
+    aliases: ["topup", "additional"]
+
+# Phonetic corrections for common ASR errors
+phonetic_corrections:
+  "gol lone": "gold loan"
+  "gold lon": "gold loan"
+  "kotuk": "Kotak"
+  "cotak": "Kotak"
+  "muthut": "Muthoot"
+  "manapuram": "Manappuram"
+  "intrest": "interest"
+  "intrst": "interest"
+  "elgibility": "eligibility"
+  "eligibilty": "eligibility"
+
+# Number words in Hindi (for slot extraction)
+hindi_numbers:
+  ek: 1
+  do: 2
+  teen: 3
+  char: 4
+  panch: 5
+  chhah: 6
+  saat: 7
+  aath: 8
+  nau: 9
+  das: 10
+  bees: 20
+  tees: 30
+  chalees: 40
+  pachas: 50
+  saath: 60
+  sattar: 70
+  assi: 80
+  nabbe: 90
+  sau: 100
+  hazaar: 1000
+  lakh: 100000
+  crore: 10000000

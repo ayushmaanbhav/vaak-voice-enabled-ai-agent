@@ -1,5 +1,14 @@
-# Gold Loan Domain - Slot Definitions
-# These define the dialogue state tracking slots for the gold loan agent
+# Domain Slot Definitions
+# These define the dialogue state tracking slots for the voice agent.
+#
+# DESIGN PRINCIPLE: Use domain-agnostic slot names that can be reused across domains.
+# Domain-specific display names and descriptions are configured here.
+#
+# Generic slot naming convention:
+#   - asset_quantity (not gold_weight_grams) - amount/weight of collateral
+#   - asset_quality_tier (not gold_purity) - quality grade of collateral
+#   - asset_type (not gold_item_type) - type/category of collateral
+#   - offer_amount (not loan_amount) - requested/offered amount
 
 # Slot type definitions
 slots:
@@ -43,10 +52,15 @@ slots:
         - "\\b([1-9]\\d{5})\\b"
         - "(?i)(?:pincode|pin)\\s*(?:is|hai)?\\s*(\\d{6})"
 
-  # Gold details slots
-  gold_weight_grams:
+  # Asset/Collateral slots (domain-agnostic names)
+  # For gold loan: quantity = weight in grams
+  # For car loan: quantity = vehicle value
+  # For insurance: quantity = coverage amount
+  asset_quantity:
     type: number
-    description: "Weight of gold in grams"
+    display_name: "Gold Weight"  # Domain-specific display
+    description: "Quantity/weight of collateral asset"
+    unit: "grams"  # Domain-specific unit
     min: 1
     max: 10000
     extraction_patterns:
@@ -60,46 +74,59 @@ slots:
       tola: 11.66
       तोला: 11.66
 
-  gold_purity:
+  # For gold loan: quality_tier = purity (K24, K22, K18, K14)
+  # For car loan: quality_tier = condition (excellent, good, fair)
+  # For insurance: quality_tier = risk category
+  asset_quality_tier:
     type: enum
-    description: "Gold purity in karats"
+    display_name: "Gold Purity"  # Domain-specific display
+    description: "Quality grade/tier of collateral asset"
     values:
-      - id: K24
+      - id: tier_1
         display: "24 karat"
-        purity_factor: 0.999
+        quality_factor: 0.999
         patterns: ["24k", "24 karat", "24kt", "pure gold"]
-      - id: K22
+      - id: tier_2
         display: "22 karat"
-        purity_factor: 0.916
+        quality_factor: 0.916
         patterns: ["22k", "22 karat", "22kt", "standard gold"]
-      - id: K18
+      - id: tier_3
         display: "18 karat"
-        purity_factor: 0.750
+        quality_factor: 0.750
         patterns: ["18k", "18 karat", "18kt"]
-      - id: K14
+      - id: tier_4
         display: "14 karat"
-        purity_factor: 0.583
+        quality_factor: 0.583
         patterns: ["14k", "14 karat", "14kt"]
-    default: K22
+    default: tier_2
 
-  gold_item_type:
+  # For gold loan: asset_type = jewelry, coins, bars
+  # For car loan: asset_type = sedan, suv, hatchback
+  # For insurance: asset_type = term, whole life, endowment
+  asset_type:
     type: enum
-    description: "Type of gold item"
+    display_name: "Gold Item Type"  # Domain-specific display
+    description: "Category/type of collateral asset"
     values:
-      - id: jewelry
+      - id: category_1
         display: "Jewelry"
         patterns: ["jewelry", "jewellery", "ornaments", "chain", "necklace", "bangles", "ring"]
-      - id: coins
+      - id: category_2
         display: "Gold Coins"
         patterns: ["coins", "coin", "gold coin"]
-      - id: bars
+      - id: category_3
         display: "Gold Bars"
         patterns: ["bars", "bar", "biscuit"]
 
-  # Loan requirement slots
-  loan_amount:
+  # Offer/Request amount slot (domain-agnostic)
+  # For gold loan: requested loan amount
+  # For insurance: coverage amount
+  # For car loan: financing amount
+  offer_amount:
     type: number
-    description: "Desired loan amount in INR"
+    display_name: "Loan Amount"  # Domain-specific display
+    description: "Desired offer/loan amount"
+    currency: "INR"  # Domain-specific currency
     min: 10000
     max: 25000000
     extraction_patterns:
@@ -338,3 +365,36 @@ intent_mapping:
     - capture_lead
     - interested
     - sms_request
+
+# P16 FIX: Slot name aliases for fact storage normalization
+# Maps alternative/legacy slot names to canonical fact keys
+# This allows the system to handle both domain-specific and generic slot names
+slot_aliases:
+  # Asset-related aliases (gold loan specific -> generic)
+  gold_weight: "asset_quantity"
+  gold_weight_grams: "asset_quantity"
+  weight: "asset_quantity"
+  gold_purity: "asset_quality"
+  purity: "asset_quality"
+  karat: "asset_quality"
+  # Amount aliases
+  loan_amount: "requested_amount"
+  amount: "requested_amount"
+  # Lender/provider aliases
+  current_lender: "current_provider"
+  lender: "current_provider"
+  # Rate aliases
+  interest_rate: "current_rate"
+  rate: "current_rate"
+  # Location aliases
+  city: "location"
+  location: "location"
+  # Phone aliases
+  phone_number: "phone"
+  phone: "phone"
+  mobile: "phone"
+
+# Slots that trigger customer name update instead of fact storage
+customer_name_slots:
+  - customer_name
+  - name

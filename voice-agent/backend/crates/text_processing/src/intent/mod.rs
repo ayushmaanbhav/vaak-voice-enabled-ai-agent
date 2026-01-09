@@ -1,12 +1,11 @@
 //! Intent Detection and Slot Filling
 //!
-//! Detects user intents and extracts relevant entities for gold loan conversations.
-//!
-//! # P1-2 FIX: Moved from agent crate to text_processing for proper separation of concerns.
+//! Detects user intents and extracts relevant entities for voice agent conversations.
+//! This module is domain-agnostic - actual intents come from domain configuration.
 //!
 //! # Features
 //!
-//! - 14 gold loan specific intents
+//! - Config-driven intent definitions
 //! - Slot extraction with multi-script support (11 Indic scripts)
 //! - Currency parsing with lakh/crore multipliers
 //! - Hindi number word recognition
@@ -17,10 +16,9 @@
 //! use voice_agent_text_processing::intent::{IntentDetector, DetectedIntent};
 //!
 //! let detector = IntentDetector::new();
-//! let result = detector.detect("I want a gold loan of 5 lakh");
+//! let result = detector.detect("I need to check my eligibility");
 //!
-//! assert_eq!(result.intent, "loan_inquiry");
-//! assert!(result.slots.contains_key("loan_amount"));
+//! assert_eq!(result.intent, "eligibility_check");
 //! ```
 
 use parking_lot::RwLock;
@@ -100,93 +98,123 @@ pub struct IntentDetector {
 }
 
 impl IntentDetector {
-    /// Create a new intent detector with gold loan intents
+    /// Create a new intent detector with minimal generic intents
+    ///
+    /// For domain-specific intents, use `with_intents()` to load from config.
     pub fn new() -> Self {
         let mut detector = Self {
             intents: RwLock::new(Vec::new()),
             compiled_patterns: HashMap::new(),
         };
 
-        detector.register_gold_loan_intents();
+        detector.register_core_intents();
         detector.compile_slot_patterns();
 
         detector
     }
 
-    /// Register gold loan specific intents
-    fn register_gold_loan_intents(&self) {
+    /// Create intent detector with custom intents (for config-driven domains)
+    ///
+    /// This is the preferred way to create domain-specific intent detectors.
+    /// Load intents from your domain's intents.yaml and pass them here.
+    pub fn with_intents(intents: Vec<Intent>) -> Self {
+        let mut detector = Self {
+            intents: RwLock::new(intents),
+            compiled_patterns: HashMap::new(),
+        };
+        detector.compile_slot_patterns();
+        detector
+    }
+
+    /// Add additional intents to the detector
+    pub fn add_intents(&self, new_intents: Vec<Intent>) {
+        let mut intents = self.intents.write();
+        intents.extend(new_intents);
+    }
+
+    /// Replace all intents with new ones
+    pub fn set_intents(&self, new_intents: Vec<Intent>) {
+        *self.intents.write() = new_intents;
+    }
+
+    /// Register core intents that are domain-agnostic
+    ///
+    /// These handle basic conversational patterns common to all domains.
+    fn register_core_intents(&self) {
         let intents = vec![
+            // Service inquiry (generic)
             Intent {
-                name: "loan_inquiry".to_string(),
-                description: "User wants to know about gold loan".to_string(),
+                name: "service_inquiry".to_string(),
+                description: "User wants to know about the service".to_string(),
                 required_slots: vec![],
-                optional_slots: vec!["loan_amount".to_string(), "gold_weight".to_string()],
+                optional_slots: vec!["requested_amount".to_string()],
                 examples: vec![
-                    "I want a gold loan".to_string(),
-                    "Tell me about gold loan".to_string(),
-                    "Gold loan kaise milega".to_string(),
+                    "I want to apply".to_string(),
+                    "Tell me about your services".to_string(),
+                    "How does this work".to_string(),
                 ],
             },
+            // Interest/rate inquiry
             Intent {
                 name: "interest_rate".to_string(),
                 description: "User asking about interest rates".to_string(),
                 required_slots: vec![],
-                optional_slots: vec!["loan_amount".to_string()],
+                optional_slots: vec!["requested_amount".to_string()],
                 examples: vec![
                     "What is the interest rate".to_string(),
                     "Interest rate kitna hai".to_string(),
                     "Rate of interest".to_string(),
                 ],
             },
+            // Eligibility check
             Intent {
                 name: "eligibility_check".to_string(),
                 description: "User wants to check eligibility".to_string(),
-                required_slots: vec!["gold_weight".to_string()],
-                optional_slots: vec!["gold_purity".to_string()],
+                required_slots: vec![],
+                optional_slots: vec!["asset_quantity".to_string()],
                 examples: vec![
                     "Am I eligible".to_string(),
-                    "Can I get a loan".to_string(),
-                    "Kitna loan milega".to_string(),
+                    "Can I get approved".to_string(),
+                    "Kitna milega".to_string(),
                 ],
             },
+            // Balance transfer
             Intent {
-                name: "switch_lender".to_string(),
-                description: "User wants to switch from current lender".to_string(),
-                required_slots: vec!["current_lender".to_string()],
-                optional_slots: vec!["current_rate".to_string(), "loan_amount".to_string()],
+                name: "balance_transfer".to_string(),
+                description: "User wants to transfer from another provider".to_string(),
+                required_slots: vec![],
+                optional_slots: vec!["current_provider".to_string()],
                 examples: vec![
-                    "I want to switch from Muthoot".to_string(),
-                    "Transfer my loan".to_string(),
-                    "Can I move my gold loan".to_string(),
+                    "I want to transfer".to_string(),
+                    "Balance transfer".to_string(),
+                    "Switch provider".to_string(),
                 ],
             },
+            // Objection/concern
             Intent {
                 name: "objection".to_string(),
                 description: "User has concerns or objections".to_string(),
                 required_slots: vec![],
-                optional_slots: vec!["objection_type".to_string()],
+                optional_slots: vec![],
                 examples: vec![
                     "I'm not sure".to_string(),
-                    "What if something goes wrong".to_string(),
                     "Is it safe".to_string(),
-                    "Mujhe dar lagta hai".to_string(),
+                    "What are the risks".to_string(),
                 ],
             },
+            // Schedule visit
             Intent {
                 name: "schedule_visit".to_string(),
-                description: "User wants to visit branch".to_string(),
+                description: "User wants to schedule appointment".to_string(),
                 required_slots: vec![],
-                optional_slots: vec![
-                    "location".to_string(),
-                    "date".to_string(),
-                    "time".to_string(),
-                ],
+                optional_slots: vec!["location".to_string(), "preferred_date".to_string()],
                 examples: vec![
                     "I want to visit".to_string(),
                     "Schedule appointment".to_string(),
-                    "Kab aa sakte hain".to_string(),
+                    "Book a time".to_string(),
                 ],
             },
+            // Documentation inquiry
             Intent {
                 name: "documentation".to_string(),
                 description: "User asking about required documents".to_string(),
@@ -194,10 +222,23 @@ impl IntentDetector {
                 optional_slots: vec![],
                 examples: vec![
                     "What documents needed".to_string(),
-                    "Kya documents chahiye".to_string(),
-                    "Paper work".to_string(),
+                    "Documents required".to_string(),
+                    "What should I bring".to_string(),
                 ],
             },
+            // Price inquiry
+            Intent {
+                name: "price_inquiry".to_string(),
+                description: "User asking about rates/prices".to_string(),
+                required_slots: vec![],
+                optional_slots: vec![],
+                examples: vec![
+                    "What is the current rate".to_string(),
+                    "Today's price".to_string(),
+                    "Current rate".to_string(),
+                ],
+            },
+            // Core conversational intents
             Intent {
                 name: "greeting".to_string(),
                 description: "User greeting".to_string(),
@@ -207,13 +248,13 @@ impl IntentDetector {
             },
             Intent {
                 name: "farewell".to_string(),
-                description: "User saying goodbye".to_string(),
+                description: "User ending conversation".to_string(),
                 required_slots: vec![],
                 optional_slots: vec![],
                 examples: vec![
                     "Bye".to_string(),
                     "Thank you".to_string(),
-                    "Dhanyavaad".to_string(),
+                    "Goodbye".to_string(),
                 ],
             },
             Intent {
@@ -221,48 +262,24 @@ impl IntentDetector {
                 description: "User agreeing".to_string(),
                 required_slots: vec![],
                 optional_slots: vec![],
-                examples: vec![
-                    "Yes".to_string(),
-                    "Sure".to_string(),
-                    "Haan".to_string(),
-                    "Okay".to_string(),
-                ],
+                examples: vec!["Yes".to_string(), "Sure".to_string(), "Okay".to_string()],
             },
             Intent {
                 name: "negative".to_string(),
                 description: "User declining".to_string(),
                 required_slots: vec![],
                 optional_slots: vec![],
-                examples: vec!["No".to_string(), "Not now".to_string(), "Nahi".to_string()],
-            },
-            // P1 FIX: Add missing intents for orphaned tools
-            Intent {
-                name: "gold_price".to_string(),
-                description: "User asking about gold price".to_string(),
-                required_slots: vec![],
-                optional_slots: vec![],
-                examples: vec![
-                    "What is the gold price".to_string(),
-                    "Gold rate today".to_string(),
-                    "Sona ka bhav".to_string(),
-                    "Current gold rate".to_string(),
-                    "Aaj ka gold price".to_string(),
-                    "Gold kitne ka hai".to_string(),
-                ],
+                examples: vec!["No".to_string(), "Not now".to_string()],
             },
             Intent {
                 name: "escalate".to_string(),
-                description: "User wants to speak to human agent".to_string(),
+                description: "User wants to speak to human".to_string(),
                 required_slots: vec![],
                 optional_slots: vec![],
                 examples: vec![
                     "Talk to human".to_string(),
                     "Speak to agent".to_string(),
-                    "I want a real person".to_string(),
-                    "Connect me to human".to_string(),
-                    "Aadmi se baat karo".to_string(),
-                    "Insaan se connect karo".to_string(),
-                    "Manager se baat karni hai".to_string(),
+                    "Real person".to_string(),
                 ],
             },
             Intent {
@@ -272,12 +289,8 @@ impl IntentDetector {
                 optional_slots: vec!["phone_number".to_string()],
                 examples: vec![
                     "Send me details".to_string(),
-                    "SMS me the information".to_string(),
                     "Text me".to_string(),
-                    "Send sms".to_string(),
-                    "Message bhejo".to_string(),
-                    "Details SMS karo".to_string(),
-                    "Mujhe message karo".to_string(),
+                    "Send SMS".to_string(),
                 ],
             },
         ];

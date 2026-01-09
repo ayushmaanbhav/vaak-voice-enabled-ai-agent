@@ -28,16 +28,28 @@ pub struct TextProcessingPipeline {
 
 impl TextProcessingPipeline {
     /// Create a new pipeline with configuration
+    ///
+    /// Note: This uses a default DomainContext based on domain name.
+    /// For config-driven contexts, use `with_domain_context()`.
     pub fn new(config: TextProcessingConfig, llm: Option<Arc<dyn LanguageModel>>) -> Self {
+        // Default to empty context - callers should use with_domain_context for config-driven
+        let domain_context = DomainContext::new(&config.domain);
+        Self::with_domain_context(config, llm, domain_context)
+    }
+
+    /// Create a new pipeline with a pre-built DomainContext
+    ///
+    /// This is the preferred constructor for config-driven contexts.
+    /// The DomainContext should be created from config using `DomainContext::from_config()`.
+    pub fn with_domain_context(
+        config: TextProcessingConfig,
+        llm: Option<Arc<dyn LanguageModel>>,
+        domain_context: DomainContext,
+    ) -> Self {
         let grammar_corrector = grammar::create_corrector(&config.grammar, llm);
         let translator = translation::create_translator(&config.translation);
         let pii_detector = pii::create_detector(&config.pii);
         let compliance_checker = compliance::create_checker(&config.compliance);
-
-        let domain_context = match config.domain.as_str() {
-            "gold_loan" => DomainContext::gold_loan(),
-            _ => DomainContext::new(&config.domain),
-        };
 
         Self {
             grammar_corrector,

@@ -28,9 +28,11 @@ pub use adapter::LanguageModelAdapter;
 pub use claude::{ClaudeBackend, ClaudeConfig, ClaudeModel, ClaudeResponse, ClaudeStopReason};
 // P0-3c: Export factory
 pub use factory::{ClaudeLanguageModel, LlmFactory, LlmProvider, LlmProviderConfig};
+// P16 FIX: gold_loan_tools removed - tools loaded from domain config
+// Use voice_agent_config::domain::ToolsConfig::to_tool_definitions() instead
 pub use prompt::{
-    gold_loan_tools, parse_tool_call, Message, ParsedToolCall, PersonaConfig, PromptBuilder, Role,
-    ToolBuilder, ToolDefinition,
+    parse_tool_call, BrandConfig, Message, ParsedToolCall, PersonaConfig, ProductFacts,
+    PromptBuilder, ResponseTemplates, Role, ToolBuilder, ToolDefinition,
 };
 pub use speculative::{SpeculativeConfig, SpeculativeExecutor, SpeculativeMode, SpeculativeResult};
 pub use streaming::{GenerationEvent, StreamingGenerator, TokenStream};

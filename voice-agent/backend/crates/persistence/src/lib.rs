@@ -23,7 +23,12 @@ pub use audit::{
 };
 pub use client::{ScyllaClient, ScyllaConfig};
 pub use error::PersistenceError;
-pub use gold_price::{GoldPrice, GoldPriceService, GoldPurity, SimulatedGoldPriceService};
+// Asset price types (domain-agnostic) with legacy aliases
+pub use gold_price::{
+    AssetPrice, AssetPriceService, AssetVariant, SimulatedAssetPriceService,
+    // Legacy aliases for backwards compatibility
+    GoldPrice, GoldPriceService, GoldPurity, SimulatedGoldPriceService,
+};
 pub use sessions::{ScyllaSessionStore, SessionData, SessionStore};
 pub use sms::{SimulatedSmsService, SmsMessage, SmsService, SmsStatus, SmsType};
 

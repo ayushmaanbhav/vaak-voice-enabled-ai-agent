@@ -6,15 +6,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CustomerSegment {
-    /// High-value customers (>100g gold, sophisticated)
+    /// High-value customers (large asset value, sophisticated)
     HighValue,
-    /// Safety-focused, may have been burned by NBFC issues
+    /// Safety-focused, may have had issues with other providers
     TrustSeeker,
-    /// New to gold loans
+    /// New to this service type
     FirstTime,
     /// Rate-focused comparison shoppers
     PriceSensitive,
-    /// Women customers (Shakti Gold segment)
+    /// Women customers (special segment programs)
     Women,
     /// Young urban professionals
     Professional,
@@ -113,17 +113,17 @@ pub struct CustomerProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub segment: Option<CustomerSegment>,
 
-    /// Current gold loan lender (competitor)
+    /// Current provider (competitor)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_lender: Option<String>,
 
-    /// Gold weight in grams
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gold_weight: Option<f64>,
+    /// Collateral weight in units (e.g., grams for gold)
+    #[serde(skip_serializing_if = "Option::is_none", alias = "gold_weight")]
+    pub collateral_weight: Option<f64>,
 
-    /// Gold purity (e.g., "22K", "24K")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gold_purity: Option<String>,
+    /// Collateral variant/grade (e.g., "22K", "24K" for gold)
+    #[serde(skip_serializing_if = "Option::is_none", alias = "gold_purity")]
+    pub collateral_variant: Option<String>,
 
     /// Current/desired loan amount
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,9 +133,9 @@ pub struct CustomerProfile {
     #[serde(default = "default_language")]
     pub preferred_language: String,
 
-    /// Existing relationship with Kotak
+    /// Existing relationship with company
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub relationship_with_kotak: Option<KotakRelationship>,
+    pub relationship_with_company: Option<CompanyRelationship>,
 
     /// City
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -144,6 +144,20 @@ pub struct CustomerProfile {
     /// Pincode
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pincode: Option<String>,
+}
+
+// Legacy aliases for backwards compatibility
+impl CustomerProfile {
+    /// Legacy accessor for gold_weight
+    pub fn gold_weight(&self) -> Option<f64> {
+        self.collateral_weight
+    }
+
+    /// Legacy accessor for gold_purity
+    pub fn gold_purity(&self) -> Option<&str> {
+        self.collateral_variant.as_deref()
+    }
+
 }
 
 fn default_language() -> String {
@@ -159,11 +173,11 @@ impl CustomerProfile {
             phone: None,
             segment: None,
             current_lender: None,
-            gold_weight: None,
-            gold_purity: None,
+            collateral_weight: None,
+            collateral_variant: None,
             loan_amount: None,
             preferred_language: "en".to_string(),
-            relationship_with_kotak: None,
+            relationship_with_company: None,
             city: None,
             pincode: None,
         }
@@ -188,17 +202,22 @@ impl CustomerProfile {
         self
     }
 
-    /// Set current lender
+    /// Set current lender/provider
     pub fn current_lender(mut self, lender: impl Into<String>) -> Self {
         self.current_lender = Some(lender.into());
         self
     }
 
-    /// Set gold details
-    pub fn gold(mut self, weight: f64, purity: impl Into<String>) -> Self {
-        self.gold_weight = Some(weight);
-        self.gold_purity = Some(purity.into());
+    /// Set collateral details (weight/quantity and variant/grade)
+    pub fn collateral(mut self, weight: f64, variant: impl Into<String>) -> Self {
+        self.collateral_weight = Some(weight);
+        self.collateral_variant = Some(variant.into());
         self
+    }
+
+    /// Legacy alias for setting gold details
+    pub fn gold(self, weight: f64, purity: impl Into<String>) -> Self {
+        self.collateral(weight, purity)
     }
 
     /// Set preferred language
@@ -212,33 +231,47 @@ impl CustomerProfile {
         self.current_lender.is_some()
     }
 
-    /// Check if we have gold details
-    pub fn has_gold_details(&self) -> bool {
-        self.gold_weight.is_some() && self.gold_purity.is_some()
+    /// Check if we have collateral details
+    pub fn has_collateral_details(&self) -> bool {
+        self.collateral_weight.is_some() && self.collateral_variant.is_some()
     }
 
-    /// P2 FIX: Default gold price per gram (INR). Should be fetched from API/config.
-    pub const DEFAULT_GOLD_PRICE_PER_GRAM: f64 = 7500.0;
+    /// Legacy alias for has_collateral_details
+    pub fn has_gold_details(&self) -> bool {
+        self.has_collateral_details()
+    }
 
-    /// Estimate gold value
+    /// Default asset price per unit (INR). Should be fetched from API/config.
+    pub const DEFAULT_ASSET_PRICE_PER_UNIT: f64 = 7500.0;
+
+    /// Legacy alias for DEFAULT_ASSET_PRICE_PER_UNIT
+    pub const DEFAULT_GOLD_PRICE_PER_GRAM: f64 = Self::DEFAULT_ASSET_PRICE_PER_UNIT;
+
+    /// Estimate collateral value
     ///
-    /// P2 FIX: Now accepts configurable gold_price_per_gram parameter.
-    /// Use `CustomerProfile::DEFAULT_GOLD_PRICE_PER_GRAM` or pass value from config.
-    pub fn estimated_gold_value(&self, gold_price_per_gram: Option<f64>) -> Option<f64> {
-        let weight = self.gold_weight?;
-        let purity = self.gold_purity.as_ref()?;
+    /// P2 FIX: Now accepts configurable asset_price_per_unit parameter.
+    /// Use `CustomerProfile::DEFAULT_ASSET_PRICE_PER_UNIT` or pass value from config.
+    pub fn estimated_collateral_value(&self, asset_price_per_unit: Option<f64>) -> Option<f64> {
+        let weight = self.collateral_weight?;
+        let variant = self.collateral_variant.as_ref()?;
 
-        let base_price = gold_price_per_gram.unwrap_or(Self::DEFAULT_GOLD_PRICE_PER_GRAM);
+        let base_price = asset_price_per_unit.unwrap_or(Self::DEFAULT_ASSET_PRICE_PER_UNIT);
 
-        let purity_factor = match purity.to_uppercase().as_str() {
-            "24K" => 1.0,
-            "22K" => 0.916,
-            "18K" => 0.75,
+        // Variant factors - these should ideally come from config
+        let variant_factor = match variant.to_uppercase().as_str() {
+            "24K" | "HIGH_GRADE" => 1.0,
+            "22K" | "STANDARD_GRADE" => 0.916,
+            "18K" | "LOWER_GRADE" => 0.75,
             "14K" => 0.585,
-            _ => 0.75, // Default to 18K
+            _ => 0.75, // Default to lower grade
         };
 
-        Some(weight * base_price * purity_factor)
+        Some(weight * base_price * variant_factor)
+    }
+
+    /// Legacy alias for estimated_collateral_value
+    pub fn estimated_gold_value(&self, gold_price_per_gram: Option<f64>) -> Option<f64> {
+        self.estimated_collateral_value(gold_price_per_gram)
     }
 
     /// Get display name (name or "Customer")
@@ -253,8 +286,8 @@ impl CustomerProfile {
             return self.segment;
         }
 
-        // High value: >100g gold OR loan amount > 5 lakhs
-        if let Some(weight) = self.gold_weight {
+        // High value: >100 units collateral OR loan amount > 5 lakhs
+        if let Some(weight) = self.collateral_weight {
             if weight >= 100.0 {
                 return Some(CustomerSegment::HighValue);
             }
@@ -266,18 +299,15 @@ impl CustomerProfile {
         }
 
         // Trust seeker: switching from NBFC due to issues
-        if let Some(ref lender) = self.current_lender {
-            let lender_lower = lender.to_lowercase();
-            if lender_lower.contains("iifl")
-                || lender_lower.contains("muthoot")
-                || lender_lower.contains("manappuram")
-            {
-                return Some(CustomerSegment::TrustSeeker);
-            }
+        // Note: For config-driven competitor detection, use primary_segment_with_config()
+        if self.current_lender.is_some() {
+            // Having any current lender suggests potential for TrustSeeker segment
+            // Full competitor matching done via primary_segment_with_config()
+            return Some(CustomerSegment::TrustSeeker);
         }
 
-        // First time: no current lender and no gold details
-        if self.current_lender.is_none() && !self.has_gold_details() {
+        // First time: no current lender and no collateral details
+        if self.current_lender.is_none() && !self.has_collateral_details() {
             return Some(CustomerSegment::FirstTime);
         }
 
@@ -450,7 +480,21 @@ impl SegmentDetector {
         price_patterns.iter().any(|p| text.contains(p))
     }
 
-    /// Detect trust-seeking customer
+    /// Detect trust-seeking customer (config-driven)
+    ///
+    /// # Arguments
+    /// * `text` - The text to analyze
+    /// * `competitor_names` - Optional list of competitor names to check
+    pub fn detect_trust_seeking_with_config(&self, text: &str, competitor_names: &[String]) -> bool {
+        // Check safety patterns
+        if self.detect_trust_seeking(text) {
+            return true;
+        }
+        // Check competitor mentions
+        competitor_names.iter().any(|c| text.contains(&c.to_lowercase()))
+    }
+
+    /// Detect trust-seeking customer (basic patterns only, no competitor matching)
     fn detect_trust_seeking(&self, text: &str) -> bool {
         let trust_patterns = [
             // Safety concerns
@@ -464,9 +508,6 @@ impl SegmentDetector {
             "regulated",
             "government",
             // Past issues
-            "iifl",
-            "muthoot",
-            "manappuram",
             "problem",
             "issue",
             "fraud",
@@ -493,8 +534,8 @@ impl SegmentDetector {
             "how does it work",
             "kaise hota hai",
             "process kya hai",
-            "what is gold loan",
-            "gold loan kya",
+            "what is",      // Generic: "what is [product]"
+            "kya hai",      // Generic: "[product] kya hai"
             "पहली बार",
             "कैसे होता है",
         ];
@@ -561,10 +602,10 @@ impl Default for CustomerProfile {
     }
 }
 
-/// Existing relationship with Kotak
+/// Existing relationship with company (domain-agnostic)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KotakRelationship {
-    /// Is existing Kotak customer
+pub struct CompanyRelationship {
+    /// Is existing customer
     pub is_customer: bool,
     /// Products held
     #[serde(default)]
@@ -577,7 +618,7 @@ pub struct KotakRelationship {
     pub is_priority: bool,
 }
 
-impl KotakRelationship {
+impl CompanyRelationship {
     pub fn new_customer() -> Self {
         Self {
             is_customer: false,
