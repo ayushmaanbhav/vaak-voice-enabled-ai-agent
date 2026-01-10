@@ -55,11 +55,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _metrics_handle = init_metrics();
     tracing::info!("Initialized Prometheus metrics at /metrics");
 
-    // P0 FIX: Optionally initialize ScyllaDB persistence
-    // P12 FIX: Only use MasterDomainConfig (no legacy DomainConfigManager)
+    // Optionally initialize ScyllaDB persistence with config-driven tiers
     let mut state = if config.persistence.enabled {
         tracing::info!("Initializing ScyllaDB persistence layer...");
-        match init_persistence(&config).await {
+        match init_persistence(&config, master_domain_config.clone()).await {
             Ok(persistence) => {
                 tracing::info!(
                     hosts = ?config.persistence.scylla_hosts,
@@ -255,16 +254,31 @@ fn init_tracing(config: &Settings) {
     subscriber.with(fmt_layer).init();
 }
 
-/// P0 FIX: Initialize ScyllaDB persistence layer
+/// Initialize ScyllaDB persistence layer with config-driven tier definitions
 async fn init_persistence(
     config: &Settings,
+    domain_config: Arc<voice_agent_config::domain::MasterDomainConfig>,
 ) -> Result<voice_agent_persistence::PersistenceLayer, voice_agent_persistence::PersistenceError> {
     let scylla_config = voice_agent_persistence::ScyllaConfig {
         hosts: config.persistence.scylla_hosts.clone(),
         keyspace: config.persistence.keyspace.clone(),
         replication_factor: config.persistence.replication_factor,
     };
-    voice_agent_persistence::init(scylla_config).await
+
+    // Extract tier definitions from domain config via ToolsDomainView
+    let tools_view = voice_agent_config::ToolsDomainView::new(domain_config);
+    let base_price = tools_view.asset_price_per_unit();
+    let tier_data = tools_view.quality_tiers_full();
+    let tiers: Vec<voice_agent_persistence::TierDefinition> = tier_data
+        .into_iter()
+        .map(|(code, factor, description)| voice_agent_persistence::TierDefinition {
+            code,
+            factor,
+            description,
+        })
+        .collect();
+
+    voice_agent_persistence::init(scylla_config, base_price, tiers).await
 }
 
 /// P0 FIX: Initialize VectorStore for RAG retrieval
@@ -297,7 +311,7 @@ fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
             tracing::error!(
                 "DOMAIN_ID environment variable is set but empty. \
                  Please set DOMAIN_ID to specify which domain configuration to load \
-                 (e.g., DOMAIN_ID=gold_loan). Available domains are in config/domains/."
+                 (e.g., DOMAIN_ID=my_domain). Available domains are in config/domains/."
             );
             std::process::exit(1);
         }
@@ -306,7 +320,7 @@ fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
                 "DOMAIN_ID environment variable is not set. \
                  This is a domain-agnostic system - you MUST specify which domain to use. \
                  Set DOMAIN_ID to the name of the domain config directory \
-                 (e.g., DOMAIN_ID=gold_loan for config/domains/gold_loan/). \
+                 (e.g., DOMAIN_ID=my_domain for config/domains/my_domain/). \
                  Available domains are in config/domains/."
             );
             std::process::exit(1);
@@ -324,6 +338,48 @@ fn load_master_domain_config(config_dir: &str) -> Arc<MasterDomainConfig> {
                 stages_count = config.stages.stages.len(),
                 "Loaded hierarchical domain configuration"
             );
+
+            // P23 FIX: Validate configuration at startup
+            let validator = voice_agent_config::ConfigValidator::new();
+            let result = validator.validate(&domain_id, &config);
+
+            // Log warnings and errors
+            for error in &result.errors {
+                match error.severity {
+                    voice_agent_config::ValidationSeverity::Warning => {
+                        tracing::warn!(
+                            source = %error.source,
+                            field = ?error.field,
+                            "Config warning: {}", error.message
+                        );
+                    }
+                    voice_agent_config::ValidationSeverity::Error => {
+                        tracing::error!(
+                            source = %error.source,
+                            field = ?error.field,
+                            "Config error: {}", error.message
+                        );
+                    }
+                    voice_agent_config::ValidationSeverity::Critical => {
+                        tracing::error!(
+                            source = %error.source,
+                            field = ?error.field,
+                            "Critical config error: {}", error.message
+                        );
+                    }
+                }
+            }
+
+            // Exit if critical errors found
+            if !result.is_ok() {
+                tracing::error!(
+                    domain_id = %domain_id,
+                    error_count = result.errors.len(),
+                    "Configuration validation failed. Fix the above errors and restart."
+                );
+                std::process::exit(1);
+            }
+
             Arc::new(config)
         }
         Err(e) => {

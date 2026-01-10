@@ -176,3 +176,14 @@ argument_mappings:
     date: preferred_date
     time: preferred_time
     branch: branch_id
+
+# P20 FIX: Common argument mappings that apply to ALL tools
+# Maps short slot names to standard argument names
+# These are applied after tool-specific mappings
+common_argument_mappings:
+  name: customer_name
+  phone: phone_number
+  date: preferred_date
+  time: preferred_time
+  branch: branch_id
+  location: city

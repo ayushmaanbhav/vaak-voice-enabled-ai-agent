@@ -9,8 +9,8 @@
 //! use voice_agent_core::traits::{ToolFactory, Tool};
 //! use std::sync::Arc;
 //!
-//! // Create factory for a domain
-//! let factory = create_tool_factory_for_domain("gold_loan", &config)?;
+//! // Create factory for a domain (domain_id from DOMAIN_ID env var)
+//! let factory = create_tool_factory_for_domain(&domain_id, &config)?;
 //!
 //! // Create tools from factory
 //! let tools = factory.create_all_tools();
@@ -83,19 +83,19 @@ pub struct ToolMetadata {
 ///
 /// # Domain-Agnostic Design
 ///
-/// Each domain (gold_loan, insurance, credit_card, etc.) implements
-/// this trait to provide its own set of tools. The registry uses
-/// the factory interface without knowing about specific tools.
+/// Each domain implements this trait to provide its own set of tools.
+/// The registry uses the factory interface without knowing about specific tools.
 ///
 /// # Example Implementation
 ///
 /// ```ignore
-/// struct GoldLoanToolFactory {
+/// struct DomainToolFactory {
 ///     view: Arc<ToolsDomainView>,
+///     domain_id: String,
 /// }
 ///
-/// impl ToolFactory for GoldLoanToolFactory {
-///     fn domain_name(&self) -> &str { "gold_loan" }
+/// impl ToolFactory for DomainToolFactory {
+///     fn domain_name(&self) -> &str { &self.domain_id }
 ///
 ///     fn available_tools(&self) -> Vec<ToolMetadata> {
 ///         vec![

@@ -23,6 +23,7 @@ use crate::intent::{Slot, SlotType};
 
 /// P16 FIX: Slot extraction configuration from domain config
 /// This mirrors the structure in slots.yaml
+/// Note: This struct is populated programmatically, not via serde deserialization
 #[derive(Debug, Clone, Default)]
 pub struct SlotExtractionConfig {
     /// Custom extraction patterns by slot name -> language -> patterns
@@ -31,6 +32,61 @@ pub struct SlotExtractionConfig {
     pub lenders: HashMap<String, Vec<String>>,
     /// Intent patterns for intent detection
     pub intent_patterns: Vec<(String, String)>, // (pattern, intent_name)
+    /// P18 FIX: Asset terms for contextual extraction (e.g., "gold", "sona", "सोना" for gold loan)
+    /// Used for confidence boosting in weight/quantity extraction
+    /// Loaded from domain config vocabulary
+    pub asset_terms: Vec<String>,
+    /// P1.1 FIX: Quality tier patterns from extraction_patterns.yaml
+    /// Each entry is (value, confidence) mapped from compiled regex patterns
+    /// Loaded from domain config extraction_patterns.asset_quality.tiers
+    pub quality_tiers: Vec<QualityTierPattern>,
+    /// P2.1 FIX: City patterns from extraction_patterns.yaml
+    /// Loaded from domain config extraction_patterns.locations.cities
+    pub city_patterns: Vec<CityPattern>,
+    /// P2.1 FIX: Purpose patterns from extraction_patterns.yaml
+    /// Loaded from domain config extraction_patterns.purposes.categories
+    pub purpose_patterns: Vec<PurposePattern>,
+}
+
+/// P1.1 FIX: Compiled quality tier pattern for domain-agnostic extraction
+#[derive(Debug, Clone)]
+pub struct QualityTierPattern {
+    /// Tier ID (e.g., "tier_1", "tier_2")
+    pub id: String,
+    /// Value to return when matched (e.g., "24", "22")
+    pub value: String,
+    /// Display name (e.g., "24K Pure Gold")
+    pub display_name: String,
+    /// Compiled regex pattern
+    pub pattern: Regex,
+    /// Confidence score for matches
+    pub confidence: f32,
+    /// Whether this is the default tier (e.g., for "hallmarked" without specific karat)
+    pub is_default: bool,
+}
+
+/// P2.1 FIX: Compiled city pattern for domain-agnostic location extraction
+#[derive(Debug, Clone)]
+pub struct CityPattern {
+    /// Canonical city name
+    pub name: String,
+    /// Compiled regex pattern
+    pub pattern: Regex,
+    /// Confidence score for matches
+    pub confidence: f32,
+}
+
+/// P2.1 FIX: Compiled purpose pattern for domain-agnostic purpose extraction
+#[derive(Debug, Clone)]
+pub struct PurposePattern {
+    /// Purpose ID (e.g., "business", "medical")
+    pub id: String,
+    /// Display name
+    pub display_name: String,
+    /// Compiled regex pattern
+    pub pattern: Regex,
+    /// Confidence score for matches
+    pub confidence: f32,
 }
 
 // =============================================================================
@@ -67,10 +123,12 @@ static AMOUNT_PATTERNS: Lazy<Vec<(Regex, AmountMultiplier)>> = Lazy::new(|| vec!
 ]);
 
 // Weight patterns (grams, tola, contextual)
+// P18 FIX: Asset-specific terms (gold/sona) removed - use config-driven asset_terms for confidence
 static WEIGHT_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| vec![
     Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:grams?|gm|g|ग्राम)").unwrap(),
     Regex::new(r"(?i)(\d+(?:\.\d+)?)\s*(?:tola|तोला)").unwrap(),
-    Regex::new(r"(?i)(?:have|hai|है)\s*(\d+(?:\.\d+)?)\s*(?:grams?|g)?\s*(?:gold|sona|सोना)").unwrap(),
+    // Contextual pattern without asset-specific term - matches "have 50 grams", "hai 50 g"
+    Regex::new(r"(?i)(?:have|hai|है)\s*(\d+(?:\.\d+)?)\s*(?:grams?|g)?").unwrap(),
 ]);
 
 // Phone patterns (Indian mobile numbers)
@@ -114,18 +172,7 @@ static DOB_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| vec![
     Regex::new(r"(?i)(?:janam\s+din|janam\s+tithi)\s*(?:hai|:)?\s*(\d{1,2}\s+\w+\s+\d{2,4})").unwrap(),
 ]);
 
-// Loan purpose patterns
-static PURPOSE_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| vec![
-    (Regex::new(r"(?i)(?:business|dhandha|vyapaar|karobar|shop|dukaan)").unwrap(), "business"),
-    (Regex::new(r"(?i)(?:working\s+capital|stock|inventory|माल)").unwrap(), "business_working_capital"),
-    (Regex::new(r"(?i)(?:medical|hospital|doctor|treatment|ilaj|ilaaj|dawai|medicine|surgery|operation)").unwrap(), "medical"),
-    (Regex::new(r"(?i)(?:education|school|college|fees|padhai|study|exam|admission)").unwrap(), "education"),
-    (Regex::new(r"(?i)(?:wedding|marriage|shaadi|shadi|vivah|byah)").unwrap(), "wedding"),
-    (Regex::new(r"(?i)(?:renovation|repair|construction|ghar|home\s+improvement|makaan)").unwrap(), "home_renovation"),
-    (Regex::new(r"(?i)(?:farming|agriculture|khet|kheti|crop|fasal|tractor|seeds|beej)").unwrap(), "agriculture"),
-    (Regex::new(r"(?i)(?:debt|loan\s+repay|karza|karz|EMI\s+pay)").unwrap(), "debt_consolidation"),
-    (Regex::new(r"(?i)(?:emergency|urgent|zaruri|jaldi|turant|immediately)").unwrap(), "emergency"),
-]);
+// P3.1 FIX: Removed static PURPOSE_PATTERNS - now config-driven via extract_purpose()
 
 // Repayment type patterns
 static REPAYMENT_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| vec![
@@ -143,22 +190,39 @@ static CITY_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| vec![
 ]);
 
 // Intent detection patterns (order matters - more specific first)
+// P18 FIX: All patterns are domain-agnostic. Domain-specific intents come from config.
 static INTENT_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| vec![
-    (Regex::new(r"(?i)(?:balance\s+transfer|loan\s+transfer|transfer\s+(?:my\s+)?loan|move\s+(?:my\s+)?loan|transfer\s+kar|BT\s+kar|switch\s+(?:to|from)\s+\w+)").unwrap(), "balance_transfer"),
-    (Regex::new(r"(?i)(?:gold\s+(?:price|rate)|sone\s+ka\s+(?:rate|bhav|price)|aaj\s+ka\s+(?:gold\s+)?rate|today.+gold|current\s+gold)").unwrap(), "gold_price_inquiry"),
+    // Balance transfer / switch provider
+    (Regex::new(r"(?i)(?:balance\s+transfer|(?:loan|service)\s+transfer|transfer\s+(?:my\s+)?(?:loan|account)|move\s+(?:my\s+)?(?:loan|account)|transfer\s+kar|BT\s+kar|switch\s+(?:to|from)\s+\w+)").unwrap(), "balance_transfer"),
+    // Asset/collateral price inquiry (domain-agnostic: could be gold, silver, vehicle, etc.)
+    // Specific asset terms (gold, sona, etc.) should come from domain config
+    (Regex::new(r"(?i)(?:(?:current|today(?:'s)?|aaj\s+ka)\s+(?:price|rate|value|bhav)|what(?:'s|\s+is)\s+(?:the\s+)?(?:price|rate|value))").unwrap(), "price_inquiry"),
+    // Interest rate inquiry
     (Regex::new(r"(?i)(?:interest\s+rate|byaaj\s+dar|rate\s+kya|kitna\s+percent|what.+(?:interest|byaaj)\s+rate)").unwrap(), "rate_inquiry"),
+    // Savings calculation inquiry
     (Regex::new(r"(?i)(?:kitna\s+bachega|how\s+much\s+(?:can\s+i\s+)?sav|bachat|savings|save\s+money|calculate\s+saving)").unwrap(), "savings_inquiry"),
-    (Regex::new(r"(?i)(?:am\s+i\s+eligible|eligibility|loan\s+milega|kitna\s+loan|qualify|kya\s+mil\s+sakta|eligible\s+for)").unwrap(), "eligibility_inquiry"),
+    // Eligibility check
+    (Regex::new(r"(?i)(?:am\s+i\s+eligible|eligibility|(?:loan|service)\s+milega|kitna\s+(?:loan|amount)|qualify|kya\s+mil\s+sakta|eligible\s+for)").unwrap(), "eligibility_inquiry"),
+    // Document requirements
     (Regex::new(r"(?i)(?:documents?\s+(?:required|needed|chahiye|list)|kya\s+laana|what\s+(?:documents?|to\s+bring)|kaunsa\s+document|laana\s+(?:hoga|padega))").unwrap(), "document_inquiry"),
+    // Appointment scheduling
     (Regex::new(r"(?i)(?:book\s+(?:an?\s+)?appointment|schedule\s+(?:a\s+)?(?:visit|appointment)|fix\s+(?:a\s+)?time|milna\s+(?:hai|chahta)|time\s+slot|slot\s+book)").unwrap(), "appointment_request"),
+    // Branch/location inquiry
     (Regex::new(r"(?i)(?:(?:nearest|nearby)\s+branch|branch\s+(?:location|kahan|where)|where\s+is\s+(?:the\s+)?(?:branch|office)|office\s+address|location\s+of)").unwrap(), "branch_inquiry"),
-    (Regex::new(r"(?i)(?:(?:is\s+)?(?:my\s+)?gold\s+safe|security|suraksha|chori|theft|insurance|vault|locker)").unwrap(), "safety_inquiry"),
+    // Security/safety inquiry (domain-agnostic: collateral safety, not gold-specific)
+    (Regex::new(r"(?i)(?:(?:is\s+)?(?:my\s+)?(?:collateral|asset|item)\s+safe|security|suraksha|chori|theft|insurance|vault|locker|safe\s+keeping)").unwrap(), "safety_inquiry"),
+    // Repayment/payment inquiry
     (Regex::new(r"(?i)(?:repay|payment\s+(?:option|method)|EMI\s+(?:kaise|how)|bhugtan|kaise\s+dena|how\s+to\s+pay|repayment)").unwrap(), "repayment_inquiry"),
-    (Regex::new(r"(?i)(?:close\s+(?:my\s+)?loan|loan\s+close|release\s+(?:my\s+)?gold|gold\s+back|sona\s+wapas|get\s+(?:my\s+)?gold\s+back)").unwrap(), "closure_inquiry"),
+    // Closure/release inquiry (domain-agnostic: release of collateral)
+    (Regex::new(r"(?i)(?:close\s+(?:my\s+)?(?:loan|account)|(?:loan|account)\s+close|release\s+(?:my\s+)?(?:collateral|asset|item)|get\s+(?:my\s+)?(?:collateral|asset|item)\s+back|wapas)").unwrap(), "closure_inquiry"),
+    // Human escalation
     (Regex::new(r"(?i)(?:talk\s+to\s+(?:a\s+)?human|(?:real\s+)?agent|real\s+person|customer\s+care|complaint|shikayat|(?:speak\s+(?:to|with)\s+)?manager)").unwrap(), "human_escalation"),
+    // Callback request
     (Regex::new(r"(?i)(?:call\s+(?:me\s+)?back|callback|phone\s+kar|give\s+(?:me\s+)?(?:a\s+)?call|ring\s+me)").unwrap(), "callback_request"),
+    // SMS/message request
     (Regex::new(r"(?i)(?:send\s+(?:me\s+)?(?:sms|message|details|info)|SMS\s+kar|whatsapp\s+(?:me|kar))").unwrap(), "sms_request"),
-    (Regex::new(r"(?i)(?:compare\s+(?:with|to)|comparison|vs\s+\w+|versus|better\s+than\s+(?:muthoot|manappuram|iifl))").unwrap(), "comparison_inquiry"),
+    // Comparison inquiry (domain-agnostic - competitor names come from config)
+    (Regex::new(r"(?i)(?:compare\s+(?:with|to)|comparison|vs\s+\w+|versus|better\s+than\s+\w+)").unwrap(), "comparison_inquiry"),
 ]);
 
 // Additional inline patterns (purity, tenure, rate, location)
@@ -197,12 +261,23 @@ static LENDER_PATTERNS: Lazy<HashMap<&'static str, Vec<&'static str>>> = Lazy::n
 /// All patterns are stored as module-level statics using `once_cell::sync::Lazy`.
 ///
 /// P16 FIX: Can be configured with domain-specific patterns via `from_config()`.
+/// P18 FIX: Asset terms are now config-driven for domain-agnostic weight extraction.
+/// P1.1 FIX: Quality tier patterns are now config-driven for domain-agnostic extraction.
+/// P2.1 FIX: City and purpose patterns are now config-driven.
 #[derive(Debug, Clone)]
 pub struct SlotExtractor {
     /// Config-driven extraction patterns (optional)
     config: Option<SlotExtractionConfig>,
     /// Compiled lender patterns from config
     config_lenders: HashMap<String, Vec<String>>,
+    /// P18 FIX: Asset terms for contextual extraction (lowercase for matching)
+    asset_terms: Vec<String>,
+    /// P1.1 FIX: Compiled quality tier patterns from config
+    quality_tiers: Vec<QualityTierPattern>,
+    /// P2.1 FIX: Compiled city patterns from config
+    city_patterns: Vec<CityPattern>,
+    /// P2.1 FIX: Compiled purpose patterns from config
+    purpose_patterns: Vec<PurposePattern>,
 }
 
 impl SlotExtractor {
@@ -210,10 +285,18 @@ impl SlotExtractor {
     ///
     /// All patterns are static and compiled once at program start,
     /// so this is a very cheap operation.
+    ///
+    /// P18 FIX: Without config, no asset terms are used for contextual confidence.
+    /// P1.1 FIX: Without config, uses static purity patterns as fallback.
+    /// P2.1 FIX: Without config, uses static city/purpose patterns as fallback.
     pub fn new() -> Self {
         Self {
             config: None,
             config_lenders: HashMap::new(),
+            asset_terms: Vec::new(),
+            quality_tiers: Vec::new(), // Empty = use static fallback patterns
+            city_patterns: Vec::new(), // Empty = use static fallback patterns
+            purpose_patterns: Vec::new(), // Empty = use static fallback patterns
         }
     }
 
@@ -221,11 +304,27 @@ impl SlotExtractor {
     ///
     /// This allows loading extraction patterns from slots.yaml config file
     /// for domain-agnostic operation.
+    ///
+    /// P18 FIX: Asset terms from config are used for contextual confidence boosting.
+    /// P1.1 FIX: Quality tier patterns from config replace hardcoded purity patterns.
+    /// P2.1 FIX: City and purpose patterns from config replace hardcoded patterns.
     pub fn from_config(config: SlotExtractionConfig) -> Self {
         let config_lenders = config.lenders.clone();
+        let asset_terms: Vec<String> = config
+            .asset_terms
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect();
+        let quality_tiers = config.quality_tiers.clone();
+        let city_patterns = config.city_patterns.clone();
+        let purpose_patterns = config.purpose_patterns.clone();
         Self {
             config: Some(config),
             config_lenders,
+            asset_terms,
+            quality_tiers,
+            city_patterns,
+            purpose_patterns,
         }
     }
 
@@ -252,6 +351,56 @@ impl SlotExtractor {
             custom_patterns: HashMap::new(),
             lenders,
             intent_patterns: Vec::new(),
+            asset_terms: Vec::new(),
+            quality_tiers: Vec::new(),
+            city_patterns: Vec::new(),
+            purpose_patterns: Vec::new(),
+        })
+    }
+
+    /// P18 FIX: Create with asset terms for contextual confidence boosting
+    ///
+    /// Example usage:
+    /// ```ignore
+    /// let extractor = SlotExtractor::with_asset_terms(vec!["gold", "sona", "सोना"]);
+    /// ```
+    pub fn with_asset_terms(asset_terms: Vec<String>) -> Self {
+        Self::from_config(SlotExtractionConfig {
+            custom_patterns: HashMap::new(),
+            lenders: HashMap::new(),
+            intent_patterns: Vec::new(),
+            asset_terms,
+            quality_tiers: Vec::new(),
+            city_patterns: Vec::new(),
+            purpose_patterns: Vec::new(),
+        })
+    }
+
+    /// P1.1 FIX: Create with quality tier patterns for domain-agnostic purity extraction
+    ///
+    /// Example usage:
+    /// ```ignore
+    /// let tiers = vec![
+    ///     QualityTierPattern {
+    ///         id: "tier_1".to_string(),
+    ///         value: "24".to_string(),
+    ///         display_name: "24K Pure Gold".to_string(),
+    ///         pattern: Regex::new(r"(?i)24\s*(?:k|karat)").unwrap(),
+    ///         confidence: 0.85,
+    ///         is_default: false,
+    ///     },
+    /// ];
+    /// let extractor = SlotExtractor::with_quality_tiers(tiers);
+    /// ```
+    pub fn with_quality_tiers(quality_tiers: Vec<QualityTierPattern>) -> Self {
+        Self::from_config(SlotExtractionConfig {
+            custom_patterns: HashMap::new(),
+            lenders: HashMap::new(),
+            intent_patterns: Vec::new(),
+            asset_terms: Vec::new(),
+            quality_tiers,
+            city_patterns: Vec::new(),
+            purpose_patterns: Vec::new(),
         })
     }
 
@@ -475,6 +624,9 @@ impl SlotExtractor {
     }
 
     /// Extract weight from utterance
+    ///
+    /// P18 FIX: Asset terms for confidence boosting are now config-driven.
+    /// Use `with_asset_terms()` or `from_config()` to provide domain-specific terms.
     pub fn extract_weight(&self, utterance: &str) -> Option<(f64, f32)> {
         let lower = utterance.to_lowercase();
 
@@ -489,8 +641,12 @@ impl SlotExtractor {
                             num
                         };
 
-                        // Confidence based on context
-                        let confidence = if lower.contains("gold") || lower.contains("sona")
+                        // P18 FIX: Config-driven confidence boosting
+                        // Check if any asset term is present in the utterance
+                        let has_asset_context = self.asset_terms.iter().any(|term| lower.contains(term.as_str()));
+
+                        // Confidence based on context (unit mentions or asset terms)
+                        let confidence = if has_asset_context
                             || lower.contains("gram") || lower.contains("tola")
                         {
                             0.9
@@ -602,11 +758,32 @@ impl SlotExtractor {
         None
     }
 
-    /// Extract gold purity from utterance
+    /// Extract asset quality/purity from utterance
+    ///
+    /// P1.1 FIX: Uses config-driven quality tier patterns when available,
+    /// falling back to static patterns for backwards compatibility.
     pub fn extract_purity(&self, utterance: &str) -> Option<(String, f32)> {
         let lower = utterance.to_lowercase();
 
-        // Use static purity patterns
+        // P1.1 FIX: Use config-driven quality tier patterns if available
+        if !self.quality_tiers.is_empty() {
+            // First, check non-default tiers (specific patterns like "24k", "22k")
+            for tier in &self.quality_tiers {
+                if !tier.is_default && tier.pattern.is_match(&lower) {
+                    return Some((tier.value.clone(), tier.confidence));
+                }
+            }
+            // Then check default tiers (generic patterns like "hallmarked")
+            for tier in &self.quality_tiers {
+                if tier.is_default && tier.pattern.is_match(&lower) {
+                    return Some((tier.value.clone(), tier.confidence));
+                }
+            }
+            // No match in config patterns
+            return None;
+        }
+
+        // Fallback to static purity patterns (for backwards compatibility)
         if PURITY_24K.is_match(&lower) {
             return Some(("24".to_string(), 0.85));
         }
@@ -630,9 +807,22 @@ impl SlotExtractor {
     }
 
     /// Extract loan purpose from utterance
+    ///
+    /// P2.1 FIX: Uses config-driven patterns when available, falls back to hardcoded patterns.
     pub fn extract_purpose(&self, utterance: &str) -> Option<(String, f32)> {
         let lower = utterance.to_lowercase();
 
+        // P2.1 FIX: Use config-driven purpose patterns if available
+        if !self.purpose_patterns.is_empty() {
+            for pattern in &self.purpose_patterns {
+                if pattern.pattern.is_match(&lower) {
+                    return Some((pattern.id.clone(), pattern.confidence));
+                }
+            }
+            return None;
+        }
+
+        // Fallback: hardcoded patterns (deprecated - prefer config)
         let purposes = [
             // Medical
             (vec!["medical", "hospital", "treatment", "surgery", "ilaj", "dawai", "doctor"],
@@ -669,35 +859,56 @@ impl SlotExtractor {
     }
 
     /// Extract location from utterance
+    ///
+    /// P2.1 FIX: Uses config-driven patterns when available, falls back to hardcoded patterns.
     pub fn extract_location(&self, utterance: &str) -> Option<(String, f32)> {
         let lower = utterance.to_lowercase();
 
-        // Major Indian cities
-        let cities = [
-            "mumbai", "delhi", "bangalore", "bengaluru", "chennai", "hyderabad",
-            "kolkata", "pune", "ahmedabad", "jaipur", "surat", "lucknow",
-            "kanpur", "nagpur", "indore", "thane", "bhopal", "visakhapatnam",
-            "patna", "vadodara", "ghaziabad", "ludhiana", "agra", "nashik",
-            "faridabad", "meerut", "rajkot", "kalyan", "vasai", "varanasi",
-            "aurangabad", "dhanbad", "amritsar", "allahabad", "ranchi", "gwalior",
-            "jodhpur", "coimbatore", "vijayawada", "madurai", "raipur", "kota",
-        ];
+        // P2.1 FIX: Use config-driven city patterns if available
+        if !self.city_patterns.is_empty() {
+            for pattern in &self.city_patterns {
+                if pattern.pattern.is_match(&lower) {
+                    // Boost confidence if location context keywords present
+                    let confidence = if lower.contains("in ") || lower.contains("at ")
+                        || lower.contains("from ") || lower.contains("near ")
+                        || lower.contains("mein") || lower.contains("में")
+                    {
+                        (pattern.confidence + 0.1).min(1.0)
+                    } else {
+                        pattern.confidence
+                    };
+                    return Some((pattern.name.clone(), confidence));
+                }
+            }
+            // Fall through to generic location pattern if no config city matched
+        } else {
+            // Fallback: hardcoded city list (deprecated - prefer config)
+            let cities = [
+                "mumbai", "delhi", "bangalore", "bengaluru", "chennai", "hyderabad",
+                "kolkata", "pune", "ahmedabad", "jaipur", "surat", "lucknow",
+                "kanpur", "nagpur", "indore", "thane", "bhopal", "visakhapatnam",
+                "patna", "vadodara", "ghaziabad", "ludhiana", "agra", "nashik",
+                "faridabad", "meerut", "rajkot", "kalyan", "vasai", "varanasi",
+                "aurangabad", "dhanbad", "amritsar", "allahabad", "ranchi", "gwalior",
+                "jodhpur", "coimbatore", "vijayawada", "madurai", "raipur", "kota",
+            ];
 
-        for city in &cities {
-            if lower.contains(city) {
-                let confidence = if lower.contains("in ") || lower.contains("at ")
-                    || lower.contains("from ") || lower.contains("near ")
-                    || lower.contains("mein") || lower.contains("में")
-                {
-                    0.9
-                } else {
-                    0.7
-                };
+            for city in &cities {
+                if lower.contains(city) {
+                    let confidence = if lower.contains("in ") || lower.contains("at ")
+                        || lower.contains("from ") || lower.contains("near ")
+                        || lower.contains("mein") || lower.contains("में")
+                    {
+                        0.9
+                    } else {
+                        0.7
+                    };
 
-                // Capitalize city name
-                let capitalized = city.chars().next().unwrap().to_uppercase().to_string()
-                    + &city[1..];
-                return Some((capitalized, confidence));
+                    // Capitalize city name
+                    let capitalized = city.chars().next().unwrap().to_uppercase().to_string()
+                        + &city[1..];
+                    return Some((capitalized, confidence));
+                }
             }
         }
 
@@ -782,9 +993,11 @@ impl SlotExtractor {
                     // Basic validation: name should be 2-50 chars and not be common words
                     if name.len() >= 2 && name.len() <= 50 {
                         let lower = name.to_lowercase();
-                        // Filter out common false positives
+                        // P18 FIX: Filter out common false positives (domain-agnostic)
+                        // Note: Brand/competitor names should be filtered at runtime
+                        // using domain config, not hardcoded here
                         let exclude_words = [
-                            "loan", "gold", "bank", "kotak", "muthoot", "amount",
+                            "loan", "bank", "amount", "finance", "company",
                             "rate", "interest", "help", "need", "want", "please",
                         ];
                         if !exclude_words.iter().any(|w| lower == *w) {
@@ -893,18 +1106,7 @@ impl SlotExtractor {
         None
     }
 
-    /// Extract loan purpose from utterance
-    pub fn extract_loan_purpose(&self, utterance: &str) -> Option<(String, f32)> {
-        let lower = utterance.to_lowercase();
-
-        for (pattern, purpose) in PURPOSE_PATTERNS.iter() {
-            if pattern.is_match(&lower) {
-                return Some((purpose.to_string(), 0.8));
-            }
-        }
-
-        None
-    }
+    // P3.1 FIX: Removed duplicate extract_loan_purpose() - use extract_purpose() instead
 }
 
 impl Default for SlotExtractor {
@@ -1079,5 +1281,57 @@ mod tests {
 
         let (intent, _) = extractor.extract_intent("what documents required").unwrap();
         assert_eq!(intent, "document_inquiry");
+    }
+
+    #[test]
+    fn test_config_driven_quality_tiers() {
+        // P1.1 FIX: Test config-driven quality tier patterns
+        let quality_tiers = vec![
+            QualityTierPattern {
+                id: "premium".to_string(),
+                value: "premium".to_string(),
+                display_name: "Premium Grade".to_string(),
+                pattern: Regex::new(r"(?i)(premium|top\s*grade|highest)").unwrap(),
+                confidence: 0.9,
+                is_default: false,
+            },
+            QualityTierPattern {
+                id: "standard".to_string(),
+                value: "standard".to_string(),
+                display_name: "Standard Grade".to_string(),
+                pattern: Regex::new(r"(?i)(standard|normal|regular)").unwrap(),
+                confidence: 0.85,
+                is_default: true, // Default tier
+            },
+            QualityTierPattern {
+                id: "economy".to_string(),
+                value: "economy".to_string(),
+                display_name: "Economy Grade".to_string(),
+                pattern: Regex::new(r"(?i)(economy|basic|budget)").unwrap(),
+                confidence: 0.8,
+                is_default: false,
+            },
+        ];
+
+        let extractor = SlotExtractor::with_quality_tiers(quality_tiers);
+
+        // Test specific tier matches
+        let (quality, conf) = extractor.extract_purity("I have premium quality items").unwrap();
+        assert_eq!(quality, "premium");
+        assert!((conf - 0.9).abs() < 0.01);
+
+        let (quality, _) = extractor.extract_purity("just normal quality stuff").unwrap();
+        assert_eq!(quality, "standard");
+
+        let (quality, _) = extractor.extract_purity("economy grade products").unwrap();
+        assert_eq!(quality, "economy");
+
+        // Test that unmatched text returns None
+        assert!(extractor.extract_purity("some random text").is_none());
+
+        // Test fallback extractor (without config) still uses static patterns
+        let fallback_extractor = SlotExtractor::new();
+        let (purity, _) = fallback_extractor.extract_purity("24k gold").unwrap();
+        assert_eq!(purity, "24"); // Uses static gold patterns
     }
 }

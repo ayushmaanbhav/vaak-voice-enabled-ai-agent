@@ -10,12 +10,12 @@ stages:
     display_name: "Greeting"
     description: "Initial greeting and rapport building"
     guidance: |
-      Warmly greet the customer. Introduce yourself as a Kotak Gold Loan specialist.
+      Warmly greet the customer. Introduce yourself as a {{company_short_name}} {{product_name}} specialist.
       Build initial rapport before discussing products. Keep it brief and friendly.
     suggested_questions:
       - "How are you doing today?"
       - "Is this a good time to talk?"
-      - "Thank you for your interest in Kotak Gold Loan!"
+      - "Thank you for your interest in {{company_short_name}} {{product_name}}!"
     context_budget_tokens: 1024
     rag_context_fraction: 0.0
     history_turns_to_keep: 0
@@ -84,15 +84,15 @@ stages:
     display_name: "Presentation"
     description: "Presenting product and benefits"
     guidance: |
-      Present Kotak's gold loan benefits tailored to their needs:
-      - Competitive interest rates (starting from 10.49% p.a.)
-      - Up to 75% LTV
+      Present {{company_short_name}}'s {{product_name}} benefits tailored to their needs:
+      - Competitive interest rates (starting from {{our_standard_rate}}% p.a.)
+      - Up to {{ltv_percent}}% LTV
       - Same day disbursement
-      - RBI-regulated bank security
+      - {{regulator_name}}-regulated bank security
       Focus on rate savings and trust. Use tools to calculate savings.
     suggested_questions:
       - "Would you like to know how much you could save?"
-      - "Have you heard about our Switch & Save program?"
+      - "Have you heard about our {{switch_program_name}} program?"
       - "Can I calculate your potential monthly savings?"
     context_budget_tokens: 3584
     rag_context_fraction: 0.4

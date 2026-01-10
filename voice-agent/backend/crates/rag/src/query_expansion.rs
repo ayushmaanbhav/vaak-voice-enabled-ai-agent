@@ -121,7 +121,7 @@ impl QueryExpander {
     /// come from config files rather than hardcoded defaults.
     ///
     /// # Arguments
-    /// * `domain` - Domain identifier (e.g., "gold_loan")
+    /// * `domain` - Domain identifier (from DOMAIN_ID env var)
     /// * `stopwords` - List of stopwords for the domain
     /// * `synonyms` - Synonym mappings (term -> alternatives)
     /// * `transliterations` - Transliteration mappings (Hindi <-> Roman)

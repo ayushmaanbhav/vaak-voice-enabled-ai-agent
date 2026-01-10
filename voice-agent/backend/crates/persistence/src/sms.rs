@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_format_appointment_confirmation() {
         let brand = SmsBrandContext {
-            bank_name: "Test Bank".to_string(),
+            company_name: "Test Bank".to_string(),
             product_name: "Gold Loan".to_string(),
             helpline: "1800-123-4567".to_string(),
         };
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn test_format_follow_up() {
         let brand = SmsBrandContext {
-            bank_name: "Test Bank".to_string(),
+            company_name: "Test Bank".to_string(),
             product_name: "Personal Loan".to_string(),
             helpline: "1800-999-8888".to_string(),
         };

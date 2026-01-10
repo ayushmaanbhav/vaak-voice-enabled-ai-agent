@@ -42,7 +42,21 @@ impl LLMGrammarCorrector {
     }
 
     /// Build grammar correction prompt
+    ///
+    /// P24 FIX: Made domain-agnostic - examples derived from context, not hardcoded
     fn build_prompt(&self, text: &str, context: &DomainContext) -> String {
+        // Build example corrections from abbreviations if available
+        let example_corrections = if !context.abbreviations.is_empty() {
+            let examples: Vec<String> = context.abbreviations
+                .iter()
+                .take(2)
+                .map(|a| format!("\"{}\" (preserve as is)", a.short))
+                .collect();
+            format!("7. Preserve abbreviations like {}", examples.join(", "))
+        } else {
+            "7. Fix common transcription errors based on context".to_string()
+        };
+
         format!(
             r#"You are a speech-to-text error corrector for a {} conversation.
 
@@ -54,18 +68,19 @@ COMMON PHRASES (preserve):
 
 RULES:
 1. Fix obvious transcription errors (homophones, mishearing)
-2. Preserve proper nouns, bank names, and numbers exactly
+2. Preserve proper nouns, company names, and numbers exactly
 3. Keep the meaning identical
 4. Output ONLY the corrected text, nothing else
 5. If text is already correct, output it unchanged
 6. Handle Hindi-English code-switching naturally
-7. Fix "gol lone" → "gold loan", "kotuk" → "Kotak", etc.
+{}
 
 INPUT: {}
 CORRECTED:"#,
             context.domain,
             context.vocabulary.join(", "),
             context.phrases.join("\n"),
+            example_corrections,
             text,
         )
     }

@@ -34,7 +34,10 @@ pub mod financial;
 // Re-exports from existing modules
 pub use audio::{AudioEncoding, AudioFrame, Channels, SampleRate};
 pub use conversation::{ConversationStage, Turn, TurnRole};
-pub use customer::{CustomerProfile, CustomerSegment, SegmentDetector, CompanyRelationship};
+pub use customer::{
+    CompanyRelationship, CustomerProfile, CustomerSegment, SegmentDetector,
+    SegmentId as CustomerSegmentId,  // Re-export for clarity
+};
 pub use error::{Error, Result};
 pub use transcript::{TranscriptResult, WordTimestamp};
 
@@ -102,28 +105,37 @@ pub use traits::{
     VADState,
     // P1 FIX: VoiceActivityDetector trait
     VoiceActivityDetector,
+    // P24 FIX: Config-driven persona provider
+    ConfigPersonaProvider,
+    PersonaAdaptationRule,
+    PersonaConfig,
+    PersonaProvider,
+    ToneConfig,
 };
 
 // Personalization re-exports
 pub use personalization::{
     BehaviorSignal,
-    // Adaptation types
-    Feature,
-    LanguageComplexity,
-    Objection,
+    // Adaptation types (config-driven)
+    feature_ids, objection_ids, parse_segment_id, segment_to_id,
+    FeatureId as PersonalizationFeatureId, ObjectionId as PersonalizationObjectionId,
     ObjectionResponse,
     // Persona
+    LanguageComplexity,
     Persona,
     PersonaTemplates,
     PersonalizationContext,
     // Engine
     PersonalizationEngine,
     ResponseUrgency,
-    // Adaptation
+    // Adaptation config types
+    ObjectionResponseConfig,
     SegmentAdapter,
+    SegmentAdapterConfig,
     SignalDetection,
     // Signals
     SignalDetector,
+    SignalDetectorConfig,
     Tone,
     TrendAnalysis,
 };

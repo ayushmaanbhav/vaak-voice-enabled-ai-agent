@@ -134,3 +134,31 @@ auto_corrections:
     "100% approval": "quick processing"
     "zero interest": "competitive interest rates"
     "no documentation": "minimal documentation"
+
+# P16 FIX: AI Disclosure Messages (RBI Compliance)
+# These must be given to customers at the start of the conversation.
+# The customer must be informed they are speaking with an AI and can
+# request to speak with a human agent at any time.
+ai_disclosures:
+  # English
+  en: "This is an AI assistant. You can speak with a human agent at any time by saying 'speak to agent'."
+  # Hindi
+  hi: "यह एक AI सहायक है। आप किसी भी समय 'एजेंट से बात करें' कहकर मानव एजेंट से बात कर सकते हैं।"
+  # Marathi
+  mr: "हे एक AI सहाय्यक आहे. तुम्ही कधीही 'एजंटशी बोला' असे सांगून मानवी एजंटशी बोलू शकता."
+  # Tamil
+  ta: "இது ஒரு AI உதவியாளர். நீங்கள் எந்த நேரத்திலும் 'ஏஜெண்டுடன் பேசுங்கள்' என்று சொல்லி மனித ஏஜெண்டுடன் பேசலாம்."
+  # Telugu
+  te: "ఇది AI సహాయకుడు. మీరు ఎప్పుడైనా 'ఏజెంట్‌తో మాట్లాడండి' అని చెప్పి మానవ ఏజెంట్‌తో మాట్లాడవచ్చు."
+  # Bengali
+  bn: "এটি একটি AI সহায়ক। আপনি যেকোনো সময় 'এজেন্টের সাথে কথা বলুন' বলে একজন মানব এজেন্টের সাথে কথা বলতে পারেন।"
+  # Gujarati
+  gu: "આ એક AI સહાયક છે. તમે ગમે ત્યારે 'એજન્ટ સાથે વાત કરો' કહીને માનવ એજન્ટ સાથે વાત કરી શકો છો."
+  # Kannada
+  kn: "ಇದು AI ಸಹಾಯಕ. ನೀವು ಯಾವುದೇ ಸಮಯದಲ್ಲಿ 'ಏಜೆಂಟ್‌ನೊಂದಿಗೆ ಮಾತನಾಡಿ' ಎಂದು ಹೇಳುವ ಮೂಲಕ ಮಾನವ ಏಜೆಂಟ್‌ನೊಂದಿಗೆ ಮಾತನಾಡಬಹುದು."
+  # Malayalam
+  ml: "ഇത് ഒരു AI അസിസ്റ്റന്റ് ആണ്. 'ഏജന്റിനോട് സംസാരിക്കുക' എന്ന് പറഞ്ഞ് നിങ്ങൾക്ക് എപ്പോൾ വേണമെങ്കിലും ഒരു മനുഷ്യ ഏജന്റുമായി സംസാരിക്കാം."
+  # Punjabi
+  pa: "ਇਹ ਇੱਕ AI ਸਹਾਇਕ ਹੈ। ਤੁਸੀਂ ਕਿਸੇ ਵੀ ਸਮੇਂ 'ਏਜੰਟ ਨਾਲ ਗੱਲ ਕਰੋ' ਕਹਿ ਕੇ ਮਨੁੱਖੀ ਏਜੰਟ ਨਾਲ ਗੱਲ ਕਰ ਸਕਦੇ ਹੋ।"
+  # Odia
+  or: "ଏହା ଏକ AI ସହାୟକ। ଆପଣ ଯେକୌଣସି ସମୟରେ 'ଏଜେଣ୍ଟଙ୍କ ସହ କଥା ହୁଅନ୍ତୁ' କହି ମାନବ ଏଜେଣ୍ଟଙ୍କ ସହ କଥା ହୋଇପାରିବେ।"

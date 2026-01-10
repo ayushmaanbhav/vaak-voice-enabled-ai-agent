@@ -2,15 +2,29 @@
 //!
 //! Implements MCP (Model Context Protocol) compatible tool interface
 //! with domain-specific tools. All tool schemas are config-driven.
+//!
+//! # Domain-Agnostic Tool Factory
+//!
+//! Tools are created via the `DomainToolFactory` which reads tool definitions
+//! from YAML config. This enables adding new tools without code changes.
+//!
+//! ```ignore
+//! use voice_agent_tools::factory::{DomainToolFactory, ToolIntegrations};
+//! use voice_agent_tools::registry::create_registry_from_factory;
+//!
+//! let factory = Arc::new(DomainToolFactory::new(config));
+//! let registry = create_registry_from_factory(factory)?;
+//! ```
 
 pub mod domain_tools;
+pub mod factory;
 pub mod integrations;
 pub mod mcp;
 pub mod registry;
 
 pub use domain_tools::{
     // Location data management
-    get_branches, get_mock_branches, load_branches_from_file, reload_branches, BranchData,
+    get_branches, find_locations, load_branches_from_file, reload_branches, BranchData,
     // Utility functions
     calculate_emi, calculate_total_interest,
     // Tool implementations
@@ -50,8 +64,11 @@ pub use mcp::{
     ToolOutput,
     ToolSchema,
 };
+pub use factory::{DomainToolFactory, ToolIntegrations};
 pub use registry::{
-    // P13 FIX: Domain config wiring via ToolsDomainView
+    // P22 FIX: Factory-based tool creation (preferred)
+    create_registry_from_factory,
+    // P13 FIX: Domain config wiring via ToolsDomainView (deprecated - use factory)
     create_registry_with_view,
     create_registry_with_integrations,
     create_registry_with_persistence,

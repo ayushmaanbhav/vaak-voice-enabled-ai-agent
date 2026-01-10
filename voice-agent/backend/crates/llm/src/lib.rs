@@ -31,8 +31,8 @@ pub use factory::{ClaudeLanguageModel, LlmFactory, LlmProvider, LlmProviderConfi
 // P16 FIX: gold_loan_tools removed - tools loaded from domain config
 // Use voice_agent_config::domain::ToolsConfig::to_tool_definitions() instead
 pub use prompt::{
-    parse_tool_call, BrandConfig, Message, ParsedToolCall, PersonaConfig, ProductFacts,
-    PromptBuilder, ResponseTemplates, Role, ToolBuilder, ToolDefinition,
+    parse_tool_call, BrandConfig, BrandDefaults, Message, ParsedToolCall, PersonaConfig,
+    ProductFacts, PromptBuilder, ResponseTemplates, Role, ToolBuilder, ToolDefinition,
 };
 pub use speculative::{SpeculativeConfig, SpeculativeExecutor, SpeculativeMode, SpeculativeResult};
 pub use streaming::{GenerationEvent, StreamingGenerator, TokenStream};

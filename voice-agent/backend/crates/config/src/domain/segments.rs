@@ -1,10 +1,19 @@
 //! Customer Segment Configuration
 //!
 //! Defines customer segment detection patterns loaded from YAML.
+//!
+//! DOMAIN-AGNOSTIC DESIGN:
+//! - Segments are fully config-driven with no hardcoded segment IDs
+//! - Each segment includes persona configuration for personalization
+//! - Detection thresholds support aliases for domain flexibility
+//! - Key messages are localized and support variable substitution
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+
+/// Segment ID type alias for clarity
+pub type SegmentId = String;
 
 /// Segments configuration loaded from segments.yaml
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,6 +210,43 @@ impl SegmentsConfig {
             .and_then(|thresholds| thresholds.get(threshold_key))
             .and_then(|t| t.min)
     }
+
+    /// Get persona config for a segment
+    pub fn get_persona_config(&self, segment_id: &str) -> Option<&SegmentPersonaConfig> {
+        self.segments
+            .get(segment_id)
+            .and_then(|def| def.persona.as_ref())
+    }
+
+    /// Get key messages for a segment in a language
+    pub fn get_key_messages(&self, segment_id: &str, language: &str) -> Vec<&str> {
+        self.segments
+            .get(segment_id)
+            .and_then(|def| {
+                def.key_messages
+                    .get(language)
+                    .or_else(|| def.key_messages.get("en"))
+            })
+            .map(|msgs| msgs.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Get suggested warmth for a segment (from persona config)
+    pub fn get_suggested_warmth(&self, segment_id: &str) -> f32 {
+        self.get_persona_config(segment_id)
+            .map(|p| p.warmth)
+            .unwrap_or(0.8)
+    }
+
+    /// Get all segment IDs
+    pub fn all_segment_ids(&self) -> Vec<&str> {
+        self.segments.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Check if a segment ID exists
+    pub fn has_segment(&self, segment_id: &str) -> bool {
+        self.segments.contains_key(segment_id)
+    }
 }
 
 /// Single segment definition
@@ -211,12 +257,80 @@ pub struct SegmentDefinition {
     pub priority: i32,
     #[serde(default)]
     pub description: String,
+    /// Persona configuration for this segment (replaces hardcoded Persona::for_segment)
+    #[serde(default)]
+    pub persona: Option<SegmentPersonaConfig>,
+    /// Key messages for this segment (replaces hardcoded CustomerSegment::key_messages)
+    #[serde(default)]
+    pub key_messages: HashMap<String, Vec<String>>,
     #[serde(default)]
     pub detection: SegmentDetection,
     #[serde(default)]
     pub features: Vec<String>,
     #[serde(default)]
     pub value_props: HashMap<String, Vec<String>>,
+}
+
+/// Persona configuration embedded in segment definition
+/// This replaces the hardcoded Persona::for_segment() match statement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SegmentPersonaConfig {
+    /// Persona name/identifier (e.g., "premium_advisor", "trust_builder")
+    pub name: String,
+    /// Tone identifier (e.g., "formal", "professional", "friendly", "casual")
+    pub tone: String,
+    /// Warmth level (0.0 = cold/factual, 1.0 = very warm/empathetic)
+    #[serde(default = "default_warmth")]
+    pub warmth: f32,
+    /// Empathy level (0.0 = neutral, 1.0 = highly empathetic)
+    #[serde(default = "default_empathy")]
+    pub empathy: f32,
+    /// Language complexity ("simple", "moderate", "sophisticated")
+    #[serde(default = "default_language_complexity")]
+    pub language_complexity: String,
+    /// Response urgency ("relaxed", "normal", "efficient", "urgent")
+    #[serde(default = "default_urgency")]
+    pub urgency: String,
+    /// Whether to use customer's name frequently
+    #[serde(default = "default_use_customer_name")]
+    pub use_customer_name: bool,
+    /// Whether to acknowledge emotions
+    #[serde(default = "default_acknowledge_emotions")]
+    pub acknowledge_emotions: bool,
+    /// Whether to use Hindi words/phrases in English (Hinglish)
+    #[serde(default)]
+    pub use_hinglish: bool,
+    /// Maximum response length preference (words)
+    #[serde(default = "default_max_response_words")]
+    pub max_response_words: usize,
+}
+
+fn default_warmth() -> f32 {
+    0.8
+}
+
+fn default_empathy() -> f32 {
+    0.7
+}
+
+fn default_language_complexity() -> String {
+    "moderate".to_string()
+}
+
+fn default_urgency() -> String {
+    "normal".to_string()
+}
+
+fn default_use_customer_name() -> bool {
+    true
+}
+
+fn default_acknowledge_emotions() -> bool {
+    true
+}
+
+fn default_max_response_words() -> usize {
+    60
 }
 
 fn default_priority() -> i32 {
@@ -244,6 +358,11 @@ pub struct NumericThreshold {
     pub min: Option<f64>,
     #[serde(default)]
     pub max: Option<f64>,
+    /// Alternative parameter names that map to this threshold
+    /// Allows generic names like "asset_quantity" to accept domain-specific
+    /// aliases like "gold_weight_grams"
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 /// Errors when loading segments configuration

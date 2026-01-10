@@ -41,6 +41,12 @@
 //!   - ObjectionHandler: Objection detection and response
 //!   - LeadScoringStrategy: Lead qualification and scoring
 //!   - CompetitorAnalyzer: Competitor comparison
+//!
+//! P20 FIX: Config-driven abstractions (replaces hardcoded enums):
+//!   - FeatureProvider: Config-driven feature definitions (replaces Feature enum)
+//!   - ObjectionProvider: Config-driven objection handling (replaces Objection enum)
+//!   - ToolArgumentProvider: Config-driven tool defaults and mappings
+//!   - LeadClassifier: Config-driven MQL/SQL classification
 //! ```
 
 mod fsm;
@@ -60,6 +66,21 @@ mod objections;
 mod scoring;
 mod segments;
 mod slots;
+
+// P20 FIX: Config-driven trait modules (replaces hardcoded enums)
+mod feature_provider;
+mod lead_classifier;
+mod objection_provider;
+mod tool_arguments;
+
+// P23 FIX: Generic signal system for domain-agnostic lead scoring
+mod signals;
+
+// P23 FIX: Config-driven entity types (replaces CompetitorType, CustomerSegment enums)
+mod entity_types;
+
+// P24 FIX: Config-driven persona provider (replaces hardcoded Persona::for_segment, Tone methods)
+mod persona_provider;
 
 pub use speech::{SpeechToText, TextToSpeech};
 // P1 FIX: Export VoiceActivityDetector trait and types
@@ -93,8 +114,7 @@ pub use calculator::{
     SavingsResult,
 };
 pub use competitors::{
-    ComparisonPoint, CompetitorAnalyzer, CompetitorInfo, CompetitorType,
-    ConfigCompetitorAnalyzer, SavingsAnalysis,
+    ComparisonPoint, CompetitorAnalyzer, CompetitorInfo, ConfigCompetitorAnalyzer, SavingsAnalysis,
 };
 pub use goals::{
     ConfigGoalDefinition, ConfigGoalSchema, ConversationGoalSchema, GoalCompletionStatus,
@@ -105,8 +125,9 @@ pub use objections::{
     ObjectionHandler, ObjectionMatch,
 };
 pub use scoring::{
-    ConfigLeadScoring, EscalationTrigger, LeadClassification, LeadScoringStrategy, LeadSignals,
-    QualificationLevel, ScoreBreakdown, ScoringConfig, SimpleLeadSignals,
+    ConfigLeadScoring, DynamicScoreBreakdown, EscalationTrigger, LeadClassification,
+    LeadScoringStrategy, LeadSignals, QualificationLevel, ScoreBreakdown, ScoringConfig,
+    SimpleLeadSignals,
 };
 pub use segments::{
     ConfigSegmentDefinition, ConfigSegmentDetector, FeatureEmphasis, SegmentDefinition,
@@ -115,4 +136,39 @@ pub use segments::{
 pub use slots::{
     ConfigSlotDefinition, ConfigSlotSchema, EnumValue, ExtractedSlot, SlotDefinition, SlotSchema,
     SlotType, SlotValidationError, UnitConversion,
+};
+
+// P20 FIX: Export config-driven traits and types
+pub use feature_provider::{
+    feature_ids, substitute_variables, ConfigFeatureDefinition, ConfigFeatureProvider,
+    FeatureDefinition, FeatureDisplay, FeatureId, FeaturePriority, FeatureProvider,
+    SegmentFeatureOverride, SegmentValueProposition, VariableMap,
+};
+pub use lead_classifier::{
+    ClassificationRule, ConfigLeadClassifier, EscalationTriggerConfig, EscalationTriggerResult,
+    LeadClass, LeadClassifier, LeadSignalsTrait, QualificationThreshold, SimpleLeadSignalsImpl,
+};
+// Note: QualificationLevel already exported from scoring module
+pub use objection_provider::{
+    objection_ids, AcreResponseParts, ConfigAcreResponse, ConfigObjectionDef,
+    ConfigObjectionProvider, DetectionPattern, ObjectionDefinitionTrait, ObjectionDetection,
+    ObjectionId, ObjectionProvider, ObjectionResponse, PatternBoost,
+};
+pub use tool_arguments::{
+    ArgumentValidationError, ConfigToolArgumentProvider, IntentToolMapping, ToolArgumentProvider,
+    ToolDefaults,
+};
+
+// P23 FIX: Export signal system for domain-agnostic lead scoring
+pub use signals::{SignalDefinition, SignalProvider, SignalStore, SignalType, SignalValue};
+
+// P23 FIX: Export entity type system for config-driven type definitions
+pub use entity_types::{
+    EntityTypeCategory, EntityTypeDefinition, EntityTypeProvider, EntityTypeStore,
+};
+
+// P24 FIX: Export persona provider for config-driven persona management
+pub use persona_provider::{
+    AdaptationRule as PersonaAdaptationRule, ConfigPersonaProvider, PersonaConfig, PersonaProvider,
+    SegmentId, ToneConfig,
 };

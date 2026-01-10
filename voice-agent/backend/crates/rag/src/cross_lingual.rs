@@ -93,8 +93,7 @@ impl CrossLingualNormalizer {
             ("document", "डॉक्यूमेंट"),
             ("dastavez", "दस्तावेज़"),
             ("bank", "बैंक"),
-            ("kotak", "कोटक"),
-            ("muthoot", "मुथूट"),
+            // P18 FIX: Brand/competitor translations should come from domain config
             ("emi", "ईएमआई"),
             ("kist", "किस्त"),
             ("amount", "अमाउंट"),
@@ -132,11 +131,7 @@ impl CrossLingualNormalizer {
             ("accont", "account"),
             ("custmer", "customer"),
             ("customr", "customer"),
-            ("muthut", "muthoot"),
-            ("manapuram", "manappuram"),
-            ("mannappuram", "manappuram"),
-            ("kotek", "kotak"),
-            ("kotk", "kotak"),
+            // P18 FIX: Brand/competitor spelling corrections should come from domain config
             ("procssing", "processing"),
             ("procesing", "processing"),
             ("disbursl", "disbursal"),

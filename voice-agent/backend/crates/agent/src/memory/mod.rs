@@ -230,10 +230,19 @@ pub struct AgenticMemory {
     llm: RwLock<Option<Arc<dyn LanguageModel>>>,
     /// RECOMP-style extractive compressor (for small models)
     extractive_compressor: ExtractiveCompressor,
+    /// P18 FIX: Config-driven competitor names for rule-based summary extraction
+    /// Loaded from domain config, empty if no config provided
+    competitor_names: Vec<String>,
+    /// P19 FIX: Config-driven slot display labels (e.g., "gold_weight" -> "Gold Weight")
+    /// Loaded from domain config, empty if no config provided
+    slot_display_labels: std::collections::HashMap<String, String>,
 }
 
 impl AgenticMemory {
     /// Create new agentic memory system
+    ///
+    /// NOTE: This creates a memory system with a basic extractive compressor.
+    /// For config-driven compression, use `from_view()` instead.
     pub fn new(config: AgenticMemoryConfig, session_id: impl Into<String>) -> Self {
         let extractive_compressor = ExtractiveCompressor::new(config.extractive.clone());
         Self {
@@ -244,6 +253,47 @@ impl AgenticMemory {
             config,
             session_id: session_id.into(),
             llm: RwLock::new(None),
+            // P18 FIX: Empty by default - use from_view() for config-driven competitor names
+            competitor_names: Vec::new(),
+            // P19 FIX: Empty by default - use from_view() for config-driven display labels
+            slot_display_labels: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Create new agentic memory system with domain view (config-driven)
+    ///
+    /// P18 FIX: This constructor initializes the extractive compressor with
+    /// config-driven domain keywords, entity patterns, and slot mappings.
+    /// Also loads competitor names for rule-based summary extraction.
+    /// P19 FIX: Also loads slot display labels for domain-agnostic summaries.
+    pub fn from_view(
+        config: AgenticMemoryConfig,
+        session_id: impl Into<String>,
+        view: &voice_agent_config::domain::AgentDomainView,
+    ) -> Self {
+        let extractive_compressor =
+            ExtractiveCompressor::from_view(config.extractive.clone(), view);
+        // P18 FIX: Load competitor names from config for rule-based summaries
+        let competitor_names: Vec<String> = view
+            .all_competitor_names()
+            .into_iter()
+            .map(|s| s.to_lowercase())
+            .collect();
+
+        // P21 FIX: Load ALL slot display labels from config (no hardcoded slot names)
+        // This replaces the hardcoded list with config-driven labels
+        let slot_display_labels = view.all_slot_display_labels();
+
+        Self {
+            core: CoreMemory::new(config.core.clone()),
+            recall: RecallMemory::new(config.recall.clone()),
+            archival: ArchivalMemory::new(config.archival.clone()),
+            extractive_compressor,
+            config,
+            session_id: session_id.into(),
+            llm: RwLock::new(None),
+            competitor_names,
+            slot_display_labels,
         }
     }
 
@@ -551,15 +601,16 @@ impl AgenticMemory {
             .collect::<Vec<_>>()
             .join("\n");
 
+        // P21 FIX: Domain-agnostic summarization prompt
         // Enhanced summarization prompt inspired by LLMLingua research
         let prompt = format!(
-            r#"Compress this gold loan conversation into a concise summary.
+            r#"Compress this conversation into a concise summary.
 
 RULES:
-1. KEEP: Customer name, gold weight, loan amount, interest rates, competitor names
+1. KEEP: Customer name, asset details, loan amount, interest rates, competitor names
 2. KEEP: Customer concerns, objections, and preferences
 3. REMOVE: Greetings, filler words, repeated information
-4. FORMAT: Use key-value pairs where possible (e.g., "Name: Rahul, Gold: 50g")
+4. FORMAT: Use key-value pairs where possible (e.g., "Name: Rahul, Amount: 5 lakh")
 
 Conversation:
 {}
@@ -592,19 +643,17 @@ Compressed Summary (max 100 words):"#,
         let mut seen_entities = std::collections::HashSet::new();
 
         // Extract from entities first (most reliable)
+        // P19 FIX: Use config-driven display labels instead of hardcoded strings
         for turn in turns {
             for (key, value) in &turn.entities {
                 let normalized_key = key.to_lowercase();
                 if !seen_entities.contains(&normalized_key) {
                     seen_entities.insert(normalized_key.clone());
-                    let display_key = match normalized_key.as_str() {
-                        "gold_weight" | "weight" => "Gold",
-                        "loan_amount" | "amount" => "Amount",
-                        "gold_purity" | "purity" | "karat" => "Purity",
-                        "customer_name" | "name" => "Name",
-                        "competitor" | "current_lender" => "Current Lender",
-                        "interest_rate" | "rate" => "Rate",
-                        _ => continue, // Skip unknown entities
+                    // P19 FIX: Look up display label from config, skip if not found
+                    let display_key = if let Some(label) = self.slot_display_labels.get(&normalized_key) {
+                        label.as_str()
+                    } else {
+                        continue; // Skip unknown entities
                     };
                     facts.push(format!("{}: {}", display_key, value));
                 }
@@ -628,26 +677,44 @@ Compressed Summary (max 100 words):"#,
             }
         }
 
-        // Extract gold weight if not found
-        if !seen_entities.contains("gold_weight") && !seen_entities.contains("weight") {
+        // P19 FIX: Extract asset quantity if not found - use config-driven label
+        if !seen_entities.contains("asset_quantity") && !seen_entities.contains("gold_weight") && !seen_entities.contains("weight") {
             if let Some(weight) = Self::extract_amount_with_unit(&all_lower, &["gram", "gm", "g ", "tola"]) {
-                facts.push(format!("Gold: {}", weight));
+                let label = self.slot_display_labels.get("asset_quantity")
+                    .map(|s| s.as_str())
+                    .unwrap_or("Asset");
+                facts.push(format!("{}: {}", label, weight));
             }
         }
 
         // Extract loan amount if not found
         if !seen_entities.contains("loan_amount") && !seen_entities.contains("amount") {
             if let Some(amount) = Self::extract_amount_with_unit(&all_lower, &["lakh", "crore", "rupees", "₹"]) {
-                facts.push(format!("Amount: {}", amount));
+                let label = self.slot_display_labels.get("loan_amount")
+                    .or_else(|| self.slot_display_labels.get("amount"))
+                    .map(|s| s.as_str())
+                    .unwrap_or("Amount");
+                facts.push(format!("{}: {}", label, amount));
             }
         }
 
-        // Extract competitor mentions
-        let competitors = ["muthoot", "manappuram", "iifl", "sbi", "hdfc"];
-        for competitor in competitors {
-            if all_lower.contains(competitor) && !seen_entities.contains("competitor") {
-                facts.push(format!("Current Lender: {}", competitor.to_uppercase()));
-                break;
+        // P18 FIX: Extract competitor mentions using config-driven names
+        // P19 FIX: Use config-driven display label for "Current Lender"
+        if !self.competitor_names.is_empty() && !seen_entities.contains("competitor") {
+            for competitor in &self.competitor_names {
+                if all_lower.contains(competitor.as_str()) {
+                    // Capitalize first letter for display
+                    let display_name = competitor
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().collect::<String>() + &competitor[1..])
+                        .unwrap_or_else(|| competitor.clone());
+                    let label = self.slot_display_labels.get("current_lender")
+                        .map(|s| s.as_str())
+                        .unwrap_or("Current Provider");
+                    facts.push(format!("{}: {}", label, display_name));
+                    break;
+                }
             }
         }
 
@@ -1088,7 +1155,8 @@ mod tests {
             ConversationTurn::new(TurnRole::User, "My name is Rahul Kumar"),
             ConversationTurn::new(TurnRole::User, "I have about 100 gram gold"),
             ConversationTurn::new(TurnRole::User, "I need 5 lakh loan"),
-            ConversationTurn::new(TurnRole::User, "Currently with Muthoot"),
+            // P23 FIX: Use generic provider reference - actual names come from domain config
+            ConversationTurn::new(TurnRole::User, "Currently with another lender"),
         ];
 
         let summary = memory.rule_based_summary(&turns);
@@ -1098,7 +1166,7 @@ mod tests {
             summary.to_lowercase().contains("rahul") ||
             summary.to_lowercase().contains("gram") ||
             summary.to_lowercase().contains("lakh") ||
-            summary.to_lowercase().contains("muthoot"),
+            summary.to_lowercase().contains("lender"),
             "Summary should contain extracted info: {}", summary
         );
     }

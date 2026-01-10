@@ -206,6 +206,39 @@ impl PromptsConfig {
         self.stage_guidance_template.replace("{guidance}", guidance)
     }
 
+    /// P21 FIX: Build key facts from template with product values
+    ///
+    /// Substitutes placeholders in key_facts_template:
+    /// - {min_rate}: Our minimum interest rate
+    /// - {max_rate}: Competitor high rate
+    /// - {min_competitor_rate}: Competitor low rate
+    /// - {ltv}: Loan-to-value percentage
+    ///
+    /// Falls back to generic format if template is empty.
+    pub fn build_key_facts(
+        &self,
+        our_rate: f64,
+        competitor_low: f64,
+        competitor_high: f64,
+        ltv_percent: f64,
+    ) -> String {
+        if self.key_facts_template.is_empty() {
+            // Fallback to generic format if no template defined
+            return format!(
+                "- Interest rates: Starting from {:.1}% p.a. (vs {:.0}-{:.0}% competitor rates)\n\
+                 - LTV: Up to {:.0}% of collateral value\n\
+                 - Processing: Same-day disbursement",
+                our_rate, competitor_low, competitor_high, ltv_percent
+            );
+        }
+
+        self.key_facts_template
+            .replace("{min_rate}", &format!("{:.1}", our_rate))
+            .replace("{max_rate}", &format!("{:.0}", competitor_high))
+            .replace("{min_competitor_rate}", &format!("{:.0}", competitor_low))
+            .replace("{ltv}", &format!("{:.0}", ltv_percent))
+    }
+
     /// P16 FIX: Get stage-specific guidance by stage name
     pub fn get_stage_guidance(&self, stage: &str) -> Option<&str> {
         self.stage_guidance.get(stage).map(|s| s.as_str())

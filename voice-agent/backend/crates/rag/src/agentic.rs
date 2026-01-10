@@ -193,10 +193,32 @@ impl AgenticRetriever {
     }
 
     /// Set LLM for query rewriting (only used if llm_query_rewriting is enabled)
+    ///
+    /// Uses generic domain context. For domain-specific prompts, use `with_llm_and_domain()`.
     pub fn with_llm(mut self, llm: Arc<dyn LlmBackend>) -> Self {
         // Only set query rewriter if LLM rewriting is enabled
         if self.config.llm_query_rewriting {
             self.query_rewriter = Some(QueryRewriter::new(llm));
+        }
+        self
+    }
+
+    /// Set LLM for query rewriting with domain-specific context
+    ///
+    /// P24 FIX: Domain-agnostic method for setting product/company context in prompts
+    pub fn with_llm_and_domain(
+        mut self,
+        llm: Arc<dyn LlmBackend>,
+        product_name: &str,
+        company_name: &str,
+    ) -> Self {
+        // Only set query rewriter if LLM rewriting is enabled
+        if self.config.llm_query_rewriting {
+            self.query_rewriter = Some(QueryRewriter::with_domain_context(
+                llm,
+                product_name,
+                company_name,
+            ));
         }
         self
     }
@@ -535,10 +557,14 @@ impl Default for SufficiencyEvaluation {
 ///
 /// Uses LLM to evaluate whether retrieved documents can answer the query.
 /// Falls back to heuristic scoring if LLM is not available or fails.
+///
+/// P25 FIX: Made domain-agnostic with configurable product_name
 pub struct LlmSufficiencyChecker {
     llm: Option<Arc<dyn LlmBackend>>,
     config: LlmSufficiencyConfig,
     heuristic_checker: SufficiencyChecker,
+    /// Product name for domain context in prompts (e.g., "gold loans", "car insurance")
+    product_name: String,
 }
 
 impl LlmSufficiencyChecker {
@@ -548,6 +574,7 @@ impl LlmSufficiencyChecker {
             llm: None,
             config: LlmSufficiencyConfig::default(),
             heuristic_checker: SufficiencyChecker::new(),
+            product_name: "loans".to_string(), // Generic default
         }
     }
 
@@ -557,6 +584,7 @@ impl LlmSufficiencyChecker {
             llm: Some(llm),
             config: LlmSufficiencyConfig::default(),
             heuristic_checker: SufficiencyChecker::new(),
+            product_name: "loans".to_string(), // Generic default
         }
     }
 
@@ -566,6 +594,20 @@ impl LlmSufficiencyChecker {
             llm,
             config,
             heuristic_checker: SufficiencyChecker::new(),
+            product_name: "loans".to_string(), // Generic default
+        }
+    }
+
+    /// P25 FIX: Create with domain context for domain-specific prompts
+    pub fn with_domain_context(
+        llm: Arc<dyn LlmBackend>,
+        product_name: &str,
+    ) -> Self {
+        Self {
+            llm: Some(llm),
+            config: LlmSufficiencyConfig::default(),
+            heuristic_checker: SufficiencyChecker::new(),
+            product_name: product_name.to_string(),
         }
     }
 
@@ -616,8 +658,9 @@ impl LlmSufficiencyChecker {
             .collect::<Vec<_>>()
             .join("\n\n");
 
+        // P25 FIX: Use configurable product_name instead of hardcoded "gold loans"
         let prompt = format!(
-            r#"You are evaluating whether retrieved documents can answer a user query about gold loans.
+            r#"You are evaluating whether retrieved documents can answer a user query about {product}.
 
 User Query: "{query}"
 
@@ -637,10 +680,11 @@ Respond in JSON format:
 IMPORTANT:
 - "sufficient" should be true only if documents directly address the query
 - "coverage" represents how much of the query can be answered (0.0 = none, 1.0 = fully)
-- For gold loan queries, consider: rates, eligibility, process, documents required, benefits
+- For {product} queries, consider: rates, eligibility, process, documents required, benefits
 - Only suggest refined_query if documents are insufficient
 
 JSON response:"#,
+            product = self.product_name,
             query = query,
             documents = doc_context,
         );
@@ -758,14 +802,41 @@ impl Default for LlmSufficiencyChecker {
 }
 
 /// Rewrites queries for better retrieval using LLM
+///
+/// P24 FIX: Made domain-agnostic with configurable product_name and company_name
 pub struct QueryRewriter {
     llm: Arc<dyn LlmBackend>,
+    /// Product name for prompt context (e.g., "gold loan", "car insurance")
+    product_name: String,
+    /// Company name for prompt context (e.g., "Kotak Bank", "HDFC Life")
+    company_name: String,
 }
 
 impl QueryRewriter {
     /// Create a new query rewriter with an LLM backend
+    ///
+    /// Uses generic defaults. For domain-specific prompts, use `with_domain_context()`.
     pub fn new(llm: Arc<dyn LlmBackend>) -> Self {
-        Self { llm }
+        Self {
+            llm,
+            product_name: "loan".to_string(),
+            company_name: "our company".to_string(),
+        }
+    }
+
+    /// Create with domain-specific context for better prompt quality
+    ///
+    /// P24 FIX: Domain-agnostic constructor
+    pub fn with_domain_context(
+        llm: Arc<dyn LlmBackend>,
+        product_name: &str,
+        company_name: &str,
+    ) -> Self {
+        Self {
+            llm,
+            product_name: product_name.to_string(),
+            company_name: company_name.to_string(),
+        }
     }
 
     /// Rewrite a query to improve retrieval
@@ -797,8 +868,9 @@ impl QueryRewriter {
             )
         };
 
+        // P24 FIX: Use config-driven product and company names
         let prompt = format!(
-            r#"You are a query rewriting assistant for a gold loan customer service system.
+            r#"You are a query rewriting assistant for a {product} customer service system.
 
 The following query did not retrieve sufficient information:
 Query: "{query}"
@@ -809,14 +881,16 @@ Top results retrieved (may not be relevant enough):
 Conversation context:
 {context}
 
-Rewrite the query to be more specific and likely to find relevant gold loan information.
+Rewrite the query to be more specific and likely to find relevant {product} information.
 Focus on:
-- Gold loan terms, rates, eligibility
-- Kotak Bank specific information
-- Customer concerns about switching lenders
+- {product} terms, rates, eligibility
+- {company} specific information
+- Customer concerns about switching providers
 
 Only output the rewritten query (in the same language as the original), nothing else.
 If the query is already good, output it unchanged."#,
+            product = self.product_name,
+            company = self.company_name,
             query = query,
             results = results_text,
             context = context_text,

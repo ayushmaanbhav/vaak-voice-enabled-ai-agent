@@ -5,204 +5,93 @@
 //! - Objection handling strategies
 //! - Value proposition customization
 //! - Competitive positioning
+//!
+//! # Config-Driven Design
+//!
+//! All content is loaded from YAML configuration files:
+//! - `features.yaml` - Feature definitions and segment mappings
+//! - `objections.yaml` - Objection patterns and responses
+//! - `segments.yaml` - Customer segment definitions
+//!
+//! Use string-based IDs (SegmentId, FeatureId, ObjectionId) loaded from config via
+//! `SegmentDetector`, `FeatureProvider`, and `ObjectionProvider` traits.
+//!
+//! ## Migration from CustomerSegment enum
+//!
+//! ```ignore
+//! // OLD: Enum-based
+//! let features = adapter.get_features_for_segment(CustomerSegment::HighValue);
+//!
+//! // NEW: Config-driven with SegmentId
+//! let features = adapter.get_feature_ids("high_value");
+//! ```
 
 use crate::CustomerSegment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Feature to emphasize in responses
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Feature {
-    /// Low interest rates
-    LowRates,
-    /// Quick processing/approval
-    QuickProcess,
-    /// Security and safety
-    Security,
-    /// Transparency
-    Transparency,
-    /// Flexibility
-    Flexibility,
-    /// Digital/online services
-    Digital,
-    /// Personal relationship manager
-    RelationshipManager,
-    /// Higher loan limits
-    HigherLimits,
-    /// No hidden charges
-    NoHiddenCharges,
-    /// RBI regulated bank
-    RbiRegulated,
-    /// Zero foreclosure charges
-    ZeroForeclosure,
-    /// Doorstep service
-    DoorstepService,
-    /// Women-specific benefits
-    WomenBenefits,
+// ============================================================================
+// Config-Driven Types
+// ============================================================================
+
+/// Segment identifier (config-driven)
+///
+/// Use string IDs from config instead of CustomerSegment enum.
+/// Segment definitions and detection come from segments.yaml.
+pub type SegmentId = String;
+
+/// Feature identifier (config-driven)
+///
+/// Use string IDs from config instead of enum variants.
+/// Feature display names and properties come from features.yaml.
+pub type FeatureId = String;
+
+/// Objection identifier (config-driven)
+///
+/// Use string IDs from config instead of enum variants.
+/// Objection detection and responses come from objections.yaml.
+pub type ObjectionId = String;
+
+/// Well-known feature IDs (for reference, actual values in config)
+///
+/// These constants provide compile-time references to common feature IDs.
+/// The actual display names and properties are loaded from config.
+pub mod feature_ids {
+    pub const LOW_RATES: &str = "low_rates";
+    pub const QUICK_PROCESS: &str = "quick_process";
+    pub const SECURITY: &str = "security";
+    pub const TRANSPARENCY: &str = "transparency";
+    pub const FLEXIBILITY: &str = "flexibility";
+    pub const DIGITAL: &str = "digital";
+    pub const RELATIONSHIP_MANAGER: &str = "relationship_manager";
+    pub const HIGHER_LIMITS: &str = "higher_limits";
+    pub const NO_HIDDEN_CHARGES: &str = "no_hidden_charges";
+    pub const REGULATOR_CERTIFIED: &str = "rbi_regulated";
+    pub const ZERO_FORECLOSURE: &str = "zero_foreclosure";
+    pub const DOORSTEP_SERVICE: &str = "doorstep_service";
+    pub const SPECIAL_PROGRAM_BENEFITS: &str = "women_benefits";
 }
 
-impl Feature {
-    /// Get display name
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Feature::LowRates => "Competitive Interest Rates",
-            Feature::QuickProcess => "Quick 30-Minute Approval",
-            Feature::Security => "Bank-Grade Security",
-            Feature::Transparency => "Transparent Pricing",
-            Feature::Flexibility => "Flexible Repayment",
-            Feature::Digital => "Digital Services",
-            Feature::RelationshipManager => "Dedicated Relationship Manager",
-            Feature::HigherLimits => "Higher Loan Limits",
-            Feature::NoHiddenCharges => "No Hidden Charges",
-            Feature::RbiRegulated => "RBI Regulated Bank",
-            Feature::ZeroForeclosure => "Zero Foreclosure Charges",
-            Feature::DoorstepService => "Doorstep Service",
-            Feature::WomenBenefits => "Shakti Gold Benefits",
-        }
-    }
-
-    /// Get Hindi equivalent
-    pub fn hindi_name(&self) -> &'static str {
-        match self {
-            Feature::LowRates => "Kam Byaj Dar",
-            Feature::QuickProcess => "Tez Processing",
-            Feature::Security => "Surakshit",
-            Feature::Transparency => "Poori Jankari",
-            Feature::Flexibility => "Flexible Bhugtan",
-            Feature::Digital => "Digital Suvidha",
-            Feature::RelationshipManager => "Personal Manager",
-            Feature::HigherLimits => "Zyada Loan",
-            Feature::NoHiddenCharges => "Koi Chhupe Charges Nahi",
-            Feature::RbiRegulated => "RBI Registered Bank",
-            Feature::ZeroForeclosure => "Free Foreclosure",
-            Feature::DoorstepService => "Ghar Par Seva",
-            Feature::WomenBenefits => "Shakti Gold",
-        }
-    }
+/// Well-known objection IDs (for reference, actual detection in config)
+///
+/// These constants provide compile-time references to common objection IDs.
+/// The actual detection patterns and responses are loaded from config.
+pub mod objection_ids {
+    pub const COLLATERAL_SAFETY: &str = "collateral_safety";
+    pub const BETTER_RATES_ELSEWHERE: &str = "better_rates_elsewhere";
+    pub const TOO_MUCH_PAPERWORK: &str = "too_much_paperwork";
+    pub const DONT_WANT_TO_SWITCH: &str = "dont_want_to_switch";
+    pub const NEEDS_TIME: &str = "needs_time";
+    pub const TRUST_ISSUES: &str = "trust_issues";
+    pub const EXPECTS_HIDDEN_CHARGES: &str = "expects_hidden_charges";
+    pub const TOO_SLOW: &str = "too_slow";
+    pub const NO_NEARBY_BRANCH: &str = "no_nearby_branch";
+    pub const EXISTING_COMMITMENTS: &str = "existing_loans";
 }
 
-/// Common customer objection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Objection {
-    /// Worried about gold safety
-    GoldSafety,
-    /// Current lender offers good rates
-    BetterRatesElsewhere,
-    /// Too much paperwork expected
-    TooMuchPaperwork,
-    /// Doesn't want to switch
-    DontWantToSwitch,
-    /// Needs to think about it
-    NeedsTime,
-    /// Trust issues with banks
-    TrustIssues,
-    /// Hidden charges expected
-    ExpectsHiddenCharges,
-    /// Process takes too long
-    TooSlow,
-    /// Branch not nearby
-    NoNearbyBranch,
-    /// Already has other loans
-    ExistingLoans,
-}
-
-impl Objection {
-    /// Detect objection from text with config-driven competitor names
-    ///
-    /// # Arguments
-    /// * `text` - The text to analyze
-    /// * `competitor_names` - List of competitor names/aliases to recognize
-    pub fn detect_with_config(text: &str, competitor_names: &[String]) -> Option<Self> {
-        let lower = text.to_lowercase();
-
-        if lower.contains("safe") && lower.contains("gold")
-            || lower.contains("sona")
-            || lower.contains("security")
-            || lower.contains("suraksha")
-        {
-            return Some(Objection::GoldSafety);
-        }
-
-        // Check for competitor mentions (config-driven)
-        let mentions_competitor = competitor_names.iter().any(|c| lower.contains(&c.to_lowercase()));
-        if lower.contains("better rate") || lower.contains("kam rate") || mentions_competitor {
-            return Some(Objection::BetterRatesElsewhere);
-        }
-
-        Self::detect_common_objections(&lower)
-    }
-
-    /// Detect objection from text (backward compatible, no competitor detection)
-    pub fn detect(text: &str) -> Option<Self> {
-        let lower = text.to_lowercase();
-
-        if lower.contains("safe") && lower.contains("gold")
-            || lower.contains("sona")
-            || lower.contains("security")
-            || lower.contains("suraksha")
-        {
-            return Some(Objection::GoldSafety);
-        }
-
-        if lower.contains("better rate") || lower.contains("kam rate") {
-            return Some(Objection::BetterRatesElsewhere);
-        }
-
-        Self::detect_common_objections(&lower)
-    }
-
-    /// Common objection detection (shared logic)
-    fn detect_common_objections(lower: &str) -> Option<Self> {
-
-        if lower.contains("paperwork")
-            || lower.contains("documents")
-            || lower.contains("kagaz")
-            || lower.contains("dastavez")
-        {
-            return Some(Objection::TooMuchPaperwork);
-        }
-
-        if lower.contains("switch") || lower.contains("change") || lower.contains("badalna") {
-            return Some(Objection::DontWantToSwitch);
-        }
-
-        if lower.contains("think")
-            || lower.contains("sochna")
-            || lower.contains("later")
-            || lower.contains("baad mein")
-        {
-            return Some(Objection::NeedsTime);
-        }
-
-        if lower.contains("trust") || lower.contains("bharosa") || lower.contains("fraud") {
-            return Some(Objection::TrustIssues);
-        }
-
-        if lower.contains("hidden") || lower.contains("chhupe") || lower.contains("extra charge") {
-            return Some(Objection::ExpectsHiddenCharges);
-        }
-
-        if lower.contains("slow") || lower.contains("time lag") || lower.contains("kitna din") {
-            return Some(Objection::TooSlow);
-        }
-
-        if lower.contains("branch")
-            || lower.contains("door")
-            || lower.contains("far")
-            || lower.contains("paas mein")
-        {
-            return Some(Objection::NoNearbyBranch);
-        }
-
-        if lower.contains("other loan") || lower.contains("already") || lower.contains("pehle se") {
-            return Some(Objection::ExistingLoans);
-        }
-
-        None
-    }
-}
+// ============================================================================
+// Response Types
+// ============================================================================
 
 /// Objection handling response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,275 +102,231 @@ pub struct ObjectionResponse {
     pub response: String,
     /// Follow-up question (optional)
     pub follow_up: Option<String>,
-    /// Feature to highlight
-    pub highlight_feature: Feature,
+    /// Feature to highlight (feature ID)
+    pub highlight_feature: FeatureId,
 }
 
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+/// Configuration data for SegmentAdapter
+///
+/// Use this struct to load segment configuration from YAML files.
+///
+/// Example YAML:
+/// ```yaml
+/// segment_features:
+///   high_value: ["relationship_manager", "higher_limits"]
+///   trust_seeker: ["security", "transparency"]
+/// value_propositions:
+///   high_value:
+///     - "Exclusive rates and priority processing"
+///     - "Dedicated relationship manager"
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SegmentAdapterConfig {
+    /// Feature IDs per segment (segment_id -> [feature_id, ...])
+    #[serde(default)]
+    pub segment_features: HashMap<String, Vec<String>>,
+    /// Value propositions per segment (segment_id -> [proposition, ...])
+    #[serde(default)]
+    pub value_propositions: HashMap<String, Vec<String>>,
+    /// Objection responses (objection_id -> response data)
+    #[serde(default)]
+    pub objection_responses: HashMap<String, ObjectionResponseConfig>,
+}
+
+/// Objection response configuration (serializable)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectionResponseConfig {
+    /// Segment this response applies to
+    pub segment: String,
+    /// Acknowledgment phrase
+    pub acknowledgment: String,
+    /// Main response
+    pub response: String,
+    /// Follow-up question (optional)
+    pub follow_up: Option<String>,
+    /// Feature to highlight (feature_id)
+    pub highlight_feature: String,
+}
+
+// ============================================================================
+// Segment Adapter
+// ============================================================================
+
 /// Segment adapter for response customization
+///
+/// Create via `from_config()` with domain-specific content loaded from YAML files.
+///
+/// ## Usage
+///
+/// ```ignore
+/// let config = SegmentAdapterConfig::from_domain_config(&domain_config);
+/// let adapter = SegmentAdapter::from_config(config);
+/// ```
 pub struct SegmentAdapter {
-    /// Priority features per segment
-    segment_features: HashMap<CustomerSegment, Vec<Feature>>,
-    /// Objection responses per segment
-    objection_responses: HashMap<(CustomerSegment, Objection), ObjectionResponse>,
-    /// Value propositions per segment
-    value_propositions: HashMap<CustomerSegment, Vec<String>>,
+    /// Feature IDs per segment (segment_id -> [feature_id, ...])
+    segment_feature_ids: HashMap<String, Vec<String>>,
+    /// Value propositions per segment (segment_id -> [proposition, ...])
+    value_propositions: HashMap<String, Vec<String>>,
+    /// Objection responses ((segment_id, objection_id) -> response)
+    objection_responses: HashMap<(String, String), ObjectionResponse>,
 }
 
 impl SegmentAdapter {
-    /// Create a new segment adapter with default configurations
-    pub fn new() -> Self {
-        let mut adapter = Self {
-            segment_features: HashMap::new(),
-            objection_responses: HashMap::new(),
+    /// Create an empty segment adapter
+    ///
+    /// Returns an adapter with no features, propositions, or responses loaded.
+    /// Useful for unit tests or when config loading is deferred.
+    pub fn empty() -> Self {
+        Self {
+            segment_feature_ids: HashMap::new(),
             value_propositions: HashMap::new(),
-        };
-        adapter.load_defaults();
-        adapter
-    }
-
-    /// Load default configurations
-    fn load_defaults(&mut self) {
-        // High Value segment
-        self.segment_features.insert(
-            CustomerSegment::HighValue,
-            vec![
-                Feature::RelationshipManager,
-                Feature::HigherLimits,
-                Feature::QuickProcess,
-                Feature::Flexibility,
-            ],
-        );
-
-        // Trust Seeker segment
-        self.segment_features.insert(
-            CustomerSegment::TrustSeeker,
-            vec![
-                Feature::RbiRegulated,
-                Feature::Security,
-                Feature::Transparency,
-                Feature::NoHiddenCharges,
-            ],
-        );
-
-        // First Time segment
-        self.segment_features.insert(
-            CustomerSegment::FirstTime,
-            vec![
-                Feature::NoHiddenCharges,
-                Feature::QuickProcess,
-                Feature::Transparency,
-                Feature::Flexibility,
-            ],
-        );
-
-        // Price Sensitive segment
-        self.segment_features.insert(
-            CustomerSegment::PriceSensitive,
-            vec![
-                Feature::LowRates,
-                Feature::ZeroForeclosure,
-                Feature::NoHiddenCharges,
-                Feature::Transparency,
-            ],
-        );
-
-        // Women segment
-        self.segment_features.insert(
-            CustomerSegment::Women,
-            vec![
-                Feature::WomenBenefits,
-                Feature::Security,
-                Feature::Flexibility,
-                Feature::DoorstepService,
-            ],
-        );
-
-        // Professional segment
-        self.segment_features.insert(
-            CustomerSegment::Professional,
-            vec![
-                Feature::QuickProcess,
-                Feature::Digital,
-                Feature::Flexibility,
-                Feature::NoHiddenCharges,
-            ],
-        );
-
-        // Value propositions
-        self.value_propositions.insert(
-            CustomerSegment::HighValue,
-            vec![
-                "Exclusive rates and priority processing for valued customers".to_string(),
-                "Dedicated relationship manager for personalized service".to_string(),
-                "Higher loan limits to meet your requirements".to_string(),
-            ],
-        );
-
-        self.value_propositions.insert(
-            CustomerSegment::TrustSeeker,
-            vec![
-                "We are an RBI-regulated scheduled bank with highest safety standards"
-                    .to_string(),
-                "Your gold is stored in bank-grade security vaults with full insurance".to_string(),
-                "Digital tracking lets you monitor your gold status anytime".to_string(),
-            ],
-        );
-
-        self.value_propositions.insert(
-            CustomerSegment::FirstTime,
-            vec![
-                "Simple process with just 2 documents - ID and address proof".to_string(),
-                "No hidden charges - what we quote is what you pay".to_string(),
-                "Loan approved in just 30 minutes at the branch".to_string(),
-            ],
-        );
-
-        self.value_propositions.insert(
-            CustomerSegment::PriceSensitive,
-            vec![
-                "Starting at 9.5% - among the lowest rates in the market".to_string(),
-                "Zero foreclosure charges - prepay anytime without penalty".to_string(),
-                "Use our calculator to see exactly how much you save".to_string(),
-            ],
-        );
-
-        self.value_propositions.insert(
-            CustomerSegment::Women,
-            vec![
-                "Shakti Gold program with 0.25% lower interest for women".to_string(),
-                "Women-priority branches with female staff".to_string(),
-                "Flexible EMI options to suit your schedule".to_string(),
-            ],
-        );
-
-        self.value_propositions.insert(
-            CustomerSegment::Professional,
-            vec![
-                "Complete the process in 30 minutes during lunch break".to_string(),
-                "Track everything on our mobile app".to_string(),
-                "Instant approval with minimal documentation".to_string(),
-            ],
-        );
-
-        // Load objection responses
-        self.load_objection_responses();
-    }
-
-    /// Load objection handling responses
-    fn load_objection_responses(&mut self) {
-        // Trust Seeker - Gold Safety
-        self.objection_responses.insert(
-            (CustomerSegment::TrustSeeker, Objection::GoldSafety),
-            ObjectionResponse {
-                acknowledgment: "I completely understand your concern about gold safety - it's your valuable asset.".to_string(),
-                response: "Your gold is stored in RBI-regulated bank vaults with 24/7 security and full insurance coverage. Unlike NBFCs, we're a scheduled bank with the highest safety standards.".to_string(),
-                follow_up: Some("Would you like to know about our digital tracking system where you can check your gold status anytime?".to_string()),
-                highlight_feature: Feature::Security,
-            },
-        );
-
-        // Price Sensitive - Better Rates Elsewhere
-        self.objection_responses.insert(
-            (CustomerSegment::PriceSensitive, Objection::BetterRatesElsewhere),
-            ObjectionResponse {
-                acknowledgment: "Getting the best rate is definitely important.".to_string(),
-                response: "Let me share the complete picture - while others may advertise lower rates, they often have processing fees, foreclosure charges, and valuation cuts. Our all-in cost at 9.5% with zero foreclosure is often lower in total.".to_string(),
-                follow_up: Some("Can I show you a quick calculation comparing your current loan with us?".to_string()),
-                highlight_feature: Feature::ZeroForeclosure,
-            },
-        );
-
-        // First Time - Too Much Paperwork
-        self.objection_responses.insert(
-            (CustomerSegment::FirstTime, Objection::TooMuchPaperwork),
-            ObjectionResponse {
-                acknowledgment: "I understand - paperwork can feel overwhelming.".to_string(),
-                response: "Good news - we only need 2 simple documents: your ID proof like Aadhaar and one address proof. That's it! Our team handles everything else.".to_string(),
-                follow_up: Some("Do you have your Aadhaar card with you today?".to_string()),
-                highlight_feature: Feature::QuickProcess,
-            },
-        );
-
-        // Trust Seeker - Hidden Charges
-        self.objection_responses.insert(
-            (CustomerSegment::TrustSeeker, Objection::ExpectsHiddenCharges),
-            ObjectionResponse {
-                acknowledgment: "You're right to ask - many customers have faced unexpected charges elsewhere.".to_string(),
-                response: "We believe in complete transparency. I'll give you a printed breakdown of all charges before you sign anything. Our processing fee is flat 1%, and there are absolutely no hidden costs.".to_string(),
-                follow_up: Some("Would you like me to prepare a detailed cost sheet for your gold weight?".to_string()),
-                highlight_feature: Feature::Transparency,
-            },
-        );
-
-        // Generic objection responses for all segments
-        for segment in [
-            CustomerSegment::HighValue,
-            CustomerSegment::TrustSeeker,
-            CustomerSegment::FirstTime,
-            CustomerSegment::PriceSensitive,
-            CustomerSegment::Women,
-            CustomerSegment::Professional,
-        ] {
-            // Needs Time
-            self.objection_responses.entry((segment, Objection::NeedsTime)).or_insert(
-                ObjectionResponse {
-                    acknowledgment: "Of course, taking time to think is wise.".to_string(),
-                    response: "This is an important decision. Let me share a quick summary of the benefits, and you can call us anytime when you're ready. There's no pressure.".to_string(),
-                    follow_up: Some("Can I send you our brochure on WhatsApp for your reference?".to_string()),
-                    highlight_feature: Feature::Transparency,
-                },
-            );
-
-            // No Nearby Branch
-            self.objection_responses.entry((segment, Objection::NoNearbyBranch)).or_insert(
-                ObjectionResponse {
-                    acknowledgment: "Convenience is important - you shouldn't have to travel far.".to_string(),
-                    response: "We have over 1,600 branches across India. Let me check the nearest one to your location. Many customers also use our doorstep service.".to_string(),
-                    follow_up: Some("What's your area or pincode? I'll find the closest branch.".to_string()),
-                    highlight_feature: Feature::DoorstepService,
-                },
-            );
+            objection_responses: HashMap::new(),
         }
     }
 
-    /// Get priority features for a segment
-    pub fn get_features(&self, segment: CustomerSegment) -> Vec<Feature> {
-        self.segment_features
-            .get(&segment)
+    /// Create a segment adapter from configuration
+    ///
+    /// Loads all domain-specific content (features, value propositions, objection responses)
+    /// from the provided configuration.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let config = SegmentAdapterConfig {
+    ///     segment_features: features_config.segment_features.clone(),
+    ///     value_propositions: features_config.value_propositions.clone(),
+    ///     objection_responses: objections_data,
+    /// };
+    /// let adapter = SegmentAdapter::from_config(config);
+    /// ```
+    pub fn from_config(config: SegmentAdapterConfig) -> Self {
+        let mut adapter = Self::empty();
+
+        // Store segment features
+        adapter.segment_feature_ids = config.segment_features;
+
+        // Store value propositions
+        adapter.value_propositions = config.value_propositions;
+
+        // Load objection responses
+        for (objection_id, response_config) in config.objection_responses {
+            adapter.objection_responses.insert(
+                (response_config.segment.clone(), objection_id),
+                ObjectionResponse {
+                    acknowledgment: response_config.acknowledgment,
+                    response: response_config.response,
+                    follow_up: response_config.follow_up,
+                    highlight_feature: response_config.highlight_feature,
+                },
+            );
+        }
+
+        adapter
+    }
+
+    /// Validate that config was properly loaded
+    ///
+    /// Returns Ok(()) if adapter has content, Err with details if empty.
+    pub fn validate(&self) -> Result<(), String> {
+        let mut issues = Vec::new();
+
+        if self.segment_feature_ids.is_empty() {
+            issues.push("No segment features loaded");
+        }
+
+        if self.value_propositions.is_empty() {
+            issues.push("No value propositions loaded");
+        }
+
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "SegmentAdapter config validation failed: {}. \
+                 Ensure features.yaml and adaptation.yaml are properly configured.",
+                issues.join(", ")
+            ))
+        }
+    }
+
+    // ========================================================================
+    // Feature Access
+    // ========================================================================
+
+    /// Get feature IDs for a segment
+    ///
+    /// Returns feature IDs as strings for use with FeatureProvider trait.
+    pub fn get_feature_ids(&self, segment_id: &str) -> Vec<String> {
+        self.segment_feature_ids
+            .get(segment_id)
             .cloned()
             .unwrap_or_default()
     }
 
-    /// Get top N features for a segment
-    pub fn get_top_features(&self, segment: CustomerSegment, n: usize) -> Vec<Feature> {
-        self.get_features(segment).into_iter().take(n).collect()
+    /// Get feature IDs for a CustomerSegment enum
+    pub fn get_features_for_segment(&self, segment: CustomerSegment) -> Vec<String> {
+        self.get_feature_ids(&segment_to_id(segment))
     }
 
-    /// Get value propositions for a segment
-    pub fn get_value_propositions(&self, segment: CustomerSegment) -> Vec<String> {
+    /// Get top N feature IDs for a segment
+    pub fn get_top_feature_ids(&self, segment_id: &str, n: usize) -> Vec<String> {
+        self.get_feature_ids(segment_id).into_iter().take(n).collect()
+    }
+
+    // ========================================================================
+    // Value Propositions
+    // ========================================================================
+
+    /// Get value propositions for a segment by ID
+    ///
+    /// Returns raw propositions which may contain {{variable}} placeholders.
+    pub fn get_value_propositions(&self, segment_id: &str) -> Vec<String> {
         self.value_propositions
-            .get(&segment)
+            .get(segment_id)
             .cloned()
             .unwrap_or_default()
     }
+
+    /// Get value propositions for a CustomerSegment enum
+    pub fn get_value_propositions_for_segment(&self, segment: CustomerSegment) -> Vec<String> {
+        self.get_value_propositions(&segment_to_id(segment))
+    }
+
+    // ========================================================================
+    // Objection Handling
+    // ========================================================================
 
     /// Get objection response
     pub fn get_objection_response(
         &self,
-        segment: CustomerSegment,
-        objection: Objection,
+        segment_id: &str,
+        objection_id: &str,
     ) -> Option<&ObjectionResponse> {
-        self.objection_responses.get(&(segment, objection))
+        self.objection_responses
+            .get(&(segment_id.to_string(), objection_id.to_string()))
+    }
+
+    /// Get objection response for CustomerSegment enum
+    pub fn get_objection_response_for_segment(
+        &self,
+        segment: CustomerSegment,
+        objection_id: &str,
+    ) -> Option<&ObjectionResponse> {
+        self.get_objection_response(&segment_to_id(segment), objection_id)
     }
 
     /// Handle objection and return formatted response
     pub fn handle_objection(
         &self,
-        segment: CustomerSegment,
-        objection: Objection,
+        segment_id: &str,
+        objection_id: &str,
         customer_name: Option<&str>,
     ) -> Option<String> {
-        let response = self.get_objection_response(segment, objection)?;
+        let response = self.get_objection_response(segment_id, objection_id)?;
 
         let mut result = response.acknowledgment.clone();
         result.push(' ');
@@ -499,139 +344,272 @@ impl SegmentAdapter {
         Some(result)
     }
 
-    /// Add custom feature priority for a segment
-    pub fn add_feature(&mut self, segment: CustomerSegment, feature: Feature) {
-        self.segment_features
-            .entry(segment)
-            .or_default()
-            .push(feature);
+    // ========================================================================
+    // Metadata
+    // ========================================================================
+
+    /// Get all segment IDs that have features configured
+    pub fn configured_segment_ids(&self) -> Vec<String> {
+        self.segment_feature_ids.keys().cloned().collect()
     }
 
-    /// Add custom value proposition
-    pub fn add_value_proposition(&mut self, segment: CustomerSegment, proposition: String) {
+    /// Check if a segment has any features configured
+    pub fn has_features(&self, segment_id: &str) -> bool {
+        self.segment_feature_ids
+            .get(segment_id)
+            .map(|f| !f.is_empty())
+            .unwrap_or(false)
+    }
+
+    // ========================================================================
+    // Modification
+    // ========================================================================
+
+    /// Add feature ID for a segment
+    pub fn add_feature(&mut self, segment_id: &str, feature_id: String) {
+        self.segment_feature_ids
+            .entry(segment_id.to_string())
+            .or_default()
+            .push(feature_id);
+    }
+
+    /// Add value proposition for a segment
+    pub fn add_value_proposition(&mut self, segment_id: &str, proposition: String) {
         self.value_propositions
-            .entry(segment)
+            .entry(segment_id.to_string())
             .or_default()
             .push(proposition);
     }
 
-    /// Add custom objection response
+    /// Add objection response
     pub fn add_objection_response(
         &mut self,
-        segment: CustomerSegment,
-        objection: Objection,
+        segment_id: &str,
+        objection_id: &str,
         response: ObjectionResponse,
     ) {
         self.objection_responses
-            .insert((segment, objection), response);
+            .insert((segment_id.to_string(), objection_id.to_string()), response);
     }
 }
 
 impl Default for SegmentAdapter {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Convert CustomerSegment enum to string ID
+///
+/// # Deprecated
+///
+/// Use `CustomerSegment::to_segment_id()` directly or string-based `SegmentId`.
+/// This function is retained for backward compatibility.
+///
+/// ## Migration
+/// ```ignore
+/// // OLD
+/// let id = segment_to_id(segment);
+///
+/// // NEW
+/// let id = segment.to_segment_id();
+/// // Or use SegmentId directly: "high_value"
+/// ```
+pub fn segment_to_id(segment: CustomerSegment) -> SegmentId {
+    segment.to_segment_id()
+}
+
+/// Parse segment ID string to CustomerSegment enum
+///
+/// # Deprecated
+///
+/// Use `CustomerSegment::from_segment_id()` directly.
+/// For config-defined segments not in the enum, the result will be None.
+///
+/// ## Migration
+/// ```ignore
+/// // OLD
+/// let segment = parse_segment_id(id);
+///
+/// // NEW
+/// let segment = CustomerSegment::from_segment_id(id);
+/// // Or use SegmentId directly without converting to enum
+/// ```
+pub fn parse_segment_id(id: &str) -> Option<CustomerSegment> {
+    CustomerSegment::from_segment_id(id)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_feature_display() {
-        assert_eq!(
-            Feature::LowRates.display_name(),
-            "Competitive Interest Rates"
-        );
-        assert_eq!(Feature::Security.hindi_name(), "Surakshit");
+    fn test_segment_to_id() {
+        assert_eq!(segment_to_id(CustomerSegment::HighValue), "high_value");
+        assert_eq!(segment_to_id(CustomerSegment::TrustSeeker), "trust_seeker");
+        assert_eq!(segment_to_id(CustomerSegment::Women), "women");
     }
 
     #[test]
-    fn test_objection_detection() {
-        assert_eq!(
-            Objection::detect("Is my gold safe with you?"),
-            Some(Objection::GoldSafety)
-        );
-        assert_eq!(
-            Objection::detect("Muthoot gives better rates"),
-            Some(Objection::BetterRatesElsewhere)
-        );
-        assert_eq!(
-            Objection::detect("Let me think about it"),
-            Some(Objection::NeedsTime)
-        );
-        assert_eq!(Objection::detect("What's your rate?"), None);
+    fn test_parse_segment_id() {
+        assert_eq!(parse_segment_id("high_value"), Some(CustomerSegment::HighValue));
+        assert_eq!(parse_segment_id("trust_seeker"), Some(CustomerSegment::TrustSeeker));
+        assert_eq!(parse_segment_id("unknown"), None);
     }
 
     #[test]
-    fn test_segment_features() {
-        let adapter = SegmentAdapter::new();
-
-        let features = adapter.get_features(CustomerSegment::TrustSeeker);
-        assert!(features.contains(&Feature::RbiRegulated));
-        assert!(features.contains(&Feature::Security));
-
-        let features = adapter.get_features(CustomerSegment::PriceSensitive);
-        assert!(features.contains(&Feature::LowRates));
-        assert!(features.contains(&Feature::ZeroForeclosure));
+    fn test_empty_adapter() {
+        let adapter = SegmentAdapter::empty();
+        assert!(adapter.get_feature_ids("high_value").is_empty());
+        assert!(adapter.get_value_propositions("high_value").is_empty());
+        assert!(adapter.validate().is_err());
     }
 
     #[test]
-    fn test_top_features() {
-        let adapter = SegmentAdapter::new();
-        let top = adapter.get_top_features(CustomerSegment::HighValue, 2);
-        assert_eq!(top.len(), 2);
-        assert_eq!(top[0], Feature::RelationshipManager);
-    }
+    fn test_from_config() {
+        let mut config = SegmentAdapterConfig::default();
+        config.segment_features.insert(
+            "high_value".to_string(),
+            vec!["relationship_manager".to_string(), "higher_limits".to_string()],
+        );
+        config.value_propositions.insert(
+            "high_value".to_string(),
+            vec!["Exclusive rates".to_string()],
+        );
 
-    #[test]
-    fn test_value_propositions() {
-        let adapter = SegmentAdapter::new();
-        let props = adapter.get_value_propositions(CustomerSegment::Women);
-        assert!(!props.is_empty());
-        assert!(props.iter().any(|p| p.contains("Shakti")));
+        let adapter = SegmentAdapter::from_config(config);
+
+        let features = adapter.get_feature_ids("high_value");
+        assert_eq!(features.len(), 2);
+        assert!(features.contains(&"relationship_manager".to_string()));
+
+        let propositions = adapter.get_value_propositions("high_value");
+        assert_eq!(propositions.len(), 1);
+        assert_eq!(propositions[0], "Exclusive rates");
     }
 
     #[test]
     fn test_objection_response() {
-        let adapter = SegmentAdapter::new();
-        let response = adapter
-            .get_objection_response(CustomerSegment::TrustSeeker, Objection::GoldSafety)
-            .unwrap();
+        let mut config = SegmentAdapterConfig::default();
+        config.segment_features.insert("trust_seeker".to_string(), vec!["security".to_string()]);
+        config.value_propositions.insert("trust_seeker".to_string(), vec!["Safe service".to_string()]);
+        config.objection_responses.insert(
+            "collateral_safety".to_string(),
+            ObjectionResponseConfig {
+                segment: "trust_seeker".to_string(),
+                acknowledgment: "I understand your concern.".to_string(),
+                response: "Your assets are fully insured.".to_string(),
+                follow_up: Some("Would you like details?".to_string()),
+                highlight_feature: "security".to_string(),
+            },
+        );
 
-        assert!(response.acknowledgment.contains("understand"));
-        assert!(response.response.contains("RBI"));
-        assert_eq!(response.highlight_feature, Feature::Security);
+        let adapter = SegmentAdapter::from_config(config);
+
+        let response = adapter.get_objection_response("trust_seeker", "collateral_safety");
+        assert!(response.is_some());
+        let response = response.unwrap();
+        assert_eq!(response.acknowledgment, "I understand your concern.");
+        assert_eq!(response.highlight_feature, "security");
     }
 
     #[test]
     fn test_handle_objection() {
-        let adapter = SegmentAdapter::new();
-        let response = adapter.handle_objection(
-            CustomerSegment::FirstTime,
-            Objection::TooMuchPaperwork,
-            Some("Raj"),
+        let mut config = SegmentAdapterConfig::default();
+        config.segment_features.insert("trust_seeker".to_string(), vec![]);
+        config.value_propositions.insert("trust_seeker".to_string(), vec![]);
+        config.objection_responses.insert(
+            "safety".to_string(),
+            ObjectionResponseConfig {
+                segment: "trust_seeker".to_string(),
+                acknowledgment: "I understand.".to_string(),
+                response: "It's safe.".to_string(),
+                follow_up: Some("Questions?".to_string()),
+                highlight_feature: "security".to_string(),
+            },
         );
 
-        assert!(response.is_some());
-        let text = response.unwrap();
-        assert!(text.contains("2"));
-        assert!(text.contains("Raj"));
+        let adapter = SegmentAdapter::from_config(config);
+
+        let result = adapter.handle_objection("trust_seeker", "safety", Some("Priya"));
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert!(result.contains("I understand."));
+        assert!(result.contains("It's safe."));
+        assert!(result.contains("Priya"));
     }
 
     #[test]
-    fn test_custom_additions() {
-        let mut adapter = SegmentAdapter::new();
-
-        adapter.add_feature(CustomerSegment::Professional, Feature::DoorstepService);
-        let features = adapter.get_features(CustomerSegment::Professional);
-        assert!(features.contains(&Feature::DoorstepService));
-
-        adapter.add_value_proposition(
-            CustomerSegment::HighValue,
-            "Airport lounge access".to_string(),
+    fn test_get_features_for_segment() {
+        let mut config = SegmentAdapterConfig::default();
+        config.segment_features.insert(
+            "high_value".to_string(),
+            vec!["feature1".to_string(), "feature2".to_string()],
         );
-        let props = adapter.get_value_propositions(CustomerSegment::HighValue);
-        assert!(props.iter().any(|p| p.contains("Airport")));
+        config.value_propositions.insert("high_value".to_string(), vec![]);
+
+        let adapter = SegmentAdapter::from_config(config);
+
+        let features = adapter.get_features_for_segment(CustomerSegment::HighValue);
+        assert_eq!(features.len(), 2);
+    }
+
+    #[test]
+    fn test_validate() {
+        // Empty adapter fails validation
+        let adapter = SegmentAdapter::empty();
+        assert!(adapter.validate().is_err());
+
+        // Adapter with content passes validation
+        let mut config = SegmentAdapterConfig::default();
+        config.segment_features.insert("test".to_string(), vec!["f1".to_string()]);
+        config.value_propositions.insert("test".to_string(), vec!["p1".to_string()]);
+
+        let adapter = SegmentAdapter::from_config(config);
+        assert!(adapter.validate().is_ok());
+    }
+
+    #[test]
+    fn test_feature_ids_constants() {
+        // Verify feature ID constants are correct
+        assert_eq!(feature_ids::LOW_RATES, "low_rates");
+        assert_eq!(feature_ids::SECURITY, "security");
+        assert_eq!(feature_ids::QUICK_PROCESS, "quick_process");
+    }
+
+    #[test]
+    fn test_objection_ids_constants() {
+        // Verify objection ID constants are correct
+        assert_eq!(objection_ids::COLLATERAL_SAFETY, "collateral_safety");
+        assert_eq!(objection_ids::BETTER_RATES_ELSEWHERE, "better_rates_elsewhere");
+        assert_eq!(objection_ids::NEEDS_TIME, "needs_time");
+    }
+
+    #[test]
+    fn test_add_feature() {
+        let mut adapter = SegmentAdapter::empty();
+        adapter.add_feature("high_value", "new_feature".to_string());
+
+        let features = adapter.get_feature_ids("high_value");
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0], "new_feature");
+    }
+
+    #[test]
+    fn test_add_value_proposition() {
+        let mut adapter = SegmentAdapter::empty();
+        adapter.add_value_proposition("high_value", "Great service".to_string());
+
+        let props = adapter.get_value_propositions("high_value");
+        assert_eq!(props.len(), 1);
+        assert_eq!(props[0], "Great service");
     }
 }

@@ -50,8 +50,8 @@ impl EligibilityCheckTool {
     }
 
     fn calculate_collateral_value(&self, weight: f64, variant: &str) -> f64 {
-        // Uses domain-specific calculation from config
-        self.view.calculate_gold_value(weight, variant)
+        // P20 FIX: Uses domain-agnostic method from config
+        self.view.calculate_asset_value(weight, variant)
     }
 
     fn calculate_max_loan(&self, collateral_value: f64) -> f64 {
@@ -104,18 +104,19 @@ impl Tool for EligibilityCheckTool {
     }
 
     async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
-        // Accept both generic and legacy (gold-specific) parameter names
-        let weight: f64 = input
-            .get("collateral_weight")
-            .or_else(|| input.get("gold_weight_grams")) // Legacy alias
-            .and_then(|v| v.as_f64())
+        // P24 FIX: Use config-driven parameter aliases instead of hardcoded ones
+        // Aliases are defined in tools/schemas.yaml parameter_aliases section
+        let weight: f64 = self.view
+            .tools_config()
+            .get_numeric_param_with_aliases(&input, "collateral_weight")
             .ok_or_else(|| ToolError::invalid_params("collateral_weight is required"))?;
 
-        let variant = input
-            .get("collateral_variant")
-            .or_else(|| input.get("gold_purity")) // Legacy alias
-            .and_then(|v| v.as_str())
-            .unwrap_or("22K"); // Default variant
+        // P24 FIX: Get variant using config aliases, fallback to default quality tier
+        let variant: String = self.view
+            .tools_config()
+            .get_string_param_with_aliases(&input, "collateral_variant")
+            .unwrap_or_else(|| self.view.default_quality_tier_display());
+        let variant = variant.as_str();
 
         let existing_loan = input
             .get("existing_loan_amount")
@@ -134,33 +135,41 @@ impl Tool for EligibilityCheckTool {
         // P16 FIX: Use config-driven response templates
         let message = if available_loan >= min_loan {
             // Try config template, fallback to hardcoded
+            // P3.2 FIX: Use config-driven currency symbol
+            let currency = self.view.currency_symbol();
             if self.view.has_response_templates("check_eligibility") {
                 let mut vars = self.view.default_template_vars();
                 vars.insert("max_amount".to_string(), format!("{:.0}", available_loan));
                 vars.insert("interest_rate".to_string(), format!("{:.1}", interest_rate));
                 vars.insert("rate_description".to_string(),
                     self.view.get_rate_description(self.view.get_rate_tier_name(available_loan)).to_string());
-                vars.insert("collateral_type".to_string(), "gold".to_string());
+                // P18 FIX: Use config-driven product name instead of hardcoded "gold"
+                vars.insert("collateral_type".to_string(), self.view.product_name().to_string());
+                vars.insert("currency".to_string(), currency.to_string());
                 self.view.render_response("check_eligibility", "eligible", "en", &vars)
                     .unwrap_or_else(|| format!(
-                        "You are eligible for a loan up to ₹{:.0} at {}% interest!",
-                        available_loan, interest_rate
+                        "You are eligible for a loan up to {}{:.0} at {}% interest!",
+                        currency, available_loan, interest_rate
                     ))
             } else {
                 format!(
-                    "You are eligible for a loan up to ₹{:.0} at {}% interest!",
-                    available_loan, interest_rate
+                    "You are eligible for a loan up to {}{:.0} at {}% interest!",
+                    currency, available_loan, interest_rate
                 )
             }
         } else if available_loan > 0.0 {
+            // P3.2 FIX: Use config-driven currency symbol
+            let currency = self.view.currency_symbol();
             if self.view.has_response_templates("check_eligibility") {
                 let mut vars = self.view.default_template_vars();
                 vars.insert("available_amount".to_string(), format!("{:.0}", available_loan));
-                vars.insert("collateral_type".to_string(), "gold".to_string());
+                // P18 FIX: Use config-driven product name instead of hardcoded "gold"
+                vars.insert("collateral_type".to_string(), self.view.product_name().to_string());
+                vars.insert("currency".to_string(), currency.to_string());
                 self.view.render_response("check_eligibility", "additional_available", "en", &vars)
-                    .unwrap_or_else(|| format!("You can get an additional ₹{:.0} on your collateral.", available_loan))
+                    .unwrap_or_else(|| format!("You can get an additional {}{:.0} on your collateral.", currency, available_loan))
             } else {
-                format!("You can get an additional ₹{:.0} on your collateral.", available_loan)
+                format!("You can get an additional {}{:.0} on your collateral.", currency, available_loan)
             }
         } else {
             if self.view.has_response_templates("check_eligibility") {
@@ -172,13 +181,15 @@ impl Tool for EligibilityCheckTool {
             }
         };
 
+        // P2.6 FIX: Use config-driven currency field suffix instead of hardcoded "_inr"
+        let suffix = self.view.currency_field_suffix();
         let result = json!({
             "eligible": available_loan >= min_loan,
-            "collateral_value_inr": collateral_value.round(),
-            "gold_value_inr": collateral_value.round(), // Legacy alias
-            "max_loan_amount_inr": max_loan.round(),
-            "existing_loan_inr": existing_loan,
-            "available_loan_inr": available_loan.max(0.0).round(),
+            format!("collateral_value_{}", suffix): collateral_value.round(),
+            format!("gold_value_{}", suffix): collateral_value.round(), // Legacy alias
+            format!("max_loan_amount_{}", suffix): max_loan.round(),
+            format!("existing_loan_{}", suffix): existing_loan,
+            format!("available_loan_{}", suffix): available_loan.max(0.0).round(),
             "ltv_percent": self.get_ltv(),
             "interest_rate_percent": interest_rate,
             "processing_fee_percent": self.get_processing_fee(),

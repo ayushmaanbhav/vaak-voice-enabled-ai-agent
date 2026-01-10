@@ -739,10 +739,12 @@ pub async fn create_session(
     // P0 FIX: Pass vector store AND tools to enable full integration in agent
     // This ensures the agent uses the persistence-wired tool registry from AppState
     // instead of creating its own default registry without persistence.
+    // P21 FIX: Pass domain config to ensure agent uses loaded domain configuration
     match state.sessions.create_with_full_integration(
         config,
         state.vector_store.clone(),
         Some(state.tools.clone()),
+        state.master_domain_config.clone(),
     ) {
         Ok(session) => {
             // P2-3 FIX: Persist session metadata to configured store

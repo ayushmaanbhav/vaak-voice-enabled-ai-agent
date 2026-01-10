@@ -125,8 +125,20 @@ pub trait PersonalizableAgent: Agent {
     /// Set customer name
     fn set_customer_name(&self, name: impl Into<String>);
 
-    /// Set customer segment
+    /// Set customer segment (enum-based - deprecated)
+    ///
+    /// Use `set_segment_id` instead for config-driven segment support.
     fn set_customer_segment(&self, segment: voice_agent_core::CustomerSegment);
+
+    /// P25 FIX: Set customer segment by config-driven ID
+    ///
+    /// This method accepts a string segment ID from config (e.g., "high_value",
+    /// "trust_seeker", "women", "professional") and uses config-driven persona
+    /// lookup instead of the hardcoded enum-based approach.
+    ///
+    /// # Arguments
+    /// * `segment_id` - Segment ID as defined in segments.yaml
+    fn set_segment_id(&self, segment_id: impl Into<String>);
 }
 
 #[cfg(test)]

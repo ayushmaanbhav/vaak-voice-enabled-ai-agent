@@ -21,43 +21,12 @@
 
 use std::collections::HashMap;
 
-/// Competitor type classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CompetitorType {
-    /// Scheduled commercial bank (e.g., HDFC, SBI)
-    Bank,
-    /// Non-Banking Financial Company (e.g., Muthoot, Manappuram)
-    Nbfc,
-    /// Informal lender (e.g., local jeweler)
-    Informal,
-}
-
-impl CompetitorType {
-    /// Get display name
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Bank => "Bank",
-            Self::Nbfc => "NBFC",
-            Self::Informal => "Informal Lender",
-        }
-    }
-
-    /// Get default rate for this competitor type
-    pub fn default_rate(&self) -> f64 {
-        match self {
-            Self::Bank => 11.0,
-            Self::Nbfc => 18.0,
-            Self::Informal => 24.0,
-        }
-    }
-}
-
 /// Competitor information
 #[derive(Debug, Clone)]
 pub struct CompetitorInfo {
-    /// Competitor ID (e.g., "muthoot", "hdfc")
+    /// Competitor ID (e.g., "competitor_a", "competitor_b")
     pub id: String,
-    /// Display name (e.g., "Muthoot Finance")
+    /// Display name (e.g., "Provider A Finance")
     pub display_name: String,
     /// Typical/advertised interest rate
     pub typical_rate: f64,
@@ -65,8 +34,11 @@ pub struct CompetitorInfo {
     pub rate_range: Option<(f64, f64)>,
     /// LTV percentage
     pub ltv_percent: f64,
-    /// Competitor type
-    pub competitor_type: CompetitorType,
+    /// Competitor type ID from config (e.g., "bank", "nbfc", "cooperative")
+    ///
+    /// The type ID should match an entry in `config/domains/{domain}/entity_types.yaml`
+    /// under `competitor_types`.
+    pub competitor_type_id: String,
     /// Strengths (from customer perspective)
     pub strengths: Vec<String>,
     /// Weaknesses (talking points against)
@@ -78,12 +50,18 @@ pub struct CompetitorInfo {
 }
 
 impl CompetitorInfo {
-    /// Create a new competitor
+    /// Create a new competitor with config-driven type ID
+    ///
+    /// # Arguments
+    /// * `id` - Unique identifier for the competitor
+    /// * `display_name` - Human-readable name
+    /// * `typical_rate` - Typical interest rate
+    /// * `competitor_type_id` - Type ID matching entity_types.yaml (e.g., "bank", "nbfc")
     pub fn new(
         id: impl Into<String>,
         display_name: impl Into<String>,
         typical_rate: f64,
-        competitor_type: CompetitorType,
+        competitor_type_id: impl Into<String>,
     ) -> Self {
         Self {
             id: id.into(),
@@ -91,7 +69,7 @@ impl CompetitorInfo {
             typical_rate,
             rate_range: None,
             ltv_percent: 75.0,
-            competitor_type,
+            competitor_type_id: competitor_type_id.into(),
             strengths: Vec::new(),
             weaknesses: Vec::new(),
             processing_time: "Same day".to_string(),
@@ -199,8 +177,17 @@ pub trait CompetitorAnalyzer: Send + Sync {
     /// Get highlighted talking points only
     fn highlighted_points(&self) -> Vec<&ComparisonPoint>;
 
-    /// Get default rate for competitor type
-    fn default_rate(&self, competitor_type: CompetitorType) -> f64;
+    /// Get fallback rate when competitor is unknown
+    ///
+    /// This rate is used when a competitor cannot be identified.
+    /// Loaded from config: `competitors.yaml:defaults.unknown_competitor_rate`
+    fn fallback_rate(&self) -> f64;
+
+    /// Get default rate for competitor type by config-driven type ID
+    ///
+    /// The type_id should match an entry in entity_types.yaml under competitor_types.
+    /// Implementations should load default rates from config.
+    fn default_rate_by_type_id(&self, type_id: &str) -> f64;
 
     /// Detect competitor from text
     fn detect_competitor(&self, text: &str) -> Option<&str>;
@@ -226,15 +213,37 @@ pub struct ConfigCompetitorAnalyzer {
     comparison_points: Vec<ComparisonPoint>,
     our_base_rate: f64,
     rate_tiers: Vec<(f64, f64)>, // (max_amount, rate)
+    /// Default rate for unknown competitors (from config)
+    default_unknown_rate: f64,
+    /// Default rates by competitor type ID (from entity_types.yaml)
+    type_default_rates: HashMap<String, f64>,
+    /// Comparison message templates by language (from config)
+    comparison_templates: HashMap<String, String>,
+    /// Currency symbol for formatting (from config)
+    currency_symbol: String,
 }
 
 impl ConfigCompetitorAnalyzer {
-    /// Create a new analyzer
+    /// Create a new analyzer with config-driven values
+    ///
+    /// # Arguments
+    /// * `competitors` - List of competitor info from config
+    /// * `comparison_points` - Comparison talking points
+    /// * `our_base_rate` - Our base interest rate
+    /// * `rate_tiers` - Rate tiers (max_amount, rate) from config
+    /// * `default_unknown_rate` - Fallback rate for unknown competitors
+    /// * `type_default_rates` - Default rates by competitor type ID
+    /// * `comparison_templates` - Message templates by language
+    /// * `currency_symbol` - Currency symbol for formatting
     pub fn new(
         competitors: Vec<CompetitorInfo>,
         comparison_points: Vec<ComparisonPoint>,
         our_base_rate: f64,
         rate_tiers: Vec<(f64, f64)>,
+        default_unknown_rate: f64,
+        type_default_rates: HashMap<String, f64>,
+        comparison_templates: HashMap<String, String>,
+        currency_symbol: String,
     ) -> Self {
         let mut alias_map = HashMap::new();
         let mut comp_map = HashMap::new();
@@ -256,7 +265,43 @@ impl ConfigCompetitorAnalyzer {
             comparison_points,
             our_base_rate,
             rate_tiers,
+            default_unknown_rate,
+            type_default_rates,
+            comparison_templates,
+            currency_symbol,
         }
+    }
+
+    /// Create a simple analyzer for testing (uses reasonable defaults)
+    #[cfg(test)]
+    pub fn for_testing(
+        competitors: Vec<CompetitorInfo>,
+        comparison_points: Vec<ComparisonPoint>,
+        our_base_rate: f64,
+        rate_tiers: Vec<(f64, f64)>,
+    ) -> Self {
+        // Use sensible defaults for testing
+        let mut type_default_rates = HashMap::new();
+        type_default_rates.insert("bank".to_string(), 11.0);
+        type_default_rates.insert("nbfc".to_string(), 18.0);
+        type_default_rates.insert("informal".to_string(), 24.0);
+
+        let mut comparison_templates = HashMap::new();
+        comparison_templates.insert(
+            "en".to_string(),
+            "You could save {currency}{monthly_savings} per month! Total savings: {currency}{total_savings} over {tenure_months} months.".to_string(),
+        );
+
+        Self::new(
+            competitors,
+            comparison_points,
+            our_base_rate,
+            rate_tiers,
+            18.0, // default_unknown_rate
+            type_default_rates,
+            comparison_templates,
+            "₹".to_string(),
+        )
     }
 
     /// Calculate EMI (uses shared implementation from crate::financial)
@@ -281,7 +326,7 @@ impl CompetitorAnalyzer for ConfigCompetitorAnalyzer {
     fn get_rate(&self, name: &str) -> f64 {
         self.get_competitor(name)
             .map(|c| c.typical_rate)
-            .unwrap_or(CompetitorType::Nbfc.default_rate())
+            .unwrap_or(self.default_unknown_rate)
     }
 
     fn all_competitors(&self) -> Vec<&CompetitorInfo> {
@@ -350,8 +395,15 @@ impl CompetitorAnalyzer for ConfigCompetitorAnalyzer {
             .collect()
     }
 
-    fn default_rate(&self, competitor_type: CompetitorType) -> f64 {
-        competitor_type.default_rate()
+    fn fallback_rate(&self) -> f64 {
+        self.default_unknown_rate
+    }
+
+    fn default_rate_by_type_id(&self, type_id: &str) -> f64 {
+        self.type_default_rates
+            .get(&type_id.to_lowercase())
+            .copied()
+            .unwrap_or(self.default_unknown_rate)
     }
 
     fn detect_competitor(&self, text: &str) -> Option<&str> {
@@ -382,19 +434,19 @@ impl CompetitorAnalyzer for ConfigCompetitorAnalyzer {
         savings: &SavingsAnalysis,
         language: &str,
     ) -> String {
-        match language {
-            "hi" => format!(
-                "आप हमारे साथ ₹{:.0} प्रति महीना बचा सकते हैं! कुल बचत ₹{:.0} होगी।",
-                savings.monthly_interest_savings,
-                savings.total_savings
-            ),
-            _ => format!(
-                "You could save ₹{:.0} per month with us! That's ₹{:.0} total savings over {} months.",
-                savings.monthly_interest_savings,
-                savings.total_savings,
-                savings.tenure_months
-            ),
-        }
+        // Try to get template from config, fall back to English if not found
+        let template = self.comparison_templates
+            .get(language)
+            .or_else(|| self.comparison_templates.get("en"))
+            .map(|s| s.as_str())
+            .unwrap_or("You could save {currency}{monthly_savings} per month! Total savings: {currency}{total_savings} over {tenure_months} months.");
+
+        // Substitute placeholders
+        template
+            .replace("{currency}", &self.currency_symbol)
+            .replace("{monthly_savings}", &format!("{:.0}", savings.monthly_interest_savings))
+            .replace("{total_savings}", &format!("{:.0}", savings.total_savings))
+            .replace("{tenure_months}", &savings.tenure_months.to_string())
     }
 }
 
@@ -408,19 +460,19 @@ mod tests {
     /// Real competitor data comes from config/domains/{domain}/competitors.yaml
     fn test_analyzer() -> ConfigCompetitorAnalyzer {
         let competitors = vec![
-            // Generic NBFC competitor with aliases
-            CompetitorInfo::new("nbfc_a", "NBFC Provider A", 12.0, CompetitorType::Nbfc)
+            // Generic NBFC competitor with aliases (using string type IDs)
+            CompetitorInfo::new("nbfc_a", "NBFC Provider A", 12.0, "nbfc")
                 .with_rate_range(12.0, 24.0)
                 .with_aliases(vec!["nbfca".to_string(), "Provider A".to_string()])
                 .with_strengths(vec!["Branch network".to_string()])
                 .with_weaknesses(vec!["Higher rates".to_string()]),
-            CompetitorInfo::new("nbfc_b", "NBFC Provider B", 12.0, CompetitorType::Nbfc),
-            CompetitorInfo::new("nbfc_c", "NBFC Provider C", 11.0, CompetitorType::Nbfc),
-            // Generic bank competitors
-            CompetitorInfo::new("bank_a", "Bank A", 10.5, CompetitorType::Bank),
-            CompetitorInfo::new("bank_b", "Bank B", 9.85, CompetitorType::Bank),
-            // Generic informal lender
-            CompetitorInfo::new("informal_lender", "Local Lender", 24.0, CompetitorType::Informal),
+            CompetitorInfo::new("nbfc_b", "NBFC Provider B", 12.0, "nbfc"),
+            CompetitorInfo::new("nbfc_c", "NBFC Provider C", 11.0, "nbfc"),
+            // Generic bank competitors (using string type IDs)
+            CompetitorInfo::new("bank_a", "Bank A", 10.5, "bank"),
+            CompetitorInfo::new("bank_b", "Bank B", 9.85, "bank"),
+            // Generic informal lender (using string type ID)
+            CompetitorInfo::new("informal_lender", "Local Lender", 24.0, "informal"),
         ];
 
         let comparison_points = vec![
@@ -447,7 +499,7 @@ mod tests {
             (f64::MAX, 9.5),
         ];
 
-        ConfigCompetitorAnalyzer::new(competitors, comparison_points, 10.5, rate_tiers)
+        ConfigCompetitorAnalyzer::for_testing(competitors, comparison_points, 10.5, rate_tiers)
     }
 
     #[test]
@@ -532,10 +584,14 @@ mod tests {
     fn test_default_rates() {
         let analyzer = test_analyzer();
 
-        // Default rates by competitor type
-        assert_eq!(analyzer.default_rate(CompetitorType::Nbfc), 18.0);
-        assert_eq!(analyzer.default_rate(CompetitorType::Bank), 11.0);
-        assert_eq!(analyzer.default_rate(CompetitorType::Informal), 24.0);
+        // Default rates by competitor type ID (config-driven approach)
+        assert_eq!(analyzer.default_rate_by_type_id("nbfc"), 18.0);
+        assert_eq!(analyzer.default_rate_by_type_id("bank"), 11.0);
+        assert_eq!(analyzer.default_rate_by_type_id("informal"), 24.0);
+
+        // Fallback rate for unknown types
+        assert_eq!(analyzer.fallback_rate(), 18.0);
+        assert_eq!(analyzer.default_rate_by_type_id("unknown_type"), 18.0);
     }
 
     #[test]
@@ -544,9 +600,24 @@ mod tests {
 
         let nbfc = analyzer.get_competitor("nbfc_a").unwrap();
         assert_eq!(nbfc.display_name, "NBFC Provider A");
-        assert_eq!(nbfc.competitor_type, CompetitorType::Nbfc);
+        // Use config-driven type ID
+        assert_eq!(nbfc.competitor_type_id, "nbfc");
         assert!(nbfc.rate_range.is_some());
         assert!(!nbfc.strengths.is_empty());
         assert!(!nbfc.weaknesses.is_empty());
+    }
+
+    #[test]
+    fn test_competitor_type_id_mapping() {
+        // Test that various type ID strings map correctly
+        let bank_competitor = CompetitorInfo::new("test_bank", "Test Bank", 10.0, "bank");
+        assert_eq!(bank_competitor.competitor_type_id, "bank");
+
+        let nbfc_competitor = CompetitorInfo::new("test_nbfc", "Test NBFC", 15.0, "nbfc");
+        assert_eq!(nbfc_competitor.competitor_type_id, "nbfc");
+
+        // Test custom/domain-specific type IDs work
+        let coop_competitor = CompetitorInfo::new("test_coop", "Test Coop", 12.0, "cooperative");
+        assert_eq!(coop_competitor.competitor_type_id, "cooperative");
     }
 }

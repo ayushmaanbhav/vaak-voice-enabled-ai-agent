@@ -4,6 +4,15 @@
 //! - Intent-based tool invocation
 //! - DST-enriched tool calls
 //! - Tool argument mapping and defaults
+//!
+//! # P20 FIX: Config-Driven Tool Resolution
+//!
+//! All intent-to-tool mappings and tool defaults now come from configuration:
+//! - `intent_tool_mappings.yaml` - Maps intents to tools with required/optional slots
+//! - `tools/schemas.yaml` - Tool definitions with default values
+//!
+//! Legacy hardcoded fallbacks have been removed. If config is missing,
+//! tools will not be called (fail-fast approach).
 
 use super::DomainAgent;
 use crate::agent_config::AgentEvent;
@@ -13,7 +22,9 @@ use voice_agent_tools::ToolExecutor;
 
 impl DomainAgent {
     /// Maybe call a tool based on intent
-    /// P16 FIX: Now uses config-driven intent-to-tool mappings
+    ///
+    /// P20 FIX: Fully config-driven - NO hardcoded fallback mappings.
+    /// All intent-to-tool mappings come from intent_tool_mappings.yaml.
     pub(super) async fn maybe_call_tool(
         &self,
         intent: &crate::intent::DetectedIntent,
@@ -21,7 +32,8 @@ impl DomainAgent {
         // Collect available slot names
         let available_slots: Vec<&str> = intent.slots.keys().map(|s| s.as_str()).collect();
 
-        // P16 FIX: Try config-driven intent-to-tool resolution first
+        // P20 FIX: Config-driven intent-to-tool resolution ONLY
+        // No hardcoded fallbacks - if config is missing, no tool is called
         let tool_name = self.domain_view
             .as_ref()
             .and_then(|view| {
@@ -29,56 +41,23 @@ impl DomainAgent {
                     view.resolve_tool_for_intent(&intent.intent, &available_slots)
                         .map(|s| s.to_string())
                 } else {
+                    // Log warning when config is missing
+                    tracing::warn!(
+                        intent = %intent.intent,
+                        "No intent-to-tool mappings configured. Check intent_tool_mappings.yaml"
+                    );
                     None
                 }
             })
             .or_else(|| {
-                // Legacy fallback mappings (used when no config mappings)
-                match intent.intent.as_str() {
-                    "eligibility_check" => {
-                        if intent.slots.contains_key("gold_weight") {
-                            Some("check_eligibility".to_string())
-                        } else {
-                            None
-                        }
-                    }
-                    "switch_lender" => {
-                        if intent.slots.contains_key("current_lender") {
-                            Some("calculate_savings".to_string())
-                        } else {
-                            None
-                        }
-                    }
-                    "schedule_visit" => Some("find_locations".to_string()),
-                    "capture_lead" | "interested" | "callback_request" => {
-                        if intent.slots.contains_key("customer_name")
-                            || intent.slots.contains_key("phone_number")
-                        {
-                            Some("capture_lead".to_string())
-                        } else {
-                            None
-                        }
-                    }
-                    "schedule_appointment" | "book_appointment" | "visit_branch" => {
-                        if intent.slots.contains_key("preferred_date")
-                            || intent.slots.contains_key("branch_id")
-                        {
-                            Some("schedule_appointment".to_string())
-                        } else {
-                            Some("find_locations".to_string())
-                        }
-                    }
-                    "gold_price" | "check_gold_price" | "price_inquiry" | "current_rate" => {
-                        Some("get_price".to_string())
-                    }
-                    "escalate" | "human_agent" | "speak_to_person" | "talk_to_human" | "real_person" => {
-                        Some("escalate_to_human".to_string())
-                    }
-                    "send_sms" | "send_message" | "text_me" | "send_details" | "sms_info" => {
-                        Some("send_sms".to_string())
-                    }
-                    _ => None,
+                // P20 FIX: No fallback - log and return None
+                if self.domain_view.is_none() {
+                    tracing::debug!(
+                        intent = %intent.intent,
+                        "DomainView not configured - tool resolution skipped"
+                    );
                 }
+                None
             });
 
         if let Some(name) = tool_name {
@@ -94,8 +73,8 @@ impl DomainAgent {
                 }
             }
 
-            // P16 FIX: Use config-driven tool defaults
-            // First try config-driven defaults, then fall back to hardcoded defaults
+            // P20 FIX: Config-driven tool defaults ONLY
+            // All defaults and argument mappings come from tools/schemas.yaml
             if let Some(view) = self.domain_view.as_ref() {
                 // Apply argument name mappings from config
                 if let Some(arg_mapping) = view.get_argument_mapping(&name) {
@@ -119,98 +98,23 @@ impl DomainAgent {
                         }
                     }
                 }
-            }
-
-            // Legacy fallback: Use hardcoded defaults from config struct if no domain_view
-            let defaults = &self.config.tool_defaults;
-
-            if name == "check_eligibility" && !args.contains_key("collateral_variant") && !args.contains_key("gold_purity") {
-                args.insert(
-                    "collateral_variant".to_string(),
-                    serde_json::json!(&defaults.default_gold_purity),
+            } else {
+                // P20 FIX: Log warning when domain view is not configured
+                tracing::warn!(
+                    tool = %name,
+                    "DomainView not configured - tool defaults not available. Check domain config."
                 );
             }
 
-            if name == "calculate_savings" {
-                if !args.contains_key("current_interest_rate") {
-                    args.insert(
-                        "current_interest_rate".to_string(),
-                        serde_json::json!(defaults.default_competitor_rate),
-                    );
-                }
-                if !args.contains_key("current_loan_amount") {
-                    args.insert(
-                        "current_loan_amount".to_string(),
-                        serde_json::json!(defaults.default_loan_amount),
-                    );
-                }
-                if !args.contains_key("remaining_tenure_months") {
-                    args.insert(
-                        "remaining_tenure_months".to_string(),
-                        serde_json::json!(defaults.default_tenure_months),
-                    );
-                }
-            }
+            // P20 FIX: Apply generic slot-to-argument mappings
+            // These are common mappings that don't depend on domain
+            self.apply_common_argument_mappings(&mut args);
 
-            if (name == "find_branches" || name == "find_locations") && !args.contains_key("city") {
-                args.insert(
-                    "city".to_string(),
-                    serde_json::json!(&defaults.default_city),
-                );
-            }
-
-            // P4 FIX: Handle capture_lead tool arguments
-            if name == "capture_lead" {
-                // Map slot names to tool parameter names
-                if args.contains_key("name") && !args.contains_key("customer_name") {
-                    if let Some(v) = args.remove("name") {
-                        args.insert("customer_name".to_string(), v);
-                    }
-                }
-                if args.contains_key("phone") && !args.contains_key("phone_number") {
-                    if let Some(v) = args.remove("phone") {
-                        args.insert("phone_number".to_string(), v);
-                    }
-                }
-                // Default interest level based on intent confidence
-                if !args.contains_key("interest_level") {
-                    let level = if intent.confidence > 0.8 {
-                        "High"
-                    } else {
-                        "Medium"
-                    };
-                    args.insert("interest_level".to_string(), serde_json::json!(level));
-                }
-            }
-
-            // P4 FIX: Handle schedule_appointment tool arguments
-            if name == "schedule_appointment" {
-                // Map slot names to tool parameter names
-                if args.contains_key("name") && !args.contains_key("customer_name") {
-                    if let Some(v) = args.remove("name") {
-                        args.insert("customer_name".to_string(), v);
-                    }
-                }
-                if args.contains_key("phone") && !args.contains_key("phone_number") {
-                    if let Some(v) = args.remove("phone") {
-                        args.insert("phone_number".to_string(), v);
-                    }
-                }
-                if args.contains_key("date") && !args.contains_key("preferred_date") {
-                    if let Some(v) = args.remove("date") {
-                        args.insert("preferred_date".to_string(), v);
-                    }
-                }
-                if args.contains_key("time") && !args.contains_key("preferred_time") {
-                    if let Some(v) = args.remove("time") {
-                        args.insert("preferred_time".to_string(), v);
-                    }
-                }
-                if args.contains_key("branch") && !args.contains_key("branch_id") {
-                    if let Some(v) = args.remove("branch") {
-                        args.insert("branch_id".to_string(), v);
-                    }
-                }
+            // P20 FIX: Interest level default based on intent confidence
+            // This is a generic behavior, not domain-specific
+            if !args.contains_key("interest_level") && name.contains("capture") {
+                let level = if intent.confidence > 0.8 { "High" } else { "Medium" };
+                args.insert("interest_level".to_string(), serde_json::json!(level));
             }
 
             let result = self
@@ -289,12 +193,16 @@ impl DomainAgent {
                 args.entry("city".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.get_slot_value("gold_weight") {
-                args.entry("gold_weight".to_string())
+            // P19 FIX: Try generic slot names first, then legacy names
+            // Generic names are defined in slots.yaml, legacy names for backwards compat
+            if let Some(val) = state.get_slot_value("asset_quantity")
+                .or_else(|| state.get_slot_value("collateral_weight")) {
+                args.entry("collateral_weight".to_string())
                     .or_insert(serde_json::json!(val));
             }
-            if let Some(val) = state.get_slot_value("gold_purity") {
-                args.entry("gold_purity".to_string())
+            if let Some(val) = state.get_slot_value("asset_quality")
+                .or_else(|| state.get_slot_value("collateral_variant")) {
+                args.entry("collateral_variant".to_string())
                     .or_insert(serde_json::json!(val));
             }
             if let Some(val) = state.get_slot_value("loan_amount") {
@@ -317,7 +225,7 @@ impl DomainAgent {
             }
         }
 
-        // P16 FIX: Apply config-driven defaults
+        // P20 FIX: Config-driven defaults ONLY
         if let Some(view) = self.domain_view.as_ref() {
             // Apply argument name mappings from config
             if let Some(arg_mapping) = view.get_argument_mapping(tool_name) {
@@ -341,47 +249,19 @@ impl DomainAgent {
                     }
                 }
             }
-        }
-
-        // Legacy fallback: Use hardcoded defaults
-        let defaults = &self.config.tool_defaults;
-
-        if tool_name == "check_eligibility" && !args.contains_key("collateral_variant") && !args.contains_key("gold_purity") {
-            args.insert(
-                "collateral_variant".to_string(),
-                serde_json::json!(&defaults.default_gold_purity),
+        } else {
+            // P20 FIX: Log warning when domain view is not configured
+            tracing::warn!(
+                tool = %tool_name,
+                "DomainView not configured - tool defaults not available. Check domain config."
             );
         }
 
-        if tool_name == "calculate_savings" {
-            if !args.contains_key("current_interest_rate") {
-                args.insert(
-                    "current_interest_rate".to_string(),
-                    serde_json::json!(defaults.default_competitor_rate),
-                );
-            }
-            if !args.contains_key("current_loan_amount") {
-                args.insert(
-                    "current_loan_amount".to_string(),
-                    serde_json::json!(defaults.default_loan_amount),
-                );
-            }
-            if !args.contains_key("remaining_tenure_months") {
-                args.insert(
-                    "remaining_tenure_months".to_string(),
-                    serde_json::json!(defaults.default_tenure_months),
-                );
-            }
-        }
+        // P20 FIX: Apply generic slot-to-argument mappings
+        self.apply_common_argument_mappings(&mut args);
 
-        if (tool_name == "find_branches" || tool_name == "find_locations") && !args.contains_key("city") {
-            args.insert(
-                "city".to_string(),
-                serde_json::json!(&defaults.default_city),
-            );
-        }
-
-        if tool_name == "capture_lead" && !args.contains_key("interest_level") {
+        // P20 FIX: Interest level default (generic behavior)
+        if tool_name.contains("capture") && !args.contains_key("interest_level") {
             // Default interest level to High for proactive capture
             args.insert("interest_level".to_string(), serde_json::json!("High"));
         }
@@ -419,6 +299,48 @@ impl DomainAgent {
             Err(e) => {
                 tracing::warn!("Proactive tool error: {}", e);
                 Ok(None)
+            }
+        }
+    }
+
+    /// Apply common slot-to-argument mappings
+    ///
+    /// P20 FIX: Uses config-driven common mappings when available.
+    /// Falls back to hardcoded mappings only when domain_view is not configured.
+    fn apply_common_argument_mappings(&self, args: &mut serde_json::Map<String, serde_json::Value>) {
+        // P20 FIX: Try config-driven common mappings first
+        if let Some(ref view) = self.domain_view {
+            let common_mappings = view.get_common_argument_mappings();
+            if !common_mappings.is_empty() {
+                let keys: Vec<String> = args.keys().cloned().collect();
+                for short_name in keys {
+                    if let Some(standard_name) = common_mappings.get(&short_name) {
+                        if !args.contains_key(standard_name) {
+                            if let Some(v) = args.remove(&short_name) {
+                                args.insert(standard_name.clone(), v);
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        // Fallback: hardcoded common mappings (deprecated - prefer config)
+        let common_mappings = [
+            ("name", "customer_name"),
+            ("phone", "phone_number"),
+            ("date", "preferred_date"),
+            ("time", "preferred_time"),
+            ("branch", "branch_id"),
+            ("location", "city"),
+        ];
+
+        for (short_name, standard_name) in common_mappings {
+            if args.contains_key(short_name) && !args.contains_key(standard_name) {
+                if let Some(v) = args.remove(short_name) {
+                    args.insert(standard_name.to_string(), v);
+                }
             }
         }
     }

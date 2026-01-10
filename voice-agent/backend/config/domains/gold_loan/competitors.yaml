@@ -220,23 +220,23 @@ competitors:
 # Comparison talking points
 comparison_points:
   - category: "Interest Rate"
-    our_advantage: "Starting from 9.5% p.a. vs 12-24% at NBFCs"
+    our_advantage: "Starting from {{our_best_rate}}% p.a. vs {{nbfc_rate_range}}% at NBFCs"
     highlight: true
 
   - category: "Regulatory Safety"
-    our_advantage: "RBI-regulated scheduled bank with strict security norms"
+    our_advantage: "{{regulator_name}}-regulated scheduled bank with strict security norms"
     highlight: true
 
   - category: "Loan-to-Value"
-    our_advantage: "Up to 75% of gold value (same as market)"
+    our_advantage: "Up to {{ltv_percent}}% of {{collateral_type}} value (same as market)"
     highlight: false
 
   - category: "Processing Time"
     our_advantage: "Same day disbursement with minimal documentation"
     highlight: true
 
-  - category: "Gold Security"
-    our_advantage: "Stored in RBI-regulated bank vaults with 24/7 security"
+  - category: "Asset Security"
+    our_advantage: "Stored in {{regulator_name}}-regulated bank vaults with 24/7 security"
     highlight: true
 
   - category: "Part Payment"
@@ -247,10 +247,10 @@ comparison_points:
     our_advantage: "Full online loan management via mobile app"
     highlight: false
 
-# Our (Kotak) features for comparison
+# Our features for comparison (P16 FIX: use variables for domain-agnostic config)
 our_features:
-  - "Competitive interest rate from 10.49% p.a."
-  - "Up to 75% LTV (Loan-to-Value)"
+  - "Competitive interest rate from {{our_standard_rate}}% p.a."
+  - "Up to {{ltv_percent}}% LTV (Loan-to-Value)"
   - "Same day disbursement"
   - "No hidden charges"
   - "Flexible repayment options"
@@ -264,3 +264,9 @@ defaults:
   nbfc_rate: 18.0
   local_lender_rate: 24.0
   bank_rate: 11.0
+
+# Comparison message templates by language
+# Placeholders: {currency}, {monthly_savings}, {total_savings}, {tenure_months}
+comparison_message_templates:
+  en: "You could save {currency}{monthly_savings} per month with us! That's {currency}{total_savings} total savings over {tenure_months} months."
+  hi: "आप हमारे साथ {currency}{monthly_savings} प्रति महीना बचा सकते हैं! कुल बचत {currency}{total_savings} होगी।"

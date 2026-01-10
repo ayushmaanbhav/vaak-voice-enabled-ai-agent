@@ -271,10 +271,11 @@ mod tests {
 
     #[test]
     fn test_retrieve_options_builder() {
+        // P21 FIX: Use domain-agnostic test data
         let options = RetrieveOptions::default()
             .with_top_k(10)
             .with_min_score(0.5)
-            .with_filter(MetadataFilter::eq("category", "gold_loan"))
+            .with_filter(MetadataFilter::eq("category", "test_domain"))
             .without_rerank();
 
         assert_eq!(options.top_k, 10);
@@ -285,7 +286,8 @@ mod tests {
 
     #[test]
     fn test_document_builder() {
-        let doc = Document::new("doc-1", "Gold loan eligibility criteria", 0.95)
+        // P21 FIX: Use domain-agnostic test data
+        let doc = Document::new("doc-1", "Service eligibility criteria", 0.95)
             .with_metadata("category", "eligibility")
             .with_source("knowledge_base.md");
 

@@ -59,72 +59,6 @@ pub mod objection_ids {
 }
 
 // =============================================================================
-// Backward Compatibility - Deprecated ObjectionType Enum
-// =============================================================================
-
-/// Types of objections (DEPRECATED - use string-based ObjectionId)
-///
-/// This enum is kept for backward compatibility only.
-/// New code should use string-based objection IDs from config.
-#[deprecated(note = "Use string-based ObjectionId from config instead")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ObjectionType {
-    Safety,
-    InterestRate,
-    GoldSecurity,
-    ProcessComplexity,
-    NeedTime,
-    CurrentLenderSatisfaction,
-    HiddenCharges,
-    Documentation,
-    TrustIssues,
-    Other,
-}
-
-#[allow(deprecated)]
-impl ObjectionType {
-    /// Convert to string ID
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Safety => "safety",
-            Self::InterestRate => "interest_rate",
-            Self::GoldSecurity => "gold_security",
-            Self::ProcessComplexity => "process_complexity",
-            Self::NeedTime => "need_time",
-            Self::CurrentLenderSatisfaction => "current_lender_satisfaction",
-            Self::HiddenCharges => "hidden_charges",
-            Self::Documentation => "documentation",
-            Self::TrustIssues => "trust_issues",
-            Self::Other => "other",
-        }
-    }
-
-    /// Parse from string ID
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "safety" => Self::Safety,
-            "interest_rate" => Self::InterestRate,
-            "gold_security" => Self::GoldSecurity,
-            "process_complexity" => Self::ProcessComplexity,
-            "need_time" => Self::NeedTime,
-            "current_lender_satisfaction" => Self::CurrentLenderSatisfaction,
-            "hidden_charges" => Self::HiddenCharges,
-            "documentation" => Self::Documentation,
-            "trust_issues" => Self::TrustIssues,
-            _ => Self::Other,
-        }
-    }
-
-    /// Detect from text (DEPRECATED - use ObjectionDetector)
-    #[deprecated(note = "Use ObjectionDetector::detect() for config-driven detection")]
-    pub fn detect(_text: &str) -> Self {
-        // Fallback - returns Other, use ObjectionDetector instead
-        Self::Other
-    }
-}
-
-// =============================================================================
 // PersuasionStrategy Trait (Domain-Agnostic)
 // =============================================================================
 
@@ -145,16 +79,6 @@ pub trait PersuasionStrategy: Send + Sync {
         objection_id: &str,
         language: Language,
     ) -> Option<ObjectionResponse>;
-
-    /// Get response for a specific objection type (deprecated enum)
-    #[allow(deprecated)]
-    fn get_response(
-        &self,
-        objection_type: ObjectionType,
-        language: Language,
-    ) -> Option<ObjectionResponse> {
-        self.get_response_by_id(objection_type.as_str(), language)
-    }
 
     /// Get value proposition for customer segment
     fn get_value_proposition(&self, segment: &str) -> Option<ValueProposition>;
@@ -490,16 +414,22 @@ impl PersuasionEngine {
     }
 
     /// Load competitor data from config
+    ///
+    /// P18 FIX: Savings unit amount now comes from config (currency.display_units.savings_unit)
+    /// instead of hardcoded 100,000 (lakh)
     fn load_competition_from_config(&mut self, view: &Arc<AgentDomainView>) {
         let competitors = view.competitors_config();
+
+        // P18 FIX: Use config-driven savings unit amount
+        let savings_unit = view.savings_unit_amount();
 
         for (competitor_id, competitor) in &competitors.competitors {
             let their_rate = competitor.typical_rate;
             let our_rate = self.our_base_rate;
 
-            // Calculate monthly savings per lakh
+            // Calculate monthly savings per unit (config-driven)
             let rate_diff = their_rate - our_rate;
-            let monthly_savings_per_lakh = (rate_diff / 100.0 / 12.0) * 100_000.0;
+            let monthly_savings_per_unit = (rate_diff / 100.0 / 12.0) * savings_unit;
 
             let advantages = competitor.weaknesses.clone();
 
@@ -510,8 +440,8 @@ impl PersuasionEngine {
                     name: competitor.display_name.clone(),
                     their_rate,
                     our_rate,
-                    monthly_savings_per_unit: monthly_savings_per_lakh,
-                    savings_unit_amount: 100_000.0,
+                    monthly_savings_per_unit,
+                    savings_unit_amount: savings_unit,
                     our_advantages: advantages,
                 },
             );
@@ -768,14 +698,6 @@ mod tests {
         assert_eq!(savings.rate_difference, 8.0);
         assert!(savings.monthly_savings > 0.0);
         assert!(savings.annual_savings > savings.monthly_savings);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn test_objection_type_backward_compat() {
-        assert_eq!(ObjectionType::Safety.as_str(), "safety");
-        assert_eq!(ObjectionType::from_str("interest_rate"), ObjectionType::InterestRate);
-        assert_eq!(ObjectionType::from_str("unknown"), ObjectionType::Other);
     }
 
     #[test]

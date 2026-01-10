@@ -202,13 +202,75 @@ impl ToolCallTracker {
 // Use create_registry_with_view() instead.
 
 // =============================================================================
-// P13 FIX: Domain Config Wiring via ToolsDomainView
+// P22 FIX: Factory-Based Tool Creation (Preferred)
+// =============================================================================
+
+use voice_agent_core::traits::{ToolFactory, ToolFactoryError};
+
+/// P22 FIX: Create registry using ToolFactory
+///
+/// This is the PREFERRED way to create a tool registry.
+/// All tools are defined in YAML config and created by the factory.
+///
+/// # Example
+///
+/// ```ignore
+/// use voice_agent_tools::factory::{DomainToolFactory, ToolIntegrations};
+/// use voice_agent_tools::registry::create_registry_from_factory;
+///
+/// let factory = Arc::new(DomainToolFactory::with_integrations(config, integrations));
+/// let registry = create_registry_from_factory(factory)?;
+/// ```
+pub fn create_registry_from_factory(
+    factory: Arc<dyn ToolFactory>,
+) -> Result<ToolRegistry, ToolFactoryError> {
+    let mut registry = ToolRegistry::new();
+
+    // Create all tools defined in config
+    let tools = factory.create_all_tools()?;
+
+    for tool in tools {
+        registry.register_boxed(tool);
+    }
+
+    tracing::info!(
+        domain = factory.domain_name(),
+        tool_count = registry.len(),
+        "Created tool registry from factory"
+    );
+
+    Ok(registry)
+}
+
+/// P22 FIX: Create registry for a domain with full configuration
+///
+/// Convenience function that creates a DomainToolFactory and uses it to build the registry.
+pub fn create_registry_for_domain(
+    config: Arc<voice_agent_config::MasterDomainConfig>,
+    integrations: crate::factory::ToolIntegrations,
+) -> Result<ToolRegistry, ToolFactoryError> {
+    let factory = Arc::new(crate::factory::DomainToolFactory::with_integrations(
+        config,
+        integrations,
+    ));
+
+    create_registry_from_factory(factory)
+}
+
+// =============================================================================
+// P13 FIX: Domain Config Wiring via ToolsDomainView (Legacy - use factory instead)
 // =============================================================================
 
 /// P15 FIX: Create registry with REQUIRED ToolsDomainView configuration
 ///
 /// Uses ToolsDomainView for all configurable values (rates, LTV, competitor info).
-/// This is the ONLY way to create a tool registry - domain config is mandatory.
+///
+/// DEPRECATED: Use `create_registry_from_factory` instead for true domain-agnosticism.
+#[deprecated(
+    since = "0.25.0",
+    note = "Use create_registry_from_factory with DomainToolFactory for config-driven tool creation"
+)]
+#[allow(deprecated)]
 pub fn create_registry_with_view(
     view: Arc<voice_agent_config::ToolsDomainView>,
 ) -> ToolRegistry {
@@ -678,14 +740,15 @@ mod tests {
         let config = IntegrationConfig::with_stubs(view);
         let registry = create_registry_with_integrations(config);
 
+        // P20 FIX: Tool names now come from config (domain-agnostic)
         // Should have all 10 tools
         assert_eq!(registry.len(), 10);
         assert!(registry.has("check_eligibility"));
         assert!(registry.has("calculate_savings"));
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
-        assert!(registry.has("find_branches"));
-        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("find_locations")); // Config-driven name (was find_branches)
+        assert!(registry.has("get_price")); // Config-driven name (was get_gold_price)
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
         assert!(registry.has("get_document_checklist"));
@@ -698,11 +761,12 @@ mod tests {
         let config = IntegrationConfig::new(view);
         let registry = create_registry_with_integrations(config);
 
+        // P20 FIX: Tool names now come from config (domain-agnostic)
         // Should still have all 10 tools (just without integrations)
         assert_eq!(registry.len(), 10);
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
-        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("get_price")); // Config-driven name (was get_gold_price)
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
         assert!(registry.has("get_document_checklist"));
@@ -714,14 +778,15 @@ mod tests {
         let view = test_view();
         let registry = create_registry_with_view(view);
 
+        // P20 FIX: Tool names now come from config (domain-agnostic)
         // Registry should have all 10 tools
         assert_eq!(registry.len(), 10);
         assert!(registry.has("check_eligibility"));
         assert!(registry.has("calculate_savings"));
         assert!(registry.has("capture_lead"));
         assert!(registry.has("schedule_appointment"));
-        assert!(registry.has("find_branches"));
-        assert!(registry.has("get_gold_price"));
+        assert!(registry.has("find_locations")); // Config-driven name (was find_branches)
+        assert!(registry.has("get_price")); // Config-driven name (was get_gold_price)
         assert!(registry.has("escalate_to_human"));
         assert!(registry.has("send_sms"));
         assert!(registry.has("get_document_checklist"));

@@ -1,5 +1,133 @@
 # Gold Loan Domain - Lead Scoring Configuration
 # P16 FIX: Config-driven signal mappings for domain-agnostic lead scoring
+# P20 FIX: Added classification rules for MQL/SQL determination
+# P22 FIX: Added score_categories for DynamicScoreBreakdown support
+
+# =============================================================================
+# P22 FIX: Dynamic Score Categories
+# =============================================================================
+# These define the scoring categories for DynamicScoreBreakdown.
+# New domains can add/remove/modify categories without code changes.
+score_categories:
+  urgency:
+    display_name: "Urgency"
+    display_name_hi: "तत्कालता"
+    max_score: 25
+    weight: 1.0
+    description: "How urgently the customer needs the loan"
+
+  engagement:
+    display_name: "Engagement"
+    display_name_hi: "संलग्नता"
+    max_score: 25
+    weight: 1.0
+    description: "Level of customer engagement in the conversation"
+
+  information:
+    display_name: "Information"
+    display_name_hi: "जानकारी"
+    max_score: 25
+    weight: 1.0
+    description: "Completeness of customer information provided"
+
+  intent:
+    display_name: "Intent"
+    display_name_hi: "इरादा"
+    max_score: 25
+    weight: 1.0
+    description: "Strength of customer's intent to proceed"
+
+# How signals contribute to each category
+category_signal_mappings:
+  urgency:
+    - signal: has_urgency_signal
+      points: 10
+    - signal: urgency_keywords_count
+      points_per_unit: 5
+      max_units: 3
+
+  engagement:
+    - signal: engagement_turns
+      points_per_unit: 3
+      max_units: 5
+    - signal: questions_asked
+      points_per_unit: 2
+      max_units: 3
+    - signal: asked_about_rates
+      points: 3
+    - signal: asked_for_comparison
+      points: 3
+
+  information:
+    - signal: provided_contact_info
+      points: 8
+    - signal: provided_asset_details
+      points: 8
+    - signal: provided_loan_amount
+      points: 5
+    - signal: has_specific_requirements
+      points: 4
+
+  intent:
+    - signal: expressed_intent_to_proceed
+      points: 15
+    - signal: requested_callback
+      points: 5
+    - signal: requested_branch_visit
+      points: 8
+    - signal: trust_level
+      lookup: trust_scores
+
+# Penalty signals (applied to total score)
+penalty_signals:
+  - signal: expressed_disinterest
+    penalty: -15
+  - signal: mentioned_competitor_preference
+    penalty: -10
+  - signal: requested_human_agent
+    penalty: -5
+  - signal: unresolved_objections
+    penalty_per_unit: -3
+
+# Classification rules for MQL/SQL determination
+# These replace the hardcoded rules in lead_scoring.rs
+classification:
+  # SQL (Sales Qualified Lead) criteria
+  # All required_flags must be true for SQL classification
+  sql:
+    required_flags:
+      - has_urgency_signal
+      - provided_contact_info
+      - has_specific_requirements
+
+  # MQL (Marketing Qualified Lead) criteria
+  # All required thresholds must be met AND at least one any_of flag must be true
+  mql:
+    thresholds:
+      engagement_turns: 3  # Minimum engagement turns
+    any_of:
+      - asked_about_rates
+      - asked_for_comparison
+
+# Escalation triggers
+escalation:
+  triggers:
+    - id: too_many_objections
+      signal: objections_raised
+      threshold: 3
+      priority: 1
+      message: "Customer has raised multiple objections"
+
+    - id: human_requested
+      signal: requested_human_agent
+      priority: 0  # Highest priority
+      message: "Customer explicitly requested human agent"
+
+    - id: conversation_stalled
+      signal: conversation_stalled_turns
+      threshold: 4
+      priority: 2
+      message: "Conversation appears to be stalling"
 
 # Intent to signal mappings
 # Maps detected intents to lead scoring signals to update
@@ -160,3 +288,80 @@ qualification_thresholds:
   hot: 70       # >= 70: Hot lead, ready to convert
   warm: 40      # >= 40: Warm lead, needs nurturing
   cold: 0       # < 40: Cold lead, low intent
+  qualified: 80 # >= 80: Fully qualified lead
+
+# P21 FIX: Detailed score calculation weights
+# These replace the hardcoded values in lead_scoring.rs calculate_breakdown()
+
+# Category multipliers (how much weight each category has in total score)
+weights:
+  urgency: 1.0
+  engagement: 1.0
+  information: 1.0
+  intent: 1.0
+
+# Urgency score calculation
+# Max possible: max_score
+urgency:
+  max_score: 25
+  has_signal_score: 10       # Points when has_urgency_signal is true
+  per_keyword_score: 5       # Points per urgency keyword detected
+  max_keywords: 3            # Cap on keywords counted
+
+# Engagement score calculation
+# Max possible: max_score
+engagement:
+  max_score: 25
+  per_turn_score: 3          # Points per engagement turn
+  max_turns: 5               # Cap on turns counted
+  per_question_score: 2      # Points per question asked
+  max_questions: 3           # Cap on questions counted
+  rates_inquiry_score: 3     # Points for asking about rates
+  comparison_score: 3        # Points for asking for comparison
+
+# Information completeness score
+# Max possible: max_score
+information:
+  max_score: 25
+  contact_info_score: 8      # Points for providing contact info
+  asset_details_score: 8     # Points for providing asset/collateral details
+  loan_amount_score: 5       # Points for providing loan amount
+  specific_requirements_score: 4  # Points for having specific requirements
+
+# Intent strength score
+# Max possible: max_score
+intent:
+  max_score: 25
+  intent_to_proceed_score: 15  # Points for expressing intent to proceed
+  callback_request_score: 5    # Points for requesting callback
+  branch_visit_score: 8        # Points for requesting branch visit
+
+# Trust level scores (used in intent calculation)
+trust_scores:
+  unknown: 0
+  low: 5
+  medium: 10
+  high: 15
+
+# Penalty scores (negative values)
+penalties:
+  disinterest: -15                   # Penalty for expressing disinterest
+  competitor_preference: -10         # Penalty for mentioning competitor preference
+  human_request: -5                  # Penalty for requesting human agent
+  per_unresolved_objection: -3       # Penalty per unresolved objection
+
+# P21 FIX: Conversion probability multipliers
+# Used by estimate_conversion_probability()
+conversion_multipliers:
+  unqualified: 0.5
+  mql: 0.8
+  sql: 1.2
+  intent_to_proceed: 1.2
+  disinterest: 0.3
+  max_probability: 0.95
+
+# Escalation trigger configuration
+escalation:
+  max_objections: 3
+  max_stalled_turns: 5
+  high_value_threshold: 1000000.0  # 10 lakh INR

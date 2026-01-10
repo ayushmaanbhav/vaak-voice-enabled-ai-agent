@@ -54,9 +54,11 @@ fn default_precision() -> u32 {
 
 impl Default for RateRules {
     fn default() -> Self {
+        // Use sentinel values that work for any domain
+        // Actual rate bounds should be loaded from compliance.yaml
         Self {
-            min_rate: 7.0,  // Minimum gold loan rate
-            max_rate: 24.0, // Maximum gold loan rate
+            min_rate: 0.1,   // Technical minimum (any positive rate)
+            max_rate: 100.0, // Technical maximum (no rate above 100%)
             precision: 2,
         }
     }
@@ -129,75 +131,27 @@ pub fn load_rules(path: &str) -> Result<ComplianceRules, String> {
     toml::from_str(&content).map_err(|e| format!("Failed to parse rules file: {}", e))
 }
 
-/// Get default compliance rules for banking
+/// Get default compliance rules (domain-agnostic)
+///
+/// Returns minimal defaults. For production use, load from compliance.yaml:
+/// ```ignore
+/// let compliance_config = ComplianceConfig::load("config/domains/{domain}/compliance.yaml")?;
+/// let rules = compliance_config.to_rules();
+/// ```
 pub fn default_rules() -> ComplianceRules {
+    // Domain-agnostic defaults - all domain-specific rules come from config
     ComplianceRules {
         version: "1.0.0".to_string(),
-        forbidden_phrases: vec![
-            // Absolute guarantees (not allowed)
-            "guaranteed approval".to_string(),
-            "guaranteed lowest rate".to_string(),
-            "100% approval".to_string(),
-            "no rejection".to_string(),
-            "sure approval".to_string(),
-            // Misleading claims
-            "free loan".to_string(),
-            "zero interest".to_string(),
-            "no fees".to_string(),
-            // Competitor disparagement
-            "fraud".to_string(),
-            "scam".to_string(),
-            "cheating".to_string(),
-        ],
-        claims_requiring_disclaimer: vec![
-            ClaimRule {
-                pattern: r"(?i)lowest.{0,10}rate".to_string(),
-                disclaimer: "Interest rates are subject to change and depend on various factors including loan amount and tenure.".to_string(),
-                description: "Claims about lowest rates".to_string(),
-            },
-            ClaimRule {
-                pattern: r"(?i)instant.{0,10}(approval|disbursement)".to_string(),
-                disclaimer: "Subject to document verification and eligibility criteria.".to_string(),
-                description: "Claims about instant processing".to_string(),
-            },
-            ClaimRule {
-                pattern: r"(?i)best.{0,10}(offer|deal|rate)".to_string(),
-                disclaimer: "Terms and conditions apply.".to_string(),
-                description: "Claims about best offers".to_string(),
-            },
-            ClaimRule {
-                pattern: r"\d+(\.\d+)?\s*%".to_string(),
-                disclaimer: "Interest rate is subject to change. Please refer to the latest rate card.".to_string(),
-                description: "Any rate mention".to_string(),
-            },
-        ],
+        // Empty - load from compliance.yaml:forbidden_phrases
+        forbidden_phrases: vec![],
+        // Empty - load from compliance.yaml:claims_requiring_disclaimer
+        claims_requiring_disclaimer: vec![],
+        // Sentinel values - load actual bounds from compliance.yaml:rate_rules
         rate_rules: RateRules::default(),
-        required_disclosures: vec![
-            RequiredDisclosure {
-                trigger_pattern: r"(?i)(loan|interest|emi)".to_string(),
-                disclosure: "".to_string(), // Only add on explicit loan discussion
-                position: "end".to_string(),
-            },
-        ],
-        // P16 FIX: These are FALLBACK defaults for gold loan domain
-        // For production, load competitors from CompetitorsConfig:
-        //   let config = CompetitorsConfig::load("config/domains/gold_loan/competitors.yaml")?;
-        //   let competitors = config.all_names_and_aliases().iter().map(|s| s.to_string()).collect();
-        //   CompetitorRules { competitors, allow_disparagement: false, allow_comparison: true }
-        competitor_rules: CompetitorRules {
-            competitors: vec![
-                // Gold loan NBFCs (fallback defaults)
-                "Muthoot".to_string(),
-                "Manappuram".to_string(),
-                "IIFL".to_string(),
-                // Banks (fallback defaults)
-                "HDFC".to_string(),
-                "SBI".to_string(),
-                "ICICI".to_string(),
-            ],
-            allow_disparagement: false,
-            allow_comparison: true,
-        },
+        // Empty - load from compliance.yaml:required_disclosures
+        required_disclosures: vec![],
+        // Empty - load competitor names from competitors.yaml via CompetitorsConfig
+        competitor_rules: CompetitorRules::default(),
     }
 }
 

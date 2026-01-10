@@ -72,8 +72,10 @@ pub use agent_config::{
 };
 // Phase 2: PersuasionStrategy trait for domain-agnostic persuasion handling
 pub use persuasion::{
-    CompetitorComparison, ObjectionResponse, ObjectionType, PersuasionEngine, PersuasionScript,
+    CompetitorComparison, ObjectionResponse, PersuasionEngine, PersuasionScript,
     PersuasionStrategy, SwitchSavings, ValueProposition,
+    // Config-driven objection handling
+    ObjectionDetector, objection_ids,
 };
 pub use voice_session::{VoiceSession, VoiceSessionConfig, VoiceSessionEvent, VoiceSessionState};
 // P1-1 FIX: Export Agent traits
@@ -86,8 +88,8 @@ pub use dst::{
     SlotValue, StateChange, UrgencyLevel,
     // Domain-agnostic traits and types
     DialogueState, DialogueStateTracking, DynamicDialogueState,
-    // Config-driven purity types
-    PurityId, purity_ids, parse_purity_id, format_purity_display,
+    // Config-driven quality tier types
+    QualityTierId, quality_tier_ids,
 };
 // Phase 10: Export Lead Scoring types
 pub use lead_scoring::{

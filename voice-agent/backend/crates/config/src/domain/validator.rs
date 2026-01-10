@@ -13,7 +13,7 @@
 //! use voice_agent_config::domain::ConfigValidator;
 //!
 //! let validator = ConfigValidator::new();
-//! let result = validator.validate_domain("gold_loan", &config)?;
+//! let result = validator.validate_domain(&domain_id, &config)?;
 //! ```
 
 use std::collections::HashSet;

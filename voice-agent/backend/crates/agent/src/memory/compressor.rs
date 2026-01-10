@@ -34,7 +34,7 @@ pub struct ExtractiveCompressorConfig {
     pub max_tokens: usize,
     /// Include DST state summary at the beginning
     pub include_dst_summary: bool,
-    /// Priority entities for gold loan domain
+    /// Priority entities (domain-agnostic canonical names; domain aliases loaded from config)
     pub priority_entities: Vec<String>,
 }
 
@@ -48,9 +48,10 @@ impl Default for ExtractiveCompressorConfig {
             recency_decay: 0.92,
             max_tokens: 800,
             include_dst_summary: true,
-            // P16 FIX: Support both domain-specific and generic slot names
+            // P18 FIX: Only canonical domain-agnostic slot names.
+            // Domain-specific aliases are resolved via slot aliasing at runtime.
+            // See: slots.yaml canonical_name field for domain-specific → canonical mappings
             priority_entities: vec![
-                // Generic slot names (domain-agnostic)
                 "asset_quantity".to_string(),
                 "asset_quality".to_string(),
                 "amount".to_string(),
@@ -59,11 +60,6 @@ impl Default for ExtractiveCompressorConfig {
                 "competitor".to_string(),
                 "interest_rate".to_string(),
                 "preferred_branch".to_string(),
-                // Domain-specific aliases (gold loan)
-                "gold_weight".to_string(),
-                "loan_amount".to_string(),
-                "gold_purity".to_string(),
-                "current_lender".to_string(),
             ],
         }
     }
@@ -127,12 +123,21 @@ impl ExtractionStats {
 ///
 /// This compressor selects the most relevant sentences from conversation
 /// history based on entity density, intent relevance, and recency.
+///
+/// P18 FIX: All domain-specific keywords, entity patterns, intent mappings,
+/// and slot display names are now loaded from config.
 pub struct ExtractiveCompressor {
     config: ExtractiveCompressorConfig,
-    /// Domain-specific keywords for scoring
+    /// Domain-specific keywords for scoring (loaded from config)
     domain_keywords: HashSet<String>,
-    /// Entity patterns for detection
+    /// Entity patterns for detection (loaded from config)
     entity_patterns: HashMap<String, Vec<String>>,
+    /// Intent keywords for relevance scoring (loaded from config)
+    intent_keywords: HashMap<String, Vec<String>>,
+    /// Slot display mappings (loaded from config)
+    slot_display_mappings: HashMap<String, String>,
+    /// Filler patterns by language (loaded from config)
+    filler_patterns: HashSet<String>,
 }
 
 impl Default for ExtractiveCompressor {
@@ -143,46 +148,194 @@ impl Default for ExtractiveCompressor {
 
 impl ExtractiveCompressor {
     /// Create a new extractive compressor with configuration
+    ///
+    /// NOTE: This creates a compressor with empty config-driven fields.
+    /// For production use, prefer `from_view()` which loads from domain config.
     pub fn new(config: ExtractiveCompressorConfig) -> Self {
+        // Initialize with empty collections - use from_view() for config-driven setup
+        Self {
+            config,
+            domain_keywords: HashSet::new(),
+            entity_patterns: HashMap::new(),
+            intent_keywords: HashMap::new(),
+            slot_display_mappings: HashMap::new(),
+            filler_patterns: HashSet::new(),
+        }
+    }
+
+    /// Create a config-driven extractive compressor from domain view
+    ///
+    /// P18 FIX: All domain-specific keywords, patterns, and mappings are loaded
+    /// from the memory_compressor section of domain.yaml.
+    pub fn from_view(
+        config: ExtractiveCompressorConfig,
+        view: &voice_agent_config::domain::AgentDomainView,
+    ) -> Self {
+        let mc = view.memory_compressor_config();
+
+        // 1. Build domain keywords from config
         let mut domain_keywords = HashSet::new();
-        // Gold loan domain keywords (English + Hindi/Hinglish)
-        for kw in &[
-            "gold", "loan", "rate", "interest", "emi", "branch", "weight",
-            "gram", "grams", "tola", "purity", "karat", "22k", "24k", "18k",
-            "sona", "karj", "byaj", "rin", "gehne", "jewelry",
-            "lakh", "crore", "rupees", "amount", "kotak", "muthoot", "manappuram",
-            "eligibility", "document", "disbursal", "repayment", "tenure",
-        ] {
-            domain_keywords.insert(kw.to_string());
+        for kw in &mc.domain_keywords.product_terms {
+            domain_keywords.insert(kw.to_lowercase());
+        }
+        for kw in &mc.domain_keywords.unit_terms {
+            domain_keywords.insert(kw.to_lowercase());
+        }
+        for kw in &mc.domain_keywords.quality_terms {
+            domain_keywords.insert(kw.to_lowercase());
+        }
+        for kw in &mc.domain_keywords.regional_terms {
+            domain_keywords.insert(kw.to_lowercase());
         }
 
-        // P16 FIX: Entity patterns use generic names, with domain-specific aliases
-        let mut entity_patterns = HashMap::new();
-        // Generic: asset_quantity (gold_weight is a domain alias)
-        entity_patterns.insert(
-            "asset_quantity".to_string(),
-            vec!["gram".to_string(), "grams".to_string(), "gm".to_string(), "tola".to_string()],
-        );
-        // Generic: amount (loan_amount is a domain alias)
-        entity_patterns.insert(
-            "amount".to_string(),
-            vec!["lakh".to_string(), "crore".to_string(), "rupees".to_string(), "rs".to_string()],
-        );
-        // Generic: asset_quality (gold_purity is a domain alias)
-        entity_patterns.insert(
-            "asset_quality".to_string(),
-            vec!["22k".to_string(), "24k".to_string(), "18k".to_string(), "karat".to_string()],
-        );
-        // Generic: competitor (current_lender is a domain alias)
-        entity_patterns.insert(
-            "competitor".to_string(),
-            vec!["muthoot".to_string(), "manappuram".to_string(), "iifl".to_string(), "hdfc".to_string(), "sbi".to_string()],
-        );
+        // Optionally include competitor names from config
+        if mc.domain_keywords.include_competitor_names {
+            for name in view.all_competitor_names() {
+                domain_keywords.insert(name.to_lowercase());
+            }
+        }
+
+        // Optionally include brand/company name
+        if mc.domain_keywords.include_brand_name {
+            domain_keywords.insert(view.company_name().to_lowercase());
+        }
+
+        // 2. Build entity patterns from config
+        let entity_patterns: HashMap<String, Vec<String>> = mc
+            .entity_patterns
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    v.patterns.iter().map(|s| s.to_lowercase()).collect(),
+                )
+            })
+            .collect();
+
+        // 3. Build intent keywords from config
+        let mut intent_keywords: HashMap<String, Vec<String>> = HashMap::new();
+        for (intent, ik_config) in &mc.intent_keywords {
+            let mut patterns: Vec<String> = ik_config
+                .patterns
+                .iter()
+                .map(|s| s.to_lowercase())
+                .collect();
+
+            // Optionally add competitor aliases for competitor-related intents
+            if ik_config.include_competitor_aliases {
+                for name in view.all_competitor_names() {
+                    patterns.push(name.to_lowercase());
+                }
+            }
+
+            intent_keywords.insert(intent.clone(), patterns);
+        }
+
+        // 4. Build slot display mappings from config
+        let mut slot_display_mappings: HashMap<String, String> = HashMap::new();
+        for (slot_name, sd_config) in &mc.slot_display_mappings {
+            // Primary mapping
+            slot_display_mappings.insert(slot_name.clone(), sd_config.display.clone());
+            // Alias mappings
+            for alias in &sd_config.aliases {
+                slot_display_mappings.insert(alias.clone(), sd_config.display.clone());
+            }
+        }
+
+        // 5. Build filler patterns from config
+        let filler_patterns: HashSet<String> = mc
+            .filler_patterns
+            .values()
+            .flatten()
+            .map(|s| s.to_lowercase())
+            .collect();
 
         Self {
             config,
             domain_keywords,
             entity_patterns,
+            intent_keywords,
+            slot_display_mappings,
+            filler_patterns,
+        }
+    }
+
+    /// Create with fallback defaults (for backward compatibility without config)
+    ///
+    /// DEPRECATED: Use from_view() for config-driven initialization
+    #[deprecated(since = "2.0.0", note = "Use from_view() with domain config")]
+    pub fn with_defaults(config: ExtractiveCompressorConfig) -> Self {
+        let mut domain_keywords = HashSet::new();
+        // Fallback domain keywords (English + Hindi/Hinglish)
+        for kw in &[
+            "rate", "interest", "emi", "branch", "weight",
+            "gram", "grams", "tola", "quality", "eligibility",
+            "document", "disbursal", "repayment", "tenure", "amount",
+        ] {
+            domain_keywords.insert(kw.to_string());
+        }
+
+        // Fallback entity patterns (generic names only)
+        let mut entity_patterns = HashMap::new();
+        entity_patterns.insert(
+            "asset_quantity".to_string(),
+            vec!["gram".to_string(), "grams".to_string(), "gm".to_string(), "tola".to_string()],
+        );
+        entity_patterns.insert(
+            "amount".to_string(),
+            vec!["amount".to_string()],
+        );
+        entity_patterns.insert(
+            "asset_quality".to_string(),
+            vec!["quality".to_string(), "tier".to_string()],
+        );
+
+        // Fallback intent keywords (generic)
+        let mut intent_keywords = HashMap::new();
+        intent_keywords.insert(
+            "rate_inquiry".to_string(),
+            vec!["rate".to_string(), "interest".to_string(), "percent".to_string()],
+        );
+        intent_keywords.insert(
+            "product_inquiry".to_string(),
+            vec!["borrow".to_string(), "get".to_string()],
+        );
+        intent_keywords.insert(
+            "eligibility".to_string(),
+            vec!["eligible".to_string(), "qualify".to_string()],
+        );
+        intent_keywords.insert(
+            "branch".to_string(),
+            vec!["branch".to_string(), "location".to_string(), "visit".to_string()],
+        );
+
+        // Fallback slot display mappings
+        let mut slot_display_mappings = HashMap::new();
+        slot_display_mappings.insert("asset_quantity".to_string(), "Asset".to_string());
+        slot_display_mappings.insert("amount".to_string(), "Amount".to_string());
+        slot_display_mappings.insert("asset_quality".to_string(), "Quality".to_string());
+        slot_display_mappings.insert("customer_name".to_string(), "Name".to_string());
+        slot_display_mappings.insert("phone_number".to_string(), "Phone".to_string());
+        slot_display_mappings.insert("competitor".to_string(), "Competitor".to_string());
+        slot_display_mappings.insert("interest_rate".to_string(), "Rate".to_string());
+        slot_display_mappings.insert("preferred_branch".to_string(), "Branch".to_string());
+
+        // Fallback filler patterns
+        let filler_patterns: HashSet<String> = [
+            "hello", "hi", "thank you", "thanks", "okay", "ok",
+            "yes", "no", "sure", "alright", "great", "i see", "understood",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+        Self {
+            config,
+            domain_keywords,
+            entity_patterns,
+            intent_keywords,
+            slot_display_mappings,
+            filler_patterns,
         }
     }
 
@@ -407,8 +560,8 @@ impl ExtractiveCompressor {
             score *= 0.5;
         }
 
-        // 8. Penalize common filler patterns
-        if is_filler_sentence(&sentence_lower) {
+        // 8. Penalize common filler patterns (P18 FIX: config-driven)
+        if self.is_filler_sentence(&sentence_lower) {
             score *= 0.3;
         }
 
@@ -422,18 +575,11 @@ impl ExtractiveCompressor {
     }
 
     /// Check if intent keywords match the sentence
+    ///
+    /// P18 FIX: Uses config-driven intent_keywords instead of hardcoded mappings
     fn intent_matches_sentence(&self, intent: &str, sentence: &str) -> bool {
-        // Map intents to related keywords
-        let intent_keywords: HashMap<&str, Vec<&str>> = [
-            ("rate_inquiry", vec!["rate", "interest", "byaj", "percent"]),
-            ("loan_inquiry", vec!["loan", "borrow", "karj", "rin"]),
-            ("eligibility", vec!["eligible", "qualify", "can i get"]),
-            ("branch", vec!["branch", "location", "nearby", "visit"]),
-            ("competitor", vec!["muthoot", "manappuram", "better", "compare"]),
-            ("amount", vec!["how much", "kitna", "amount", "value"]),
-        ].into_iter().collect();
-
-        for (key, keywords) in intent_keywords.iter() {
+        // Check config-driven intent keywords
+        for (key, keywords) in &self.intent_keywords {
             if intent.contains(key) {
                 return keywords.iter().any(|kw| sentence.contains(kw));
             }
@@ -474,6 +620,8 @@ impl ExtractiveCompressor {
     }
 
     /// Compress with DST state from DynamicDialogueState
+    ///
+    /// P18 FIX: Uses config-driven slot_display_mappings instead of hardcoded match
     pub fn compress_with_dst_slots(
         &self,
         turns: &[ConversationTurn],
@@ -485,21 +633,15 @@ impl ExtractiveCompressor {
                 .iter()
                 .filter(|(_, v)| !v.is_empty())
                 .map(|(k, v)| {
-                    // P16 FIX: Support both generic and domain-specific slot names
-                    let display_key = match k.as_str() {
-                        // Generic names first, then domain-specific aliases
-                        "asset_quantity" | "gold_weight" | "weight" => "Asset",
-                        "amount" | "loan_amount" => "Amount",
-                        "asset_quality" | "gold_purity" | "purity" => "Quality",
-                        "customer_name" | "name" => "Name",
-                        "phone_number" | "phone" => "Phone",
-                        "competitor" | "current_lender" => "Competitor",
-                        "interest_rate" | "rate" => "Rate",
-                        "preferred_branch" | "branch" => "Branch",
-                        "urgency" => "Urgency",
-                        "purpose" | "loan_purpose" => "Purpose",
-                        _ => k.as_str(),
-                    };
+                    // P18 FIX: Use config-driven slot display mappings
+                    let display_key = self
+                        .slot_display_mappings
+                        .get(k)
+                        .map(|s| s.as_str())
+                        .unwrap_or_else(|| {
+                            // Fallback: capitalize first letter of slot name
+                            k.as_str()
+                        });
                     format!("{}={}", display_key, v)
                 })
                 .collect();
@@ -509,6 +651,25 @@ impl ExtractiveCompressor {
         };
 
         self.compress(turns, dst_summary.as_deref())
+    }
+
+    /// Check if sentence is a common filler/greeting
+    ///
+    /// P18 FIX: Uses config-driven filler_patterns instead of hardcoded array
+    fn is_filler_sentence(&self, sentence: &str) -> bool {
+        let sentence_trimmed = sentence.trim();
+
+        // Check if sentence is just a filler
+        for pattern in &self.filler_patterns {
+            if sentence_trimmed == pattern
+                || (sentence_trimmed.starts_with(pattern)
+                    && sentence_trimmed.len() < pattern.len() + 5)
+            {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -528,27 +689,6 @@ fn estimate_tokens(text: &str) -> usize {
         // English-heavy text: roughly 1 token per 4 characters
         grapheme_count.max(1) / 4
     }
-}
-
-/// Check if sentence is a common filler/greeting
-fn is_filler_sentence(sentence: &str) -> bool {
-    let filler_patterns = [
-        "hello", "hi", "namaste", "good morning", "good afternoon",
-        "thank you", "thanks", "dhanyavaad", "okay", "ok", "hmm",
-        "yes", "no", "haan", "nahi", "ji", "achha", "theek hai",
-        "i see", "understood", "sure", "alright", "great",
-    ];
-
-    let sentence_trimmed = sentence.trim();
-
-    // Check if sentence is just a filler
-    for pattern in &filler_patterns {
-        if sentence_trimmed == *pattern || sentence_trimmed.starts_with(pattern) && sentence_trimmed.len() < pattern.len() + 5 {
-            return true;
-        }
-    }
-
-    false
 }
 
 #[cfg(test)]
@@ -777,11 +917,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_is_filler_sentence() {
-        assert!(is_filler_sentence("hello"));
-        assert!(is_filler_sentence("thank you"));
-        assert!(is_filler_sentence("ok"));
-        assert!(!is_filler_sentence("I need a gold loan of 5 lakh"));
-        assert!(!is_filler_sentence("What is the interest rate?"));
+        // P18 FIX: Use compressor with fallback defaults for testing
+        let compressor = ExtractiveCompressor::with_defaults(ExtractiveCompressorConfig::default());
+        assert!(compressor.is_filler_sentence("hello"));
+        assert!(compressor.is_filler_sentence("thank you"));
+        assert!(compressor.is_filler_sentence("ok"));
+        assert!(!compressor.is_filler_sentence("I need a gold loan of 5 lakh"));
+        assert!(!compressor.is_filler_sentence("What is the interest rate?"));
     }
 }

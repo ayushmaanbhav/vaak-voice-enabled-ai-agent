@@ -611,8 +611,8 @@ intent_mapping:
         assert!(missing.contains(&"current_lender"));
         assert!(missing.contains(&"loan_amount"));
 
-        // Fill one slot
-        state.set_slot_value("current_lender", "Muthoot", 0.9);
+        // P23 FIX: Use generic provider name - actual values come from domain config
+        state.set_slot_value("current_lender", "competitor_1", 0.9);
         let missing = state.missing_required_slots();
         assert_eq!(missing.len(), 1);
         assert!(missing.contains(&"loan_amount"));
@@ -640,8 +640,8 @@ intent_mapping:
             _ => panic!("Expected AskFor action"),
         }
 
-        // Fill required slots -> call completion action
-        state.set_slot_value("current_lender", "Muthoot", 0.9);
+        // P23 FIX: Use generic provider name - actual values come from domain config
+        state.set_slot_value("current_lender", "competitor_1", 0.9);
         state.set_slot_value("loan_amount", "500000", 0.9);
         assert_eq!(
             state.next_best_action(),
@@ -667,8 +667,8 @@ intent_mapping:
         // No slots filled
         assert_eq!(state.completion_for_goal("balance_transfer"), 0.0);
 
-        // One of two required slots
-        state.set_slot_value("current_lender", "Muthoot", 0.9);
+        // P23 FIX: Use generic provider name - actual values come from domain config
+        state.set_slot_value("current_lender", "competitor_1", 0.9);
         assert!((state.completion_for_goal("balance_transfer") - 0.5).abs() < 0.01);
 
         // Both required slots

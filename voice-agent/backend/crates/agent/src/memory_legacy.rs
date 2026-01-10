@@ -261,10 +261,10 @@ impl ConversationMemory {
         let end_ms = entries.last().map(|e| e.timestamp_ms).unwrap_or(0);
         let topics: Vec<String> = entries.iter().flat_map(|e| e.intents.clone()).collect();
 
-        // Create summarization prompt
+        // P21 FIX: Domain-agnostic summarization prompt
         let prompt = format!(
-            r#"Summarize this gold loan conversation segment concisely (1-2 sentences).
-Focus on: customer needs, loan details mentioned, any concerns raised.
+            r#"Summarize this conversation segment concisely (1-2 sentences).
+Focus on: customer needs, product details mentioned, any concerns raised.
 
 Conversation:
 {}

@@ -380,14 +380,15 @@ mod tests {
 
     #[test]
     fn test_intent() {
-        let intent = Intent::new("request_loan", 0.95)
-            .with_slot("loan_type", "gold_loan")
+        // P21 FIX: Use domain-agnostic test data
+        let intent = Intent::new("service_request", 0.95)
+            .with_slot("service_type", "test_service")
             .with_slot("amount", "100000");
 
         assert_eq!(intent.slots.len(), 2);
         assert_eq!(
-            intent.slots.get("loan_type"),
-            Some(&"gold_loan".to_string())
+            intent.slots.get("service_type"),
+            Some(&"test_service".to_string())
         );
     }
 }

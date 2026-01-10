@@ -336,6 +336,9 @@ pub struct StageManager {
     /// P0 FIX: Track detected intents for stage requirement validation
     detected_intents: Mutex<Vec<String>>,
     requirements: HashMap<ConversationStage, StageRequirements>,
+    /// P19 FIX: Config-driven slot aliases for requirement checking
+    /// Maps slot names to their aliases (e.g., "gold_weight" -> "asset_quantity")
+    slot_aliases: HashMap<String, String>,
 }
 
 impl StageManager {
@@ -348,6 +351,8 @@ impl StageManager {
             collected_info: Mutex::new(HashMap::new()),
             detected_intents: Mutex::new(Vec::new()),
             requirements: Self::default_requirements(),
+            // P19 FIX: Empty aliases - use from_config() for config-driven aliases
+            slot_aliases: HashMap::new(),
         }
     }
 
@@ -379,7 +384,23 @@ impl StageManager {
             collected_info: Mutex::new(HashMap::new()),
             detected_intents: Mutex::new(Vec::new()),
             requirements,
+            // P19 FIX: Empty aliases - use from_slots_config() for full config
+            slot_aliases: HashMap::new(),
         }
+    }
+
+    /// P19 FIX: Create a stage manager with requirements and slot aliases from config
+    ///
+    /// This is the recommended constructor for production use. It loads:
+    /// - Stage requirements from StagesConfig
+    /// - Slot aliases from SlotsConfig for domain-agnostic requirement checking
+    pub fn from_slots_config(
+        stages_config: &voice_agent_config::domain::StagesConfig,
+        slots_config: &voice_agent_config::domain::SlotsConfig,
+    ) -> Self {
+        let mut manager = Self::from_config(stages_config);
+        manager.slot_aliases = slots_config.slot_aliases.clone();
+        manager
     }
 
     /// Get default stage requirements
@@ -540,22 +561,35 @@ impl StageManager {
             return true;
         }
 
-        // Check known aliases (generic ↔ domain-specific mappings)
-        let aliases: &[&str] = match key {
-            // Generic → domain-specific
-            "asset_quantity" => &["gold_weight", "gold_weight_grams", "weight"],
-            "asset_quality" => &["gold_purity", "purity", "karat"],
-            "competitor" => &["current_lender", "other_bank"],
-            "amount" => &["loan_amount", "requested_amount"],
-            // Domain-specific → generic
-            "gold_weight" | "gold_weight_grams" => &["asset_quantity"],
-            "gold_purity" | "purity" => &["asset_quality"],
-            "current_lender" => &["competitor"],
-            "loan_amount" => &["amount"],
-            _ => &[],
-        };
+        // P19 FIX: Check config-driven slot aliases
+        // First check if key maps to a canonical name via config aliases
+        if let Some(canonical) = self.slot_aliases.get(key) {
+            if info.contains_key(canonical) {
+                return true;
+            }
+        }
 
-        aliases.iter().any(|alias| info.contains_key(*alias))
+        // Check if any alias of the key exists in collected info
+        for (alias, canonical) in &self.slot_aliases {
+            if canonical == key && info.contains_key(alias) {
+                return true;
+            }
+        }
+
+        // Fallback: check hardcoded aliases only when no config aliases available
+        // These are only used when slot_aliases is empty (backwards compat)
+        if self.slot_aliases.is_empty() {
+            let fallback_aliases: &[&str] = match key {
+                "asset_quantity" => &["weight"],
+                "asset_quality" => &["quality"],
+                "competitor" => &["provider"],
+                "amount" => &["value"],
+                _ => &[],
+            };
+            return fallback_aliases.iter().any(|alias| info.contains_key(*alias));
+        }
+
+        false
     }
 
     /// Transition to a new stage

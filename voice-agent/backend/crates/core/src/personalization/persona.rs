@@ -5,7 +5,23 @@
 //! - Warmth level (empathy, friendliness)
 //! - Language style (simple/sophisticated)
 //! - Response patterns
+//!
+//! # Domain-Agnostic Design
+//!
+//! The `for_segment()` and `system_prompt_instructions()` methods are DEPRECATED.
+//! New code should use `PersonaProvider` trait for config-driven personas:
+//!
+//! ```ignore
+//! // OLD: Hardcoded enum-based (deprecated)
+//! let persona = Persona::for_segment(CustomerSegment::HighValue);
+//!
+//! // NEW: Config-driven via PersonaProvider
+//! let config = persona_provider.persona_for_segment("high_value")?;
+//! let persona = Persona::from_persona_config(&config);
+//! let instructions = persona_provider.build_instructions(&config, "en");
+//! ```
 
+use crate::traits::PersonaConfig;
 use crate::CustomerSegment;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +42,33 @@ pub enum Tone {
 }
 
 impl Tone {
+    /// Create Tone from string identifier
+    ///
+    /// Parses tone strings from config (e.g., "formal", "professional", "friendly", "casual")
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "formal" => Some(Tone::Formal),
+            "professional" => Some(Tone::Professional),
+            "friendly" => Some(Tone::Friendly),
+            "casual" => Some(Tone::Casual),
+            _ => None,
+        }
+    }
+
+    /// Get tone ID string (for config compatibility)
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Tone::Formal => "formal",
+            Tone::Professional => "professional",
+            Tone::Friendly => "friendly",
+            Tone::Casual => "casual",
+        }
+    }
+
     /// Get greeting prefix for this tone
+    ///
+    /// # Deprecated
+    /// Use `persona_provider.greeting_prefix(tone_id, language)` for config-driven phrases
     pub fn greeting_prefix(&self) -> &'static str {
         match self {
             Tone::Formal => "Respected",
@@ -37,6 +79,9 @@ impl Tone {
     }
 
     /// Get closing phrase for this tone
+    ///
+    /// # Deprecated
+    /// Use `persona_provider.closing_phrase(tone_id, language)` for config-driven phrases
     pub fn closing_phrase(&self) -> &'static str {
         match self {
             Tone::Formal => "Thank you for your valuable time.",
@@ -61,6 +106,29 @@ pub enum LanguageComplexity {
     Sophisticated,
 }
 
+impl LanguageComplexity {
+    /// Create from string identifier
+    ///
+    /// Parses complexity strings from config (e.g., "simple", "moderate", "sophisticated")
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "simple" => Some(LanguageComplexity::Simple),
+            "moderate" => Some(LanguageComplexity::Moderate),
+            "sophisticated" => Some(LanguageComplexity::Sophisticated),
+            _ => None,
+        }
+    }
+
+    /// Get complexity ID string (for config compatibility)
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            LanguageComplexity::Simple => "simple",
+            LanguageComplexity::Moderate => "moderate",
+            LanguageComplexity::Sophisticated => "sophisticated",
+        }
+    }
+}
+
 /// Response urgency level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -75,6 +143,31 @@ pub enum ResponseUrgency {
     Efficient,
     /// Quick responses, highlighting urgency
     Urgent,
+}
+
+impl ResponseUrgency {
+    /// Create from string identifier
+    ///
+    /// Parses urgency strings from config (e.g., "relaxed", "normal", "efficient", "urgent")
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "relaxed" => Some(ResponseUrgency::Relaxed),
+            "normal" => Some(ResponseUrgency::Normal),
+            "efficient" => Some(ResponseUrgency::Efficient),
+            "urgent" => Some(ResponseUrgency::Urgent),
+            _ => None,
+        }
+    }
+
+    /// Get urgency ID string (for config compatibility)
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ResponseUrgency::Relaxed => "relaxed",
+            ResponseUrgency::Normal => "normal",
+            ResponseUrgency::Efficient => "efficient",
+            ResponseUrgency::Urgent => "urgent",
+        }
+    }
 }
 
 /// Agent persona configuration
@@ -128,7 +221,64 @@ impl Persona {
         }
     }
 
+    /// Create persona from config-driven PersonaConfig
+    ///
+    /// This is the preferred method for creating personas from config.
+    /// Use with `PersonaProvider::persona_for_segment()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let config = persona_provider.persona_for_segment("high_value")?;
+    /// let persona = Persona::from_persona_config(&config);
+    /// ```
+    pub fn from_persona_config(config: &PersonaConfig) -> Self {
+        Self {
+            name: config.name.clone(),
+            tone: Tone::from_str(&config.tone).unwrap_or_default(),
+            warmth: config.warmth,
+            empathy: config.empathy,
+            language_complexity: LanguageComplexity::from_str(&config.language_complexity)
+                .unwrap_or_default(),
+            urgency: ResponseUrgency::from_str(&config.urgency).unwrap_or_default(),
+            use_customer_name: config.use_customer_name,
+            acknowledge_emotions: config.acknowledge_emotions,
+            use_hinglish: config.use_hinglish,
+            max_response_words: config.max_response_words,
+        }
+    }
+
+    /// Convert Persona to PersonaConfig (for trait compatibility)
+    pub fn to_persona_config(&self) -> PersonaConfig {
+        PersonaConfig {
+            name: self.name.clone(),
+            tone: self.tone.to_str().to_string(),
+            warmth: self.warmth,
+            empathy: self.empathy,
+            language_complexity: self.language_complexity.to_str().to_string(),
+            urgency: self.urgency.to_str().to_string(),
+            use_customer_name: self.use_customer_name,
+            acknowledge_emotions: self.acknowledge_emotions,
+            use_hinglish: self.use_hinglish,
+            max_response_words: self.max_response_words,
+        }
+    }
+
     /// Create persona optimized for a customer segment
+    ///
+    /// # Deprecated
+    ///
+    /// Use `PersonaProvider::persona_for_segment(segment_id)` for config-driven personas.
+    /// This hardcoded method is retained for backward compatibility only.
+    ///
+    /// ## Migration
+    /// ```ignore
+    /// // OLD: Hardcoded
+    /// let persona = Persona::for_segment(CustomerSegment::HighValue);
+    ///
+    /// // NEW: Config-driven
+    /// let config = persona_provider.persona_for_segment("high_value")?;
+    /// let persona = Persona::from_persona_config(&config);
+    /// ```
     pub fn for_segment(segment: CustomerSegment) -> Self {
         match segment {
             CustomerSegment::HighValue => Self {
@@ -243,6 +393,21 @@ impl Persona {
     }
 
     /// Get system prompt instructions for this persona
+    ///
+    /// # Deprecated
+    ///
+    /// Use `PersonaProvider::build_instructions(config, language)` for config-driven instructions.
+    /// This hardcoded method is retained for backward compatibility only.
+    ///
+    /// ## Migration
+    /// ```ignore
+    /// // OLD: Hardcoded
+    /// let instructions = persona.system_prompt_instructions();
+    ///
+    /// // NEW: Config-driven
+    /// let config = persona.to_persona_config();
+    /// let instructions = persona_provider.build_instructions(&config, "en");
+    /// ```
     pub fn system_prompt_instructions(&self) -> String {
         let mut instructions: Vec<String> = Vec::new();
 

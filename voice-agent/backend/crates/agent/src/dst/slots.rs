@@ -2,48 +2,32 @@
 //!
 //! Core types for dialogue state tracking, shared across all domain implementations.
 //! The actual dialogue state implementation is in `DynamicDialogueState`.
+//!
+//! P18 FIX: Quality tier system is now domain-agnostic. Use `quality_tier_ids` module
+//! instead of domain-specific `purity_ids`. Parsing and display formatting are now
+//! config-driven via `SlotsConfig::parse_quality_tier()` and `format_quality_display()`.
 
 use serde::{Deserialize, Serialize};
 
-/// Purity ID - string-based identifier for asset purity (config-driven)
-/// Example IDs: "24k", "22k", "18k", "14k" for gold
-/// Purity factors are defined in config/domains/{domain}/slots.yaml
-pub type PurityId = String;
+// ============================================================================
+// P18 FIX: Generic Quality Tier System (Domain-Agnostic)
+// ============================================================================
 
-/// Common purity IDs for gold (reference - actual factors come from config)
-pub mod purity_ids {
-    pub const K24: &str = "24k";
-    pub const K22: &str = "22k";
-    pub const K18: &str = "18k";
-    pub const K14: &str = "14k";
+/// Quality Tier ID - string-based identifier for asset quality (config-driven)
+/// Example IDs: "tier_1", "tier_2", "tier_3", "tier_4"
+/// Quality factors are defined in config/domains/{domain}/slots.yaml
+pub type QualityTierId = String;
+
+/// Generic quality tier IDs (domain-agnostic)
+///
+/// P18 FIX: Use these generic tier names instead of domain-specific names.
+/// The actual display names and quality factors come from config.
+pub mod quality_tier_ids {
+    pub const TIER_1: &str = "tier_1";
+    pub const TIER_2: &str = "tier_2";
+    pub const TIER_3: &str = "tier_3";
+    pub const TIER_4: &str = "tier_4";
     pub const UNKNOWN: &str = "unknown";
-}
-
-/// Parse purity ID from free text
-pub fn parse_purity_id(text: &str) -> &'static str {
-    let lower = text.to_lowercase();
-    if lower.contains("24") {
-        purity_ids::K24
-    } else if lower.contains("22") {
-        purity_ids::K22
-    } else if lower.contains("18") {
-        purity_ids::K18
-    } else if lower.contains("14") {
-        purity_ids::K14
-    } else {
-        purity_ids::UNKNOWN
-    }
-}
-
-/// Format purity ID for display
-pub fn format_purity_display(purity_id: &str) -> &'static str {
-    match purity_id {
-        "24k" => "24 karat",
-        "22k" => "22 karat",
-        "18k" => "18 karat",
-        "14k" => "14 karat",
-        _ => "unknown purity",
-    }
 }
 
 /// Goal ID - string-based goal identifier (config-driven)
@@ -248,17 +232,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_purity_parsing() {
-        assert_eq!(parse_purity_id("24k gold"), purity_ids::K24);
-        assert_eq!(parse_purity_id("22 karat"), purity_ids::K22);
-        assert_eq!(parse_purity_id("18kt"), purity_ids::K18);
-        assert_eq!(parse_purity_id("pure gold"), purity_ids::UNKNOWN);
-    }
-
-    #[test]
-    fn test_purity_display() {
-        assert_eq!(format_purity_display(purity_ids::K24), "24 karat");
-        assert_eq!(format_purity_display(purity_ids::K22), "22 karat");
+    fn test_quality_tier_ids() {
+        // Verify quality tier IDs are available
+        assert_eq!(quality_tier_ids::TIER_1, "tier_1");
+        assert_eq!(quality_tier_ids::TIER_2, "tier_2");
+        assert_eq!(quality_tier_ids::TIER_3, "tier_3");
+        assert_eq!(quality_tier_ids::TIER_4, "tier_4");
+        assert_eq!(quality_tier_ids::UNKNOWN, "unknown");
     }
 
     #[test]

@@ -1,8 +1,47 @@
 //! Customer profile and segmentation types
+//!
+//! # Domain-Agnostic Design
+//!
+//! The CustomerSegment enum is DEPRECATED. New code should use String-based
+//! segment IDs loaded from config (segments.yaml). This allows domains to
+//! define their own segments without code changes.
+//!
+//! ## Migration Guide
+//!
+//! ```ignore
+//! // OLD: Hardcoded enum (deprecated)
+//! let segment = CustomerSegment::HighValue;
+//! let warmth = segment.suggested_warmth();
+//!
+//! // NEW: Config-driven via SegmentId and PersonaProvider
+//! let segment_id = "high_value";
+//! let warmth = persona_provider.suggested_warmth(segment_id);
+//! let key_messages = persona_provider.key_messages(segment_id, "en");
+//! ```
 
 use serde::{Deserialize, Serialize};
 
+/// Segment ID type alias for config-driven segment identification
+///
+/// Use this instead of CustomerSegment enum for new code.
+/// Segment IDs are loaded from config/domains/{domain}/segments.yaml
+pub type SegmentId = String;
+
 /// Customer segment for personalization
+///
+/// # Deprecated
+///
+/// This enum is deprecated in favor of config-driven segment IDs (String).
+/// Use `SegmentId` (String) and `PersonaProvider` trait for new code.
+///
+/// The enum is retained for backward compatibility during migration.
+/// New segments should be defined in segments.yaml, not added here.
+///
+/// ## Migration
+///
+/// - Replace `CustomerSegment::HighValue` with `"high_value".to_string()`
+/// - Replace `segment.key_messages()` with `persona_provider.key_messages(segment_id, language)`
+/// - Replace `segment.suggested_warmth()` with `persona_provider.suggested_warmth(segment_id)`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CustomerSegment {
@@ -21,7 +60,71 @@ pub enum CustomerSegment {
 }
 
 impl CustomerSegment {
+    /// Convert enum variant to config-compatible segment ID string
+    ///
+    /// Use this to bridge between legacy enum code and config-driven systems.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let segment = CustomerSegment::HighValue;
+    /// let segment_id = segment.to_segment_id(); // Returns "high_value"
+    /// let key_messages = persona_provider.key_messages(&segment_id, "en");
+    /// ```
+    pub fn to_segment_id(&self) -> SegmentId {
+        match self {
+            CustomerSegment::HighValue => "high_value".to_string(),
+            CustomerSegment::TrustSeeker => "trust_seeker".to_string(),
+            CustomerSegment::FirstTime => "first_time".to_string(),
+            CustomerSegment::PriceSensitive => "price_sensitive".to_string(),
+            CustomerSegment::Women => "women".to_string(),
+            CustomerSegment::Professional => "professional".to_string(),
+        }
+    }
+
+    /// Create enum variant from segment ID string (for backward compatibility)
+    ///
+    /// Returns None if the segment ID doesn't match any known enum variant.
+    /// This is expected for config-defined segments that aren't in the enum.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let segment_id = "high_value";
+    /// if let Some(segment) = CustomerSegment::from_segment_id(segment_id) {
+    ///     // Use legacy enum-based code
+    /// } else {
+    ///     // Config-only segment, use PersonaProvider
+    /// }
+    /// ```
+    pub fn from_segment_id(id: &str) -> Option<Self> {
+        match id {
+            "high_value" => Some(CustomerSegment::HighValue),
+            "trust_seeker" => Some(CustomerSegment::TrustSeeker),
+            "first_time" => Some(CustomerSegment::FirstTime),
+            "price_sensitive" => Some(CustomerSegment::PriceSensitive),
+            "women" => Some(CustomerSegment::Women),
+            "professional" => Some(CustomerSegment::Professional),
+            _ => None, // Config-only segment, not in enum
+        }
+    }
+
+    /// Get all segment IDs that have enum representations
+    ///
+    /// Note: Config may define additional segments not in this list.
+    pub fn all_segment_ids() -> Vec<SegmentId> {
+        vec![
+            "high_value".to_string(),
+            "trust_seeker".to_string(),
+            "first_time".to_string(),
+            "price_sensitive".to_string(),
+            "women".to_string(),
+            "professional".to_string(),
+        ]
+    }
+
     /// Get segment display name (generic - override with config for domain-specific names)
+    ///
+    /// # Deprecated
+    /// Use `segments_config.get_segment(segment_id).display_name` instead
     pub fn display_name(&self) -> &'static str {
         match self {
             CustomerSegment::HighValue => "High Value",
@@ -35,8 +138,12 @@ impl CustomerSegment {
 
     /// Get generic key messaging points for this segment.
     ///
-    /// NOTE: For domain-specific messaging, load from config via
-    /// `MasterDomainConfig::segment_messages()` instead of using these defaults.
+    /// # Deprecated
+    ///
+    /// Use `persona_provider.key_messages(segment_id, language)` instead.
+    /// Config-driven messages come from segments.yaml and support localization.
+    ///
+    /// These hardcoded messages are generic fallbacks only.
     pub fn key_messages(&self) -> Vec<&'static str> {
         match self {
             CustomerSegment::HighValue => vec![
@@ -79,6 +186,13 @@ impl CustomerSegment {
     }
 
     /// Get suggested persona warmth level (0.0 - 1.0)
+    ///
+    /// # Deprecated
+    ///
+    /// Use `persona_provider.suggested_warmth(segment_id)` instead.
+    /// Config-driven warmth comes from segments.yaml persona.warmth field.
+    ///
+    /// These hardcoded values are generic fallbacks only.
     pub fn suggested_warmth(&self) -> f32 {
         match self {
             CustomerSegment::HighValue => 0.9,
@@ -120,12 +234,14 @@ pub struct CustomerProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_lender: Option<String>,
 
-    /// Collateral weight in units (e.g., grams for gold)
-    #[serde(skip_serializing_if = "Option::is_none", alias = "gold_weight")]
+    /// Collateral weight in units (domain-specific, e.g., grams)
+    /// P23 FIX: Removed domain-specific alias "gold_weight"
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub collateral_weight: Option<f64>,
 
-    /// Collateral variant/grade (e.g., "22K", "24K" for gold)
-    #[serde(skip_serializing_if = "Option::is_none", alias = "gold_purity")]
+    /// Collateral variant/grade (domain-specific, e.g., quality tier)
+    /// P23 FIX: Removed domain-specific alias "gold_purity"
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub collateral_variant: Option<String>,
 
     /// Current/desired loan amount
@@ -760,7 +876,8 @@ mod tests {
         let segment = CustomerSegment::TrustSeeker;
         let messages = segment.key_messages();
         assert!(!messages.is_empty());
-        assert!(messages.iter().any(|m| m.contains("RBI")));
+        // P20 FIX: Check for generic security messaging (domain-specific content in config)
+        assert!(messages.iter().any(|m| m.contains("Regulated") || m.contains("Secure") || m.contains("insurance")));
     }
 
     // P3-2 FIX: Tests for SegmentDetector
@@ -812,17 +929,25 @@ mod tests {
     fn test_segment_detector_trust_seeker() {
         let detector = SegmentDetector::new();
 
+        // P20 FIX: Use generic trust-related patterns (domain-specific patterns in config)
         assert_eq!(
-            detector.detect_from_text("Is my gold safe with you?"),
+            detector.detect_from_text("Is it safe to keep my assets with you?"),
             Some(CustomerSegment::TrustSeeker)
         );
 
+        // Security concerns
         assert_eq!(
-            detector.detect_from_text("I had issues with Muthoot before"),
+            detector.detect_from_text("How is security handled at your vault?"),
             Some(CustomerSegment::TrustSeeker)
         );
 
-        // RBI mention
+        // Past issues (generic)
+        assert_eq!(
+            detector.detect_from_text("I had issues with another provider before"),
+            Some(CustomerSegment::TrustSeeker)
+        );
+
+        // Regulator mention
         assert_eq!(
             detector.detect_from_text("Are you RBI regulated?"),
             Some(CustomerSegment::TrustSeeker)

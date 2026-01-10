@@ -783,7 +783,7 @@ impl SpeculativeExecutor {
         // 2. Check coherence with conversation context
         let coherence = self.estimate_coherence(draft, messages);
 
-        // 3. Check domain relevance (for gold loan context)
+        // 3. Check domain relevance (P21 FIX: domain-agnostic)
         let relevance = self.estimate_domain_relevance(draft);
 
         // Weighted combination

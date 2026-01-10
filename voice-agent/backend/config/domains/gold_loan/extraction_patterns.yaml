@@ -1,0 +1,414 @@
+# Gold Loan Domain - Extraction Patterns Configuration
+# P21 FIX: Config-driven text patterns for domain-agnostic slot extraction
+#
+# This file contains domain-specific patterns for extracting entities from text.
+# Each domain can define its own patterns, allowing the slot extraction engine
+# to work with any product type (gold loans, car loans, insurance, etc.)
+
+# Asset quality/purity patterns
+# For gold loans: karat values (24K, 22K, etc.)
+# For car loans: condition grades (excellent, good, fair)
+# For insurance: risk tiers (low, medium, high)
+asset_quality:
+  tiers:
+    - id: tier_1
+      display_name: "24K Pure Gold"
+      patterns:
+        en:
+          - "24\\s*(?:k|karat|carat|kt)"
+          - "pure\\s*gold"
+        hi:
+          - "24\\s*(?:k|कैरेट)"
+          - "शुद्ध\\s*सोना"
+      value: "24"
+      confidence: 0.85
+
+    - id: tier_2
+      display_name: "22K Gold"
+      patterns:
+        en:
+          - "22\\s*(?:k|karat|carat|kt)"
+          - "hallmark(?:ed)?"
+        hi:
+          - "22\\s*(?:k|कैरेट)"
+          - "हॉलमार्क"
+      value: "22"
+      confidence: 0.85
+      default: true  # Assume 22K if hallmarked or no quality specified
+
+    - id: tier_3
+      display_name: "18K Gold"
+      patterns:
+        en:
+          - "18\\s*(?:k|karat|carat|kt)"
+        hi:
+          - "18\\s*(?:k|कैरेट)"
+      value: "18"
+      confidence: 0.85
+
+    - id: tier_4
+      display_name: "14K Gold"
+      patterns:
+        en:
+          - "14\\s*(?:k|karat|carat|kt)"
+        hi:
+          - "14\\s*(?:k|कैरेट)"
+      value: "14"
+      confidence: 0.85
+
+  # Validation range for quality values
+  validation:
+    min: 10
+    max: 24
+    unit: "karat"
+
+# Location/city patterns
+# Supported cities for branch visits or service coverage
+locations:
+  cities:
+    # Tier 1 metros
+    - name: "Mumbai"
+      aliases: ["Bombay", "Mumbay"]
+      pattern_en: "mumbai|bombay|mumbay"
+      pattern_hi: "मुंबई|बॉम्बे"
+    - name: "Delhi"
+      aliases: ["New Delhi", "NCR", "Dilli"]
+      pattern_en: "delhi|dilli|new\\s*delhi|ncr"
+      pattern_hi: "दिल्ली|नई\\s*दिल्ली"
+    - name: "Bangalore"
+      aliases: ["Bengaluru", "Bangaluru"]
+      pattern_en: "bangalore|bengaluru|bangaluru"
+      pattern_hi: "बैंगलोर|बेंगलुरु"
+    - name: "Chennai"
+      aliases: ["Madras"]
+      pattern_en: "chennai|madras"
+      pattern_hi: "चेन्नई|मद्रास"
+    - name: "Hyderabad"
+      aliases: []
+      pattern_en: "hyderabad"
+      pattern_hi: "हैदराबाद"
+    - name: "Kolkata"
+      aliases: ["Calcutta"]
+      pattern_en: "kolkata|calcutta"
+      pattern_hi: "कोलकाता|कलकत्ता"
+    - name: "Pune"
+      aliases: ["Poona"]
+      pattern_en: "pune|poona"
+      pattern_hi: "पुणे"
+    - name: "Ahmedabad"
+      aliases: []
+      pattern_en: "ahmedabad"
+      pattern_hi: "अहमदाबाद"
+
+    # Tier 2 cities
+    - name: "Jaipur"
+      pattern_en: "jaipur"
+      pattern_hi: "जयपुर"
+    - name: "Surat"
+      pattern_en: "surat"
+      pattern_hi: "सूरत"
+    - name: "Lucknow"
+      pattern_en: "lucknow"
+      pattern_hi: "लखनऊ"
+    - name: "Kanpur"
+      pattern_en: "kanpur"
+      pattern_hi: "कानपुर"
+    - name: "Nagpur"
+      pattern_en: "nagpur"
+      pattern_hi: "नागपुर"
+    - name: "Indore"
+      pattern_en: "indore"
+      pattern_hi: "इंदौर"
+    - name: "Thane"
+      pattern_en: "thane"
+      pattern_hi: "ठाणे"
+    - name: "Bhopal"
+      pattern_en: "bhopal"
+      pattern_hi: "भोपाल"
+    - name: "Visakhapatnam"
+      aliases: ["Vizag"]
+      pattern_en: "visakhapatnam|vizag"
+      pattern_hi: "विशाखापत्तनम"
+    - name: "Patna"
+      pattern_en: "patna"
+      pattern_hi: "पटना"
+    - name: "Vadodara"
+      aliases: ["Baroda"]
+      pattern_en: "vadodara|baroda"
+      pattern_hi: "वडोदरा"
+    - name: "Ghaziabad"
+      pattern_en: "ghaziabad"
+      pattern_hi: "गाजियाबाद"
+    - name: "Ludhiana"
+      pattern_en: "ludhiana"
+      pattern_hi: "लुधियाना"
+    - name: "Agra"
+      pattern_en: "agra"
+      pattern_hi: "आगरा"
+    - name: "Nashik"
+      aliases: ["Nasik"]
+      pattern_en: "nashik|nasik"
+      pattern_hi: "नासिक"
+    - name: "Faridabad"
+      pattern_en: "faridabad"
+      pattern_hi: "फरीदाबाद"
+    - name: "Meerut"
+      pattern_en: "meerut"
+      pattern_hi: "मेरठ"
+    - name: "Rajkot"
+      pattern_en: "rajkot"
+      pattern_hi: "राजकोट"
+    - name: "Varanasi"
+      aliases: ["Banaras", "Kashi"]
+      pattern_en: "varanasi|banaras|kashi"
+      pattern_hi: "वाराणसी|बनारस|काशी"
+    - name: "Amritsar"
+      pattern_en: "amritsar"
+      pattern_hi: "अमृतसर"
+    - name: "Ranchi"
+      pattern_en: "ranchi"
+      pattern_hi: "रांची"
+    - name: "Gwalior"
+      pattern_en: "gwalior"
+      pattern_hi: "ग्वालियर"
+    - name: "Jodhpur"
+      pattern_en: "jodhpur"
+      pattern_hi: "जोधपुर"
+    - name: "Coimbatore"
+      pattern_en: "coimbatore"
+      pattern_hi: "कोयंबटूर"
+    - name: "Vijayawada"
+      pattern_en: "vijayawada"
+      pattern_hi: "विजयवाड़ा"
+    - name: "Madurai"
+      pattern_en: "madurai"
+      pattern_hi: "मदुरै"
+    - name: "Raipur"
+      pattern_en: "raipur"
+      pattern_hi: "रायपुर"
+    - name: "Kota"
+      pattern_en: "kota"
+      pattern_hi: "कोटा"
+    - name: "Aurangabad"
+      pattern_en: "aurangabad"
+      pattern_hi: "औरंगाबाद"
+    - name: "Dhanbad"
+      pattern_en: "dhanbad"
+      pattern_hi: "धनबाद"
+    - name: "Allahabad"
+      aliases: ["Prayagraj"]
+      pattern_en: "allahabad|prayagraj"
+      pattern_hi: "इलाहाबाद|प्रयागराज"
+    - name: "Kalyan"
+      pattern_en: "kalyan"
+      pattern_hi: "कल्याण"
+    - name: "Vasai"
+      pattern_en: "vasai"
+      pattern_hi: "वसई"
+
+  # Context keywords that indicate location is being mentioned
+  context_keywords:
+    en: ["in", "at", "from", "near", "around"]
+    hi: ["mein", "me", "se", "में", "से"]
+
+# Loan purpose patterns
+# Why the customer needs the loan
+purposes:
+  categories:
+    - id: business
+      display_name: "Business"
+      keywords:
+        en: ["business", "shop", "store", "dukan", "karobar", "vyapaar", "investment", "startup", "working capital"]
+        hi: ["व्यापार", "दुकान", "कारोबार", "व्यवसाय", "निवेश"]
+
+    - id: medical
+      display_name: "Medical"
+      keywords:
+        en: ["medical", "hospital", "treatment", "surgery", "ilaj", "ilaaj", "dawai", "doctor", "health", "operation"]
+        hi: ["चिकित्सा", "अस्पताल", "इलाज", "दवाई", "डॉक्टर", "ऑपरेशन"]
+
+    - id: education
+      display_name: "Education"
+      keywords:
+        en: ["education", "school", "college", "fees", "padhai", "admission", "tuition", "university", "study", "course"]
+        hi: ["शिक्षा", "स्कूल", "कॉलेज", "फीस", "पढ़ाई", "एडमिशन"]
+
+    - id: wedding
+      display_name: "Wedding"
+      keywords:
+        en: ["wedding", "marriage", "shaadi", "vivah", "function", "ceremony", "shadi"]
+        hi: ["शादी", "विवाह", "समारोह"]
+
+    - id: agriculture
+      display_name: "Agriculture"
+      keywords:
+        en: ["agriculture", "farming", "kheti", "crop", "seeds", "fertilizer", "tractor", "farm"]
+        hi: ["खेती", "कृषि", "फसल", "बीज", "खाद", "ट्रैक्टर"]
+
+    - id: debt_consolidation
+      display_name: "Debt Consolidation"
+      keywords:
+        en: ["debt", "loan", "repay", "consolidation", "karza", "karz", "qarz", "previous loan", "other bank"]
+        hi: ["कर्ज", "कर्ज़ा", "ऋण", "चुकाना"]
+
+    - id: emergency
+      display_name: "Emergency"
+      keywords:
+        en: ["emergency", "urgent", "zaruri", "jaldi", "turant", "immediately", "asap", "crisis"]
+        hi: ["आपातकालीन", "जरूरी", "जल्दी", "तुरंत"]
+
+    - id: home_renovation
+      display_name: "Home Renovation"
+      keywords:
+        en: ["home", "house", "renovation", "repair", "construction", "building", "ghar", "makaan"]
+        hi: ["घर", "मकान", "मरम्मत", "निर्माण"]
+
+# Repayment type preferences
+# P21 FIX: Config-driven repayment type patterns (previously hardcoded)
+repayment_types:
+  categories:
+    - id: emi
+      display_name: "EMI"
+      description: "Equal Monthly Installments"
+      patterns:
+        en:
+          - "EMI"
+          - "monthly\\s+(?:payment|installment)"
+        hi:
+          - "mahina"
+          - "kishte"
+          - "किस्त"
+          - "मासिक"
+      confidence: 0.8
+
+    - id: bullet
+      display_name: "Bullet Payment"
+      description: "One-time lump sum payment at end"
+      patterns:
+        en:
+          - "bullet"
+          - "lump\\s*sum"
+          - "one\\s+time"
+        hi:
+          - "ek\\s+baar"
+          - "ekmusht"
+          - "एकमुश्त"
+          - "एक\\s+बार"
+      confidence: 0.8
+
+    - id: overdraft
+      display_name: "Overdraft"
+      description: "Flexible credit line with interest on utilized amount"
+      patterns:
+        en:
+          - "overdraft"
+          - "OD"
+          - "credit\\s+line"
+          - "flexible"
+        hi:
+          - "ओवरड्राफ्ट"
+          - "लचीला"
+      confidence: 0.8
+
+    - id: interest_only
+      display_name: "Interest Only"
+      description: "Pay interest periodically, principal at end"
+      patterns:
+        en:
+          - "interest\\s+only"
+          - "only\\s+interest"
+        hi:
+          - "sirf\\s+byaaj"
+          - "सिर्फ\\s+ब्याज"
+          - "केवल\\s+ब्याज"
+      confidence: 0.8
+
+  # Default repayment type if customer doesn't specify
+  default: "emi"
+
+# Unit conversions
+# Domain-specific weight and currency units
+unit_conversions:
+  weight:
+    # 1 tola = 11.66 grams (traditional Indian gold unit)
+    tola_to_grams: 11.66
+    # Standard weight units
+    gram_to_mg: 1000.0
+    kg_to_grams: 1000.0
+    oz_to_grams: 31.1  # Troy ounce (used for precious metals)
+
+  currency:
+    # Indian currency multipliers
+    crore: 10000000
+    lakh: 100000
+    thousand: 1000
+    # Aliases
+    cr: 10000000
+    lac: 100000
+    k: 1000
+
+  # Hindi currency terms
+  currency_hindi:
+    करोड़: 10000000
+    लाख: 100000
+    हज़ार: 1000
+    हजार: 1000
+
+# Validation thresholds
+# Domain-specific validation rules
+validation:
+  # Amount limits
+  amount:
+    min: 10000        # Rs 10,000 minimum loan amount
+    max: 100000000    # Rs 10 crore maximum (100 million)
+    currency: "INR"
+
+  # Interest rate range
+  rate:
+    min: 5.0
+    max: 30.0
+    unit: "percent_per_annum"
+
+  # Asset weight range
+  asset_weight:
+    min: 1.0
+    max: 100000.0
+    unit: "grams"
+
+  # Tenure range
+  tenure:
+    min_months: 1
+    max_months: 36
+    default_months: 12
+
+# Confidence boost keywords
+# Domain-specific keywords that boost extraction confidence
+confidence_boosters:
+  amount:
+    en: ["loan", "lakh", "amount", "chahiye", "need", "require", "want"]
+    hi: ["राशि", "चाहिए", "ज़रूरत"]
+
+  weight:
+    en: ["gram", "grams", "tola", "gold", "weight", "sona"]
+    hi: ["ग्राम", "तोला", "सोना", "वजन"]
+
+  rate:
+    en: ["rate", "interest", "percent", "byaj"]
+    hi: ["ब्याज", "दर", "प्रतिशत"]
+
+# Name exclusion list
+# Words that should NOT be recognized as names
+name_exclusions:
+  - loan
+  - bank
+  - amount
+  - finance
+  - company
+  - rate
+  - interest
+  - help
+  - need
+  - want
+  - please
+  - gold
+  - sona

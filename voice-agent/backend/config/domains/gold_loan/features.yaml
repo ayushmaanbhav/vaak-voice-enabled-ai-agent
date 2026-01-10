@@ -75,10 +75,22 @@ features:
     description: "Doorstep service"
 
   women_benefits:
+    # P20 FIX: Use variable substitution for domain-specific names
+    # Variables defined in adaptation.yaml: {{special_program_name}}
     display_name:
-      en: "Shakti Gold Benefits"
-      hi: "Shakti Gold"
-    description: "Women-specific benefits"
+      en: "{{special_program_name}} Benefits"
+      hi: "{{special_program_name}}"
+    description: "Special benefits program for women customers"
+    icon: "female"
+    badge: "exclusive"
+    enabled: true
+    # Segment-specific overrides
+    segment_overrides:
+      women:
+        priority: 1
+        custom_text:
+          en: "{{special_program_name}} with {{special_program_benefit}}"
+          hi: "{{special_program_name}} {{special_program_benefit_hindi}}"
 
 # Segment to feature priority mappings
 segment_features:
@@ -126,9 +138,10 @@ value_propositions:
     - "Higher loan limits to meet your requirements"
 
   trust_seeker:
-    - "Kotak is an RBI-regulated scheduled bank with highest safety standards"
-    - "Your gold is stored in bank-grade security vaults with full insurance"
-    - "Digital tracking lets you monitor your gold status anytime"
+    # P20 FIX: Use brand variables instead of hardcoded names
+    - "{{company_name}} is an {{regulator_name}}-regulated scheduled bank with highest safety standards"
+    - "Your {{collateral_type}} is stored in bank-grade security vaults with full insurance"
+    - "Digital tracking lets you monitor your {{collateral_type}} status anytime"
 
   first_time:
     - "Simple process with just 2 documents - ID and address proof"
@@ -141,7 +154,8 @@ value_propositions:
     - "Use our calculator to see exactly how much you save"
 
   women:
-    - "Shakti Gold program with 0.25% lower interest for women"
+    # P20 FIX: Use variable substitution for domain-specific content
+    - "{{special_program_name}} with {{special_program_benefit}}"
     - "Women-priority branches with female staff"
     - "Flexible EMI options to suit your schedule"
 

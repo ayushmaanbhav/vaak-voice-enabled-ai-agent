@@ -1,0 +1,214 @@
+# Signal Definitions for Lead Scoring
+# P23 FIX: Config-driven signal system (replaces hardcoded LeadSignals trait methods)
+#
+# Signals are used for lead scoring, qualification, and escalation detection.
+# All signal IDs are config-driven - no hardcoded signal names in code.
+
+# Signal categories and their weights
+categories:
+  urgency:
+    display_name: "Urgency Signals"
+    max_score: 25
+    weight: 1.0
+    description: "Signals indicating customer urgency or time pressure"
+
+  engagement:
+    display_name: "Engagement Signals"
+    max_score: 25
+    weight: 1.0
+    description: "Signals indicating customer engagement level"
+
+  information:
+    display_name: "Information Signals"
+    max_score: 25
+    weight: 1.0
+    description: "Signals indicating information provided by customer"
+
+  intent:
+    display_name: "Intent Signals"
+    max_score: 25
+    weight: 1.0
+    description: "Signals indicating customer intent to convert"
+
+# Signal definitions
+signals:
+  # Urgency signals (boolean)
+  has_urgency:
+    display_name: "Urgency Detected"
+    type: boolean
+    category: urgency
+    weight: 10
+    description: "Customer mentioned urgency (urgent, immediately, asap, today)"
+
+  time_pressure:
+    display_name: "Time Pressure"
+    type: boolean
+    category: urgency
+    weight: 8
+    description: "Customer mentioned specific time constraints"
+
+  # Urgency signals (counter)
+  urgency_keyword_count:
+    display_name: "Urgency Keywords"
+    type: counter
+    category: urgency
+    weight: 5
+    max: 3
+    description: "Number of urgency keywords detected (capped at 3)"
+
+  # Engagement signals (boolean)
+  has_pricing_interest:
+    display_name: "Pricing Interest"
+    type: boolean
+    category: engagement
+    weight: 8
+    description: "Customer asked about rates or pricing"
+
+  has_competitor_mention:
+    display_name: "Competitor Mention"
+    type: boolean
+    category: engagement
+    weight: 6
+    description: "Customer mentioned a competitor"
+
+  asked_about_process:
+    display_name: "Process Interest"
+    type: boolean
+    category: engagement
+    weight: 5
+    description: "Customer asked about the process or requirements"
+
+  expressed_interest:
+    display_name: "Expressed Interest"
+    type: boolean
+    category: engagement
+    weight: 7
+    description: "Customer expressed interest in the product"
+
+  # Engagement signals (counter)
+  engagement_turns:
+    display_name: "Engagement Turns"
+    type: counter
+    category: engagement
+    weight: 3
+    max: 5
+    description: "Number of meaningful conversation turns (capped at 5)"
+
+  questions_asked:
+    display_name: "Questions Asked"
+    type: counter
+    category: engagement
+    weight: 2
+    max: 10
+    description: "Number of questions asked by customer"
+
+  # Information signals (boolean)
+  provided_contact:
+    display_name: "Contact Provided"
+    type: boolean
+    category: information
+    weight: 10
+    description: "Customer provided contact information"
+
+  provided_asset_details:
+    display_name: "Asset Details Provided"
+    type: boolean
+    category: information
+    weight: 8
+    description: "Customer provided asset/collateral details"
+
+  provided_location:
+    display_name: "Location Provided"
+    type: boolean
+    category: information
+    weight: 5
+    description: "Customer provided location information"
+
+  # Intent signals (boolean)
+  requested_callback:
+    display_name: "Callback Requested"
+    type: boolean
+    category: intent
+    weight: 15
+    description: "Customer explicitly requested a callback"
+
+  ready_to_visit:
+    display_name: "Ready to Visit"
+    type: boolean
+    category: intent
+    weight: 12
+    description: "Customer expressed willingness to visit branch"
+
+  showed_objection:
+    display_name: "Objection Shown"
+    type: boolean
+    category: intent
+    weight: -5
+    description: "Customer showed objection (negative weight)"
+
+  # Intent signals (counter)
+  objection_count:
+    display_name: "Objection Count"
+    type: counter
+    category: intent
+    weight: -3
+    max: 5
+    description: "Number of objections raised (negative weight)"
+
+  # Stage tracking (string)
+  current_stage:
+    display_name: "Current Stage"
+    type: string
+    category: engagement
+    weight: 0
+    description: "Current conversation stage ID"
+    allowed_values:
+      - greeting
+      - discovery
+      - presentation
+      - objection_handling
+      - closing
+      - post_close
+
+  # Segment tracking (string)
+  detected_segment:
+    display_name: "Detected Segment"
+    type: string
+    category: information
+    weight: 0
+    description: "Detected customer segment ID"
+
+# Scoring thresholds based on total signal score
+scoring_thresholds:
+  hot:
+    min_score: 60
+    description: "Hot lead - immediate follow-up required"
+  warm:
+    min_score: 35
+    description: "Warm lead - follow-up within 24 hours"
+  cold:
+    min_score: 0
+    description: "Cold lead - nurture campaign"
+
+# Escalation triggers based on signals
+escalation_triggers:
+  high_urgency:
+    signals:
+      - has_urgency
+      - urgency_keyword_count >= 2
+    action: "immediate_callback"
+    description: "High urgency detected - escalate for immediate callback"
+
+  competitor_risk:
+    signals:
+      - has_competitor_mention
+      - has_pricing_interest
+    action: "manager_review"
+    description: "Competitor comparison - manager review recommended"
+
+  ready_to_convert:
+    signals:
+      - requested_callback
+      - provided_contact
+    action: "priority_callback"
+    description: "Customer ready to convert - priority callback"

@@ -23,6 +23,7 @@ use crate::memory::{AgenticMemory, AgenticMemoryConfig, MemoryConfig};
 use crate::memory_legacy::{ConversationMemory, MemoryEntry};
 use crate::stage::{ConversationStage, StageManager, TransitionReason};
 use crate::AgentError;
+use voice_agent_config::domain::StagesConfig;
 use voice_agent_core::{Turn, TurnRole};
 
 // =============================================================================
@@ -435,16 +436,28 @@ pub struct Conversation {
     turn_count: Mutex<usize>,
     /// P0 FIX: Compliance status (AI disclosure, consent)
     compliance: Mutex<ComplianceStatus>,
+    /// P16 FIX: Config-driven stage transitions
+    /// When set, intent-to-stage transitions are loaded from config instead of hardcoded
+    stages_config: Option<Arc<StagesConfig>>,
+    /// P16 FIX: AI disclosure message loaded from config (RBI compliance)
+    /// Stored at construction to avoid needing view reference later
+    ai_disclosure_message: String,
 }
 
 impl Conversation {
     /// Create a new conversation
+    ///
+    /// NOTE: For config-driven operation, use `from_view()` instead to wire
+    /// domain-specific competitor patterns into the intent detector.
     pub fn new(session_id: impl Into<String>, config: ConversationConfig) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         let session_id_str = session_id.into();
 
         // Phase 10: Create agentic memory with session ID for archival retrieval
         let agentic_config = AgenticMemoryConfig::default();
+
+        // P16 FIX: Use static fallback for AI disclosure (config-driven version uses from_view)
+        let ai_disclosure = AiDisclosure::get_disclosure_message(&config.language).to_string();
 
         Self {
             session_id: session_id_str.clone(),
@@ -459,6 +472,79 @@ impl Conversation {
             event_tx,
             turn_count: Mutex::new(0),
             compliance: Mutex::new(ComplianceStatus::default()),
+            stages_config: None, // No config-driven transitions in basic constructor
+            ai_disclosure_message: ai_disclosure,
+        }
+    }
+
+    /// Create a new conversation with config-driven intent detection
+    ///
+    /// P18 FIX: This constructor wires the domain-specific competitor patterns
+    /// from config into the intent detector, replacing hardcoded defaults.
+    pub fn from_view(
+        session_id: impl Into<String>,
+        config: ConversationConfig,
+        view: &voice_agent_config::domain::AgentDomainView,
+    ) -> Self {
+        let (event_tx, _) = broadcast::channel(100);
+        let session_id_str = session_id.into();
+
+        // Create agentic memory with config-driven compressor
+        let agentic_config = AgenticMemoryConfig::default();
+        let agentic_memory = AgenticMemory::from_view(agentic_config, &session_id_str, view);
+
+        // Create intent detector with config-driven patterns
+        let mut intent_detector = IntentDetector::new();
+
+        // Wire competitor patterns from config
+        // Note: We need to convert the owned Strings to &str references
+        let competitor_patterns_owned = view.competitor_intent_patterns();
+        if !competitor_patterns_owned.is_empty() {
+            // Convert Vec<(&str, &str, String)> to Vec<(&str, &str, &str)>
+            let patterns: Vec<(&str, &str, &str)> = competitor_patterns_owned
+                .iter()
+                .map(|(id, name, pattern)| (*id, *name, pattern.as_str()))
+                .collect();
+            intent_detector.add_competitor_patterns(patterns);
+        }
+
+        // P2.1 FIX: Wire quality tier patterns from config
+        // This replaces hardcoded purity patterns (24K, 22K, etc.) with config-driven patterns
+        let quality_patterns_owned = view.quality_tier_intent_patterns();
+        if !quality_patterns_owned.is_empty() {
+            let patterns: Vec<(&str, &str)> = quality_patterns_owned
+                .iter()
+                .map(|(value, pattern)| (value.as_str(), pattern.as_str()))
+                .collect();
+            intent_detector.add_variant_patterns(patterns);
+        }
+
+        // P2.1 FIX: Wire location patterns from config
+        // This replaces hardcoded 9-city list with config-driven cities
+        let location_pattern = view.location_intent_pattern();
+        intent_detector.set_location_pattern(&location_pattern);
+
+        // P16 FIX: Store stages config for config-driven intent transitions
+        let stages_config = Arc::new(view.stages_config().clone());
+
+        // P16 FIX: Load AI disclosure message from compliance config (RBI requirement)
+        let ai_disclosure_message = view.ai_disclosure(&config.language).to_string();
+
+        Self {
+            session_id: session_id_str.clone(),
+            config: config.clone(),
+            start_time: Instant::now(),
+            last_activity: Mutex::new(Instant::now()),
+            state: Mutex::new(ConversationState::Active),
+            stage_manager: Arc::new(StageManager::new()),
+            memory: Arc::new(ConversationMemory::new(config.memory)),
+            agentic_memory: Arc::new(agentic_memory),
+            intent_detector: Arc::new(intent_detector),
+            event_tx,
+            turn_count: Mutex::new(0),
+            compliance: Mutex::new(ComplianceStatus::default()),
+            stages_config: Some(stages_config), // P16 FIX: Config-driven transitions
+            ai_disclosure_message, // P16 FIX: Config-driven AI disclosure
         }
     }
 
@@ -607,117 +693,40 @@ impl Conversation {
 
     /// Check and perform stage transitions based on intent
     ///
-    /// P0 FIX: Added comprehensive intent→stage mappings for gold loan sales flow.
-    /// Covers all major intents: greeting, loan_inquiry, eligibility, interest_rate,
-    /// branch_locator, schedule_visit, objection, affirmative, negative, farewell, thank_you.
+    /// P16 FIX: Config-driven intent→stage transitions loaded from stages.yaml.
+    /// Falls back to hardcoded transitions for backward compatibility.
     fn check_stage_transitions(&self, intent: &DetectedIntent) {
         let current = self.stage();
+        let current_stage_str = current.as_str();
+        let current_turns = self.stage_manager.current_stage_turns();
 
         // Record intent for stage requirement tracking
         self.stage_manager.record_intent(&intent.intent);
 
-        // P0 FIX: Comprehensive intent-based transitions for gold loan sales flow
-        let new_stage = match intent.intent.as_str() {
-            // Greeting -> Discovery: After initial greeting, move to discovery
-            "greeting" if current == ConversationStage::Greeting => {
-                // Only transition if we've had at least 1 turn (rapport built)
-                if self.stage_manager.current_stage_turns() >= 1 {
-                    Some(ConversationStage::Discovery)
-                } else {
-                    None
-                }
-            },
-
-            // Loan inquiry / eligibility query: Move to relevant stage
-            "loan_inquiry" | "eligibility_query" => match current {
-                ConversationStage::Greeting => Some(ConversationStage::Discovery),
-                ConversationStage::Discovery => Some(ConversationStage::Qualification),
-                _ => None,
-            },
-
-            // Interest rate query: Customer interested in rates -> Presentation
-            "interest_rate_query" => match current {
-                ConversationStage::Greeting | ConversationStage::Discovery => {
-                    Some(ConversationStage::Presentation)
-                },
-                ConversationStage::Qualification => Some(ConversationStage::Presentation),
-                _ => None,
-            },
-
-            // Competitor reference: Need to understand their situation
-            "competitor_reference" => {
-                match current {
-                    ConversationStage::Greeting => Some(ConversationStage::Discovery),
-                    _ => None, // Stay in current stage but note the competitor info
-                }
-            },
-
-            // Branch locator: Ready to visit -> Closing
-            "branch_locator" => match current {
-                ConversationStage::Presentation => Some(ConversationStage::Closing),
-                ConversationStage::ObjectionHandling => Some(ConversationStage::Closing),
-                _ => None,
-            },
-
-            // Schedule visit: Ready to book appointment -> Closing
-            "schedule_visit" | "schedule_appointment" | "book_appointment" => {
-                match current {
-                    ConversationStage::Presentation => Some(ConversationStage::Closing),
-                    ConversationStage::ObjectionHandling => Some(ConversationStage::Closing),
-                    ConversationStage::Discovery => Some(ConversationStage::Closing), // Fast track
-                    _ => None,
-                }
-            },
-
-            // Objection: Handle objection (from any sales stage)
-            "objection" if current != ConversationStage::ObjectionHandling => match current {
-                ConversationStage::Discovery
-                | ConversationStage::Qualification
-                | ConversationStage::Presentation
-                | ConversationStage::Closing => Some(ConversationStage::ObjectionHandling),
-                _ => None,
-            },
-
-            // Affirmative: Agreement to proceed to next stage
-            "affirmative" => match current {
-                ConversationStage::Greeting => Some(ConversationStage::Discovery),
-                ConversationStage::Discovery => Some(ConversationStage::Qualification),
-                ConversationStage::ObjectionHandling => Some(ConversationStage::Presentation),
-                ConversationStage::Presentation => Some(ConversationStage::Closing),
-                ConversationStage::Closing => Some(ConversationStage::Farewell),
-                _ => None,
-            },
-
-            // Negative: Might need objection handling or early exit
-            "negative" => {
-                match current {
-                    ConversationStage::Closing => Some(ConversationStage::ObjectionHandling),
-                    ConversationStage::Presentation => Some(ConversationStage::ObjectionHandling),
-                    _ => None, // Don't force exit on negative, handle gracefully
-                }
-            },
-
-            // Thank you: Positive signal, often near end
-            "thank_you" => match current {
-                ConversationStage::Closing => Some(ConversationStage::Farewell),
-                ConversationStage::ObjectionHandling => Some(ConversationStage::Presentation),
-                _ => None,
-            },
-
-            // Farewell: End conversation (from any stage)
-            "farewell" => Some(ConversationStage::Farewell),
-
-            // Confusion: May need to revisit discovery
-            "confusion" => match current {
-                ConversationStage::Presentation => Some(ConversationStage::Discovery),
-                _ => None,
-            },
-
-            _ => None,
+        // P21 FIX: Config-driven transitions only (deprecated fallback removed)
+        let new_stage = if let Some(ref stages_config) = self.stages_config {
+            // Config-driven: look up intent→stage transition from config
+            stages_config
+                .can_transition_on_intent(&intent.intent, current_stage_str, current_turns)
+                .and_then(|target| ConversationStage::from_str(target))
+        } else {
+            // No config = no automatic transitions (config is required in production)
+            tracing::warn!(
+                "No stages_config provided - stage transitions disabled. \
+                 Configure stages.yaml with intent_transitions for production use."
+            );
+            None
         };
 
         if let Some(to) = new_stage {
-            if current.valid_transitions().contains(&to) {
+            // Validate transition is allowed
+            let is_valid = if let Some(ref stages_config) = self.stages_config {
+                stages_config.is_valid_transition(current_stage_str, to.as_str())
+            } else {
+                current.valid_transitions().contains(&to)
+            };
+
+            if is_valid {
                 let _ = self
                     .stage_manager
                     .transition(to, TransitionReason::IntentDetected(intent.intent.clone()));
@@ -868,9 +877,12 @@ impl Conversation {
     ///
     /// Should be called at the start of conversation after the greeting.
     /// Returns the disclosure message that should be spoken to the customer.
+    ///
+    /// P16 FIX: Uses config-driven AI disclosure message loaded at construction
+    /// instead of hardcoded static messages.
     pub fn mark_ai_disclosed(&self) -> String {
         let language = &self.config.language;
-        let disclosure_text = AiDisclosure::get_disclosure_message(language);
+        let disclosure_text = &self.ai_disclosure_message;
 
         let mut compliance = self.compliance.lock();
         compliance
@@ -878,7 +890,7 @@ impl Conversation {
             .mark_disclosed(language, disclosure_text, true);
         compliance.update();
 
-        disclosure_text.to_string()
+        disclosure_text.clone()
     }
 
     /// Mark AI disclosure with custom text
@@ -927,8 +939,11 @@ impl Conversation {
     }
 
     /// Get AI disclosure message for the configured language
+    ///
+    /// P16 FIX: Returns the config-driven AI disclosure message loaded at construction.
+    /// This replaces the hardcoded static message lookup with config from compliance.yaml.
     pub fn get_ai_disclosure_message(&self) -> String {
-        AiDisclosure::get_disclosure_message(&self.config.language).to_string()
+        self.ai_disclosure_message.clone()
     }
 }
 

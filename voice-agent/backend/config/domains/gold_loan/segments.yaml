@@ -1,20 +1,54 @@
 # Customer Segment Detection Configuration
 # Used by core personalization engine and agent for tailored responses
+#
+# DOMAIN-AGNOSTIC DESIGN:
+# - Each segment includes persona config for config-driven personalization
+# - Detection uses generic field names (asset_quantity) with domain aliases
+# - Key messages and value props support variable substitution
 
 segments:
   # High-value customer segment
   high_value:
     display_name: "High Value Customer"
-    priority: 1  # Higher priority segments checked first
-    description: "Customers with significant gold holdings or loan amounts"
+    priority: 1
+    description: "Customers with significant asset holdings or loan amounts"
+
+    # Persona configuration for this segment
+    persona:
+      name: "premium_advisor"
+      tone: "formal"
+      warmth: 0.9
+      empathy: 0.8
+      language_complexity: "sophisticated"
+      urgency: "efficient"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: false
+      max_response_words: 80
+
+    # Key messages for this segment (moved from hardcoded customer.rs)
+    key_messages:
+      en:
+        - "Dedicated relationship manager"
+        - "Priority processing"
+        - "Higher limits"
+        - "Exclusive rates"
+      hi:
+        - "समर्पित रिलेशनशिप मैनेजर"
+        - "प्राथमिकता प्रसंस्करण"
+        - "उच्च सीमा"
+        - "विशेष दरें"
 
     detection:
       # Numeric thresholds (any match triggers)
       numeric_thresholds:
-        gold_weight_grams:
+        # Generic name with domain-specific alias
+        asset_quantity:
           min: 100
+          aliases: ["gold_weight_grams", "weight_grams"]
         loan_amount:
           min: 500000
+          aliases: ["offer_amount"]
 
       # Text patterns to detect (case-insensitive)
       text_patterns:
@@ -43,21 +77,45 @@ segments:
       en:
         - "Dedicated relationship manager for personalized service"
         - "Priority processing with faster disbursement"
-        - "Premium interest rates starting from 9.5% p.a."
+        - "Premium interest rates starting from {{our_best_rate}}% p.a."
         - "Exclusive lounge access at select branches"
       hi:
         - "व्यक्तिगत सेवा के लिए समर्पित रिलेशनशिप मैनेजर"
         - "तेज वितरण के साथ प्राथमिकता प्रसंस्करण"
-        - "9.5% प्रति वर्ष से शुरू होने वाली प्रीमियम ब्याज दरें"
+        - "{{our_best_rate}}% प्रति वर्ष से शुरू होने वाली प्रीमियम ब्याज दरें"
 
   # Trust-seeker segment (worried about safety)
   trust_seeker:
     display_name: "Trust Seeker"
     priority: 2
-    description: "Customers concerned about gold safety and bank trust"
+    description: "Customers concerned about asset safety and institutional trust"
+
+    persona:
+      name: "trust_builder"
+      tone: "professional"
+      warmth: 0.95
+      empathy: 0.95
+      language_complexity: "moderate"
+      urgency: "relaxed"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: true
+      max_response_words: 70
+
+    key_messages:
+      en:
+        - "Regulated financial institution"
+        - "Secure storage facilities"
+        - "Full insurance coverage"
+        - "Digital tracking"
+      hi:
+        - "विनियमित वित्तीय संस्थान"
+        - "सुरक्षित भंडारण सुविधाएं"
+        - "पूर्ण बीमा कवरेज"
+        - "डिजिटल ट्रैकिंग"
 
     detection:
-      # Current lender indicates NBFC experience
+      # Current lender indicates competitor experience
       text_values:
         current_lender:
           - "muthoot"
@@ -93,19 +151,43 @@ segments:
     value_props:
       en:
         - "RBI-regulated scheduled commercial bank"
-        - "Gold stored in secure bank vaults with 24/7 surveillance"
-        - "Full insurance coverage for your gold"
+        - "Assets stored in secure bank vaults with 24/7 surveillance"
+        - "Full insurance coverage for your assets"
         - "Transparent valuation process"
       hi:
         - "RBI द्वारा विनियमित अनुसूचित वाणिज्यिक बैंक"
-        - "24/7 निगरानी के साथ सुरक्षित बैंक वॉल्ट में सोना रखा जाता है"
-        - "आपके सोने के लिए पूर्ण बीमा कवरेज"
+        - "24/7 निगरानी के साथ सुरक्षित बैंक वॉल्ट में संपत्ति रखी जाती है"
+        - "आपकी संपत्ति के लिए पूर्ण बीमा कवरेज"
 
   # Price-sensitive segment (focused on rates)
   price_sensitive:
     display_name: "Price Sensitive"
     priority: 3
     description: "Customers primarily concerned about interest rates"
+
+    persona:
+      name: "value_expert"
+      tone: "professional"
+      warmth: 0.7
+      empathy: 0.6
+      language_complexity: "moderate"
+      urgency: "normal"
+      use_customer_name: true
+      acknowledge_emotions: false
+      use_hinglish: false
+      max_response_words: 55
+
+    key_messages:
+      en:
+        - "Competitive rates"
+        - "Zero foreclosure charges"
+        - "Transparent pricing"
+        - "Savings calculator"
+      hi:
+        - "प्रतिस्पर्धी दरें"
+        - "शून्य फोरक्लोज़र शुल्क"
+        - "पारदर्शी मूल्य निर्धारण"
+        - "बचत कैलकुलेटर"
 
     detection:
       text_patterns:
@@ -136,13 +218,13 @@ segments:
 
     value_props:
       en:
-        - "Competitive interest rates starting from 9.5% p.a."
-        - "Save up to ₹5,000/month compared to NBFCs"
+        - "Competitive interest rates starting from {{our_best_rate}}% p.a."
+        - "Save up to {{max_monthly_savings}}/month compared to competitors"
         - "No hidden charges - transparent pricing"
         - "Flexible repayment options"
       hi:
-        - "9.5% प्रति वर्ष से शुरू होने वाली प्रतिस्पर्धी ब्याज दरें"
-        - "NBFCs की तुलना में ₹5,000/माह तक की बचत"
+        - "{{our_best_rate}}% प्रति वर्ष से शुरू होने वाली प्रतिस्पर्धी ब्याज दरें"
+        - "प्रतियोगियों की तुलना में {{max_monthly_savings}}/माह तक की बचत"
         - "कोई छिपे हुए शुल्क नहीं"
 
   # Balance transfer segment
@@ -150,6 +232,30 @@ segments:
     display_name: "Balance Transfer Prospect"
     priority: 2
     description: "Customers with existing loans at other lenders"
+
+    persona:
+      name: "transfer_specialist"
+      tone: "professional"
+      warmth: 0.8
+      empathy: 0.75
+      language_complexity: "moderate"
+      urgency: "efficient"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: false
+      max_response_words: 60
+
+    key_messages:
+      en:
+        - "Easy transfer process"
+        - "Rate comparison available"
+        - "Savings calculation"
+        - "Quick closure assistance"
+      hi:
+        - "आसान ट्रांसफर प्रक्रिया"
+        - "दर तुलना उपलब्ध"
+        - "बचत गणना"
+        - "त्वरित बंद सहायता"
 
     detection:
       text_values:
@@ -195,6 +301,30 @@ segments:
     priority: 1
     description: "Customers needing immediate funds"
 
+    persona:
+      name: "rapid_responder"
+      tone: "professional"
+      warmth: 0.85
+      empathy: 0.9
+      language_complexity: "simple"
+      urgency: "urgent"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: true
+      max_response_words: 45
+
+    key_messages:
+      en:
+        - "Same day disbursement"
+        - "Minimal documentation"
+        - "Quick valuation"
+        - "Direct bank transfer"
+      hi:
+        - "उसी दिन वितरण"
+        - "न्यूनतम दस्तावेज़"
+        - "त्वरित मूल्यांकन"
+        - "सीधा बैंक ट्रांसफर"
+
     detection:
       text_patterns:
         en:
@@ -225,18 +355,42 @@ segments:
       en:
         - "Same day disbursement available"
         - "Minimal documentation required"
-        - "Gold valuation in 15 minutes"
+        - "Asset valuation in 15 minutes"
         - "Direct bank transfer to your account"
       hi:
         - "उसी दिन वितरण उपलब्ध"
         - "न्यूनतम दस्तावेज़ आवश्यक"
-        - "15 मिनट में सोने का मूल्यांकन"
+        - "15 मिनट में संपत्ति मूल्यांकन"
 
   # First-time borrower segment
   first_time:
     display_name: "First Time Borrower"
     priority: 4
-    description: "Customers new to gold loans"
+    description: "Customers new to this service type"
+
+    persona:
+      name: "helpful_guide"
+      tone: "friendly"
+      warmth: 0.9
+      empathy: 0.85
+      language_complexity: "simple"
+      urgency: "relaxed"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: true
+      max_response_words: 50
+
+    key_messages:
+      en:
+        - "Simple process"
+        - "No hidden charges"
+        - "Friendly support"
+        - "Clear documentation"
+      hi:
+        - "सरल प्रक्रिया"
+        - "कोई छिपे शुल्क नहीं"
+        - "मित्रवत सहायता"
+        - "स्पष्ट दस्तावेज़ीकरण"
 
     detection:
       text_patterns:
@@ -265,18 +419,42 @@ segments:
       en:
         - "Simple 3-step process"
         - "Our team will guide you through everything"
-        - "No prior gold loan experience needed"
+        - "No prior experience needed"
         - "Transparent and straightforward"
       hi:
         - "सरल 3-चरण प्रक्रिया"
         - "हमारी टीम आपको हर चीज़ में मार्गदर्शन करेगी"
-        - "पहले से गोल्ड लोन का अनुभव नहीं चाहिए"
+        - "पहले से अनुभव नहीं चाहिए"
 
   # Business owner segment
   business_owner:
     display_name: "Business Owner"
     priority: 3
     description: "Customers needing funds for business"
+
+    persona:
+      name: "business_advisor"
+      tone: "professional"
+      warmth: 0.75
+      empathy: 0.7
+      language_complexity: "moderate"
+      urgency: "efficient"
+      use_customer_name: true
+      acknowledge_emotions: false
+      use_hinglish: false
+      max_response_words: 55
+
+    key_messages:
+      en:
+        - "Quick working capital"
+        - "Flexible repayment"
+        - "Higher limits"
+        - "No business plan required"
+      hi:
+        - "त्वरित कार्यशील पूंजी"
+        - "लचीला पुनर्भुगतान"
+        - "उच्च सीमा"
+        - "कोई व्यापार योजना आवश्यक नहीं"
 
     detection:
       text_patterns:
@@ -312,14 +490,146 @@ segments:
         - "व्यापार चक्र के साथ लचीला पुनर्भुगतान"
         - "व्यावसायिक जरूरतों के लिए उच्च ऋण सीमा"
 
+  # Women segment (special programs)
+  women:
+    display_name: "Women"
+    priority: 3
+    description: "Women customers eligible for special programs"
+
+    persona:
+      name: "shakti_advisor"
+      tone: "friendly"
+      warmth: 0.95
+      empathy: 0.9
+      language_complexity: "simple"
+      urgency: "relaxed"
+      use_customer_name: true
+      acknowledge_emotions: true
+      use_hinglish: true
+      max_response_words: 55
+
+    key_messages:
+      en:
+        - "Special programs available"
+        - "Preferential rates"
+        - "Dedicated service centers"
+        - "Flexible repayment"
+      hi:
+        - "विशेष कार्यक्रम उपलब्ध"
+        - "तरजीही दरें"
+        - "समर्पित सेवा केंद्र"
+        - "लचीला पुनर्भुगतान"
+
+    detection:
+      text_patterns:
+        en:
+          - "woman"
+          - "women"
+          - "lady"
+          - "mahila"
+          - "shakti"
+          - "female"
+          - "housewife"
+        hi:
+          - "महिला"
+          - "औरत"
+          - "गृहिणी"
+          - "शक्ति"
+
+    features:
+      - "shakti_program"
+      - "preferential_rates"
+      - "dedicated_service"
+      - "flexible_repayment"
+
+    value_props:
+      en:
+        - "Special {{special_program_name}} program for women"
+        - "Preferential interest rates"
+        - "Dedicated service centers"
+        - "Flexible repayment options"
+      hi:
+        - "महिलाओं के लिए विशेष {{special_program_name}} कार्यक्रम"
+        - "तरजीही ब्याज दरें"
+        - "समर्पित सेवा केंद्र"
+
+  # Young professional segment
+  professional:
+    display_name: "Young Professional"
+    priority: 4
+    description: "Young urban professionals seeking quick digital services"
+
+    persona:
+      name: "smart_advisor"
+      tone: "professional"
+      warmth: 0.75
+      empathy: 0.65
+      language_complexity: "moderate"
+      urgency: "efficient"
+      use_customer_name: false
+      acknowledge_emotions: false
+      use_hinglish: false
+      max_response_words: 45
+
+    key_messages:
+      en:
+        - "Quick digital process"
+        - "Mobile app tracking"
+        - "Instant approval"
+        - "Flexible tenure options"
+      hi:
+        - "त्वरित डिजिटल प्रक्रिया"
+        - "मोबाइल ऐप ट्रैकिंग"
+        - "तुरंत स्वीकृति"
+        - "लचीले कार्यकाल विकल्प"
+
+    detection:
+      text_patterns:
+        en:
+          - "professional"
+          - "office"
+          - "salary"
+          - "corporate"
+          - "job"
+          - "working"
+          - "employed"
+          - "tech"
+          - "app"
+          - "online"
+        hi:
+          - "नौकरी"
+          - "ऑफिस"
+          - "सैलरी"
+          - "कॉर्पोरेट"
+          - "काम"
+
+    features:
+      - "quick_digital_process"
+      - "mobile_app"
+      - "instant_approval"
+      - "flexible_tenure"
+
+    value_props:
+      en:
+        - "Quick digital process - apply from anywhere"
+        - "Track your loan on our mobile app"
+        - "Instant approval for salaried professionals"
+        - "Flexible tenure options to suit your needs"
+      hi:
+        - "त्वरित डिजिटल प्रक्रिया - कहीं से भी आवेदन करें"
+        - "हमारे मोबाइल ऐप पर अपना लोन ट्रैक करें"
+        - "वेतनभोगी पेशेवरों के लिए तुरंत स्वीकृति"
+
 # Segment priority order (for multiple matches)
 priority_order:
   - "urgent_need"
   - "high_value"
   - "balance_transfer"
   - "trust_seeker"
+  - "women"
   - "price_sensitive"
   - "business_owner"
+  - "professional"
   - "first_time"
 
 # Default segment when no specific match

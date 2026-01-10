@@ -55,7 +55,8 @@ impl Default for GrammarConfig {
         Self {
             // P1 FIX: Default to LLM-based grammar correction
             provider: GrammarProvider::Llm,
-            domain: "gold_loan".to_string(),
+            // P21 FIX: Use generic default instead of hardcoded "gold_loan"
+            domain: "unconfigured".to_string(),
             temperature: 0.1,
             max_tokens: 256,
         }
@@ -93,6 +94,7 @@ mod tests {
         let config = GrammarConfig::default();
         // P1 FIX: Grammar is now enabled by default
         assert!(matches!(config.provider, GrammarProvider::Llm));
-        assert_eq!(config.domain, "gold_loan");
+        // P21 FIX: Domain should be "unconfigured" by default
+        assert_eq!(config.domain, "unconfigured");
     }
 }

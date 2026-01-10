@@ -61,10 +61,6 @@ impl GetPriceTool {
         self.view.asset_price_per_unit()
     }
 
-    /// Get purity/variant factor from config
-    fn purity_factor(&self, purity: &str) -> f64 {
-        self.view.purity_factor(purity)
-    }
 }
 
 #[async_trait]
@@ -90,8 +86,9 @@ impl Tool for GetPriceTool {
         if let Some(core_schema) = self.view.tools_config().get_core_schema(TOOL_NAME) {
             core_schema
         } else {
-            // Fallback if config not available (should not happen in production)
-            tracing::warn!("Tool schema not found in config for {}, using fallback", TOOL_NAME);
+            // P20 FIX: Use config-driven tier codes even in fallback schema
+            let tier_codes = self.view.quality_tier_short_codes();
+            tracing::warn!("Tool schema not found in config for {}, using fallback with config tiers", TOOL_NAME);
             ToolSchema {
                 name: TOOL_NAME.to_string(),
                 description: "Get current prices".to_string(),
@@ -99,8 +96,8 @@ impl Tool for GetPriceTool {
                     .property(
                         "purity",
                         PropertySchema::enum_type(
-                            "Purity to get price for",
-                            vec!["24K".into(), "22K".into(), "18K".into()],
+                            "Quality tier to get price for",
+                            tier_codes,
                         ),
                         false,
                     )
@@ -114,109 +111,206 @@ impl Tool for GetPriceTool {
     }
 
     async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
-        let purity = input.get("purity").and_then(|v| v.as_str());
-        let weight = input.get("weight_grams").and_then(|v| v.as_f64());
+        // P24 FIX: Use config-driven parameter aliases
+        // "purity" is already the generic name, but can also accept "collateral_variant", "quality"
+        let purity = self.view
+            .tools_config()
+            .get_string_param_with_aliases(&input, "collateral_variant")
+            .or_else(|| input.get("purity").and_then(|v| v.as_str()).map(|s| s.to_string()));
+        let purity = purity.as_deref();
 
-        // P14 FIX: Use config-driven fallback prices and purity factors
-        let (price_24k, price_22k, price_18k, source) =
-            if let Some(ref service) = self.price_service {
-                match service.get_current_price().await {
-                    Ok(price) => (
-                        price.price_24k,
-                        price.price_22k,
-                        price.price_18k,
-                        price.source,
-                    ),
-                    Err(e) => {
-                        tracing::warn!("Failed to get gold price from service: {}", e);
-                        let base = self.fallback_base_price();
-                        (
-                            base * self.purity_factor("24K"),
-                            base * self.purity_factor("22K"),
-                            base * self.purity_factor("18K"),
-                            "fallback".to_string(),
-                        )
+        // "weight_grams" can also accept "collateral_weight", "weight"
+        let weight = self.view
+            .tools_config()
+            .get_numeric_param_with_aliases(&input, "collateral_weight")
+            .or_else(|| input.get("weight_grams").and_then(|v| v.as_f64()));
+
+        // P20 FIX: Get quality tiers from config dynamically
+        let tiers = self.view.quality_tiers_full();
+        let base_price = self.fallback_base_price();
+
+        // Calculate prices for each tier from config
+        // Price service returns specific prices, otherwise calculate from base * factor
+        let mut tier_prices: std::collections::HashMap<String, (f64, String)> =
+            std::collections::HashMap::new();
+
+        let source = if let Some(ref service) = self.price_service {
+            match service.get_current_price().await {
+                Ok(price) => {
+                    // Use dynamic tier prices from service - supports any domain's tier structure
+                    for (code, _factor, desc) in &tiers {
+                        let tier_price = price.price_for_tier(code);
+                        tier_prices.insert(code.clone(), (tier_price, desc.clone()));
                     }
+                    // Also include any tiers from service not in config
+                    for tier_code in price.tier_codes() {
+                        if !tier_prices.contains_key(tier_code) {
+                            let tier_price = price.price_for_tier(tier_code);
+                            tier_prices.insert(tier_code.to_string(), (tier_price, tier_code.to_string()));
+                        }
+                    }
+                    price.source.clone()
                 }
-            } else {
-                let base = self.fallback_base_price();
-                (
-                    base * self.purity_factor("24K"),
-                    base * self.purity_factor("22K"),
-                    base * self.purity_factor("18K"),
-                    "fallback".to_string(),
-                )
-            };
+                Err(e) => {
+                    tracing::warn!("Failed to get price from service: {}", e);
+                    // Calculate all from config
+                    for (code, factor, desc) in &tiers {
+                        tier_prices.insert(code.clone(), (base_price * factor, desc.clone()));
+                    }
+                    "fallback".to_string()
+                }
+            }
+        } else {
+            // No service - calculate all from config
+            for (code, factor, desc) in &tiers {
+                tier_prices.insert(code.clone(), (base_price * factor, desc.clone()));
+            }
+            "fallback".to_string()
+        };
+
+        // P2.6 FIX: Use config-driven currency field suffix
+        let suffix = self.view.currency_field_suffix();
+        let price_field = format!("price_per_gram_{}", suffix);
+
+        // Build prices object dynamically from config tiers
+        let mut prices_obj = serde_json::Map::new();
+        for (code, factor, desc) in &tiers {
+            let price = tier_prices
+                .get(code)
+                .map(|(p, _)| *p)
+                .unwrap_or(base_price * factor);
+            let tier_desc = tier_prices
+                .get(code)
+                .map(|(_, d)| d.clone())
+                .unwrap_or_else(|| desc.clone());
+
+            prices_obj.insert(
+                code.clone(),
+                json!({
+                    price_field.clone(): price.round(),
+                    "description": tier_desc
+                }),
+            );
+        }
 
         let mut result = json!({
-            "prices": {
-                "24K": {
-                    "price_per_gram_inr": price_24k.round(),
-                    "description": "Pure gold (99.9%)"
-                },
-                "22K": {
-                    "price_per_gram_inr": price_22k.round(),
-                    "description": "Standard jewelry gold (91.6%)"
-                },
-                "18K": {
-                    "price_per_gram_inr": price_18k.round(),
-                    "description": "Fashion jewelry gold (75%)"
-                }
-            },
+            "prices": prices_obj,
             "source": source,
             "updated_at": Utc::now().to_rfc3339(),
             "disclaimer": "Prices are indicative. Final value determined at branch during valuation."
         });
 
+        // Add estimated values if weight provided
         if let Some(w) = weight {
-            let values = json!({
-                "24K": (w * price_24k).round(),
-                "22K": (w * price_22k).round(),
-                "18K": (w * price_18k).round()
-            });
-            result["estimated_values_inr"] = values;
+            let mut values_obj = serde_json::Map::new();
+            for (code, factor, _) in &tiers {
+                let price = tier_prices
+                    .get(code)
+                    .map(|(p, _)| *p)
+                    .unwrap_or(base_price * factor);
+                values_obj.insert(code.clone(), json!((w * price).round()));
+            }
+            // P2.6 FIX: Use config-driven currency field suffix
+            result[format!("estimated_values_{}", suffix)] = Value::Object(values_obj);
             result["weight_grams"] = json!(w);
         }
 
-        // P16 FIX: Use config-driven response templates
+        // P20 FIX: Build message dynamically from config tiers
+        let default_tier = self.view.default_quality_tier_display();
         if let Some(p) = purity {
-            let price = match p {
-                "24K" => price_24k,
-                "22K" => price_22k,
-                "18K" => price_18k,
-                _ => price_22k,
-            };
+            let price = tier_prices
+                .get(p)
+                .map(|(pr, _)| *pr)
+                .unwrap_or_else(|| {
+                    // Fallback to default tier price
+                    tier_prices.get(&default_tier).map(|(pr, _)| *pr).unwrap_or(base_price)
+                });
+
             result["requested_purity"] = json!(p);
+            // P20 FIX: Use config template keys (single_variant) with correct variable names
+            // P3.2 FIX: Use config-driven currency symbol
+            let currency = self.view.currency_symbol();
             let message = if self.view.has_response_templates("get_price") {
                 let mut vars = self.view.default_template_vars();
-                vars.insert("purity".to_string(), p.to_string());
+                vars.insert("variant_name".to_string(), p.to_string());
                 vars.insert("price".to_string(), format!("{:.0}", price));
-                self.view.render_response("get_price", "single_purity", "en", &vars)
-                    .unwrap_or_else(|| format!("Current {} gold price is ₹{:.0} per gram.", p, price))
+                vars.insert("unit".to_string(), self.view.asset_unit().to_string());
+                vars.insert("currency".to_string(), currency.to_string());
+                self.view
+                    .render_response("get_price", "single_variant", "en", &vars)
+                    .unwrap_or_else(|| {
+                        format!(
+                            "Current {} {} price is {}{:.0} per {}.",
+                            p,
+                            self.view.product_name(),
+                            currency,
+                            price,
+                            self.view.asset_unit()
+                        )
+                    })
             } else {
-                format!("Current {} gold price is ₹{:.0} per gram.", p, price)
+                format!(
+                    "Current {} {} price is {}{:.0} per {}.",
+                    p,
+                    self.view.product_name(),
+                    currency,
+                    price,
+                    self.view.asset_unit()
+                )
             };
             result["message"] = json!(message);
         } else {
+            // P20 FIX: Build all prices message dynamically from config tiers
+            // Use config template (all_variants) with positional tier variables
             let message = if self.view.has_response_templates("get_price") {
                 let mut vars = self.view.default_template_vars();
-                vars.insert("price_24k".to_string(), format!("{:.0}", price_24k));
-                vars.insert("price_22k".to_string(), format!("{:.0}", price_22k));
-                vars.insert("price_18k".to_string(), format!("{:.0}", price_18k));
-                self.view.render_response("get_price", "all_prices", "en", &vars)
-                    .unwrap_or_else(|| format!(
-                        "Current gold prices - 24K: ₹{:.0}/g, 22K: ₹{:.0}/g, 18K: ₹{:.0}/g",
-                        price_24k, price_22k, price_18k
-                    ))
+                vars.insert("unit".to_string(), self.view.asset_unit().to_string());
+                // Add positional tier vars (tier_1_name, tier_1_price, tier_2_name, tier_2_price, etc.)
+                for (idx, (code, factor, _)) in tiers.iter().enumerate() {
+                    let price = tier_prices
+                        .get(code)
+                        .map(|(p, _)| *p)
+                        .unwrap_or(base_price * factor);
+                    let tier_num = idx + 1;
+                    vars.insert(format!("tier_{}_name", tier_num), code.clone());
+                    vars.insert(format!("tier_{}_price", tier_num), format!("{:.0}", price));
+                }
+                self.view
+                    .render_response("get_price", "all_variants", "en", &vars)
+                    .unwrap_or_else(|| self.build_all_prices_message(&tiers, &tier_prices, base_price))
             } else {
-                format!(
-                    "Current gold prices - 24K: ₹{:.0}/g, 22K: ₹{:.0}/g, 18K: ₹{:.0}/g",
-                    price_24k, price_22k, price_18k
-                )
+                self.build_all_prices_message(&tiers, &tier_prices, base_price)
             };
             result["message"] = json!(message);
         }
 
         Ok(ToolOutput::json(result))
+    }
+}
+
+impl GetPriceTool {
+    /// P20 FIX: Build "all prices" message dynamically from config tiers
+    fn build_all_prices_message(
+        &self,
+        tiers: &[(String, f64, String)],
+        tier_prices: &std::collections::HashMap<String, (f64, String)>,
+        base_price: f64,
+    ) -> String {
+        let product = self.view.product_name();
+        // P3.2 FIX: Use config-driven currency symbol
+        let currency = self.view.currency_symbol();
+        let unit = self.view.asset_unit();
+        let price_parts: Vec<String> = tiers
+            .iter()
+            .map(|(code, factor, _)| {
+                let price = tier_prices
+                    .get(code)
+                    .map(|(p, _)| *p)
+                    .unwrap_or(base_price * factor);
+                format!("{}: {}{:.0}/{}", code, currency, price, unit)
+            })
+            .collect();
+
+        format!("Current {} prices - {}", product, price_parts.join(", "))
     }
 }

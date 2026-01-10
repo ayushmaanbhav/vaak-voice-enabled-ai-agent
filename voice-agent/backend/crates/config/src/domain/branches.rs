@@ -71,8 +71,10 @@ impl BranchesConfig {
             .collect()
     }
 
-    /// Backwards compatibility alias
-    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+    /// Backwards compatibility alias for legacy code
+    /// P21 FIX: Deprecated - use the domain-agnostic service_locations() method
+    #[deprecated(since = "0.20.0", note = "Use service_locations() for domain-agnostic access")]
+    pub fn legacy_service_branches(&self) -> Vec<&BranchEntry> {
         self.service_locations()
     }
 
@@ -229,7 +231,9 @@ defaults:
     }
 
     #[test]
-    fn test_legacy_gold_loan_available_alias() {
+    fn test_legacy_service_available_alias() {
+        // P21 FIX: Tests backward compatibility with legacy YAML field names
+        // Old configs may use "gold_loan_available" which maps to "service_available"
         let yaml = r#"
 branches:
   - branch_id: "LOC001"

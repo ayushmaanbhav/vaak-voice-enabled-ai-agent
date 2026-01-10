@@ -220,6 +220,31 @@ impl IntentDetector {
         }
     }
 
+    /// P2.1 FIX: Set location patterns from domain config
+    ///
+    /// This allows loading city/location patterns from config rather than using
+    /// the hardcoded 9-city list. The pattern should be a regex that matches
+    /// all configured city names.
+    ///
+    /// # Arguments
+    /// * `pattern` - Combined regex pattern for all city names
+    pub fn set_location_pattern(&mut self, pattern: &str) {
+        if let Ok(regex) = Regex::new(pattern) {
+            self.compiled_patterns.insert(
+                "location".to_string(),
+                vec![CompiledSlotPattern {
+                    name: "city".to_string(),
+                    regex,
+                    slot_type: SlotType::Location,
+                    multiplier: None,
+                }],
+            );
+            tracing::debug!("Set location pattern from config");
+        } else {
+            tracing::warn!("Failed to compile location pattern: {}", pattern);
+        }
+    }
+
     /// Add additional intents to the detector
     pub fn add_intents(&self, new_intents: Vec<Intent>) {
         let mut intents = self.intents.write();
@@ -665,33 +690,16 @@ impl IntentDetector {
         self.compiled_patterns
             .insert("phone_number".to_string(), phone_patterns);
 
-        // Current lender patterns (DEFAULT - override with add_competitor_patterns())
+        // Current provider patterns (empty by default - domain-agnostic)
         //
-        // NOTE: These are example patterns. For production use, load competitor patterns
+        // P18 FIX: No hardcoded competitors. For production use, load competitor patterns
         // from domain config using add_competitor_patterns() after construction.
-        // These defaults are provided for backwards compatibility only.
-        let lender_patterns = vec![
-            CompiledSlotPattern {
-                name: "competitor_1".to_string(),
-                regex: Regex::new(r"(?i)\b(muthoot)\b").unwrap(),
-                slot_type: SlotType::Text,
-                multiplier: None,
-            },
-            CompiledSlotPattern {
-                name: "competitor_2".to_string(),
-                regex: Regex::new(r"(?i)\b(manappuram)\b").unwrap(),
-                slot_type: SlotType::Text,
-                multiplier: None,
-            },
-            CompiledSlotPattern {
-                name: "competitor_3".to_string(),
-                regex: Regex::new(r"(?i)\b(iifl|ii\s*fl)\b").unwrap(),
-                slot_type: SlotType::Text,
-                multiplier: None,
-            },
-        ];
+        // Example: detector.add_competitor_patterns(view.competitor_intent_patterns());
         self.compiled_patterns
-            .insert("current_lender".to_string(), lender_patterns);
+            .insert("current_provider".to_string(), vec![]);
+        // Legacy alias for backwards compatibility
+        self.compiled_patterns
+            .insert("current_lender".to_string(), vec![]);
 
         // Collateral variant patterns (DEFAULT - override with add_variant_patterns())
         //
@@ -1046,33 +1054,7 @@ impl IntentDetector {
         Self::indic_numerals_to_ascii(s)
     }
 
-    /// P0 FIX: Convert Hindi number word to numeric value
-    fn hindi_word_to_number(word: &str) -> Option<f64> {
-        match word {
-            "एक" => Some(1.0),
-            "दो" => Some(2.0),
-            "तीन" => Some(3.0),
-            "चार" => Some(4.0),
-            "पांच" | "पाँच" => Some(5.0),
-            "छह" | "छे" => Some(6.0),
-            "सात" => Some(7.0),
-            "आठ" => Some(8.0),
-            "नौ" => Some(9.0),
-            "दस" => Some(10.0),
-            "बीस" => Some(20.0),
-            "पच्चीस" => Some(25.0),
-            "तीस" => Some(30.0),
-            "पैंतीस" => Some(35.0),
-            "चालीस" => Some(40.0),
-            "पचास" => Some(50.0),
-            "साठ" => Some(60.0),
-            "सत्तर" => Some(70.0),
-            "अस्सी" => Some(80.0),
-            "नब्बे" => Some(90.0),
-            "सौ" => Some(100.0),
-            _ => None,
-        }
-    }
+    // P2.2 FIX: Removed duplicate hindi_word_to_number() - now uses crate::hindi::word_to_number()
 
     /// P0 FIX: Extract slot value using compiled regex patterns
     ///
@@ -1097,8 +1079,8 @@ impl IntentDetector {
                     let value = if let Some(multiplier) = pattern.multiplier {
                         // P3 FIX: Handle all Indic script numerals and number words
                         let numeric_value = if pattern.name.starts_with("hindi_word") {
-                            // Hindi number word - convert to numeric value
-                            Self::hindi_word_to_number(raw_value).unwrap_or(1.0)
+                            // P2.2 FIX: Use shared Hindi module
+                            crate::hindi::word_to_number(raw_value).unwrap_or(1.0)
                         } else if raw_value.chars().any(Self::is_indic_numeral) {
                             // P3 FIX: Contains any Indic script numerals - convert to ASCII first
                             let ascii_value = Self::indic_numerals_to_ascii(raw_value);
@@ -1210,8 +1192,9 @@ mod tests {
     fn test_intent_detection() {
         let detector = IntentDetector::new();
 
-        let result = detector.detect("I want a gold loan");
-        assert_eq!(result.intent, "loan_inquiry");
+        // P18 FIX: Domain-agnostic intent names - "service_inquiry" replaces domain-specific intents
+        let result = detector.detect("I want to apply for a service");
+        assert_eq!(result.intent, "service_inquiry");
         assert!(result.confidence > 0.5);
     }
 
@@ -1225,7 +1208,11 @@ mod tests {
 
     #[test]
     fn test_slot_extraction() {
-        let detector = IntentDetector::new();
+        let mut detector = IntentDetector::new();
+        // P18 FIX: Must set up competitor patterns before testing (domain-agnostic)
+        detector.add_competitor_patterns(vec![
+            ("muthoot", "Muthoot Finance", r"(?i)\b(muthoot)\b"),
+        ]);
 
         let slots = detector.extract_slots("I have a loan from Muthoot");
         assert!(slots.contains_key("current_lender"));
@@ -1318,7 +1305,12 @@ mod tests {
 
     #[test]
     fn test_multiple_lenders() {
-        let detector = IntentDetector::new();
+        let mut detector = IntentDetector::new();
+        // P18 FIX: Must set up competitor patterns before testing (domain-agnostic)
+        detector.add_competitor_patterns(vec![
+            ("manappuram", "Manappuram Finance", r"(?i)\b(manappuram)\b"),
+            ("iifl", "IIFL", r"(?i)\b(iifl|ii\s*fl)\b"),
+        ]);
 
         let slots1 = detector.extract_slots("I have a loan from Manappuram");
         assert_eq!(
@@ -1420,11 +1412,12 @@ mod tests {
 
     #[test]
     fn test_hindi_number_word_conversion() {
-        assert_eq!(IntentDetector::hindi_word_to_number("पांच"), Some(5.0));
-        assert_eq!(IntentDetector::hindi_word_to_number("दस"), Some(10.0));
-        assert_eq!(IntentDetector::hindi_word_to_number("बीस"), Some(20.0));
-        assert_eq!(IntentDetector::hindi_word_to_number("पचास"), Some(50.0));
-        assert_eq!(IntentDetector::hindi_word_to_number("unknown"), None);
+        // P2.2 FIX: Use shared hindi module
+        assert_eq!(crate::hindi::word_to_number("पांच"), Some(5.0));
+        assert_eq!(crate::hindi::word_to_number("दस"), Some(10.0));
+        assert_eq!(crate::hindi::word_to_number("बीस"), Some(20.0));
+        assert_eq!(crate::hindi::word_to_number("पचास"), Some(50.0));
+        assert_eq!(crate::hindi::word_to_number("unknown"), None);
     }
 
     // P3 FIX: Tests for all 11 Indic script numerals

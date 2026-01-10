@@ -715,3 +715,175 @@ domain_boost:
       category: competitor
       boost: 1.3
       related: ["manappuram finance"]
+
+# ============================================================================
+# P18 FIX: Currency Configuration (Domain-Agnostic)
+# ============================================================================
+currency:
+  code: "INR"
+  symbol: "₹"
+  # P2.6 FIX: Suffix for JSON output field names (e.g., "amount_inr")
+  field_suffix: "inr"
+  display_units:
+    savings_unit:
+      name: "lakh"
+      amount: 100000.0
+    large_unit:
+      name: "crore"
+      amount: 10000000.0
+    small_unit:
+      name: "rupees"
+      amount: 1.0
+
+# ============================================================================
+# P18 FIX: Memory Compressor Configuration (Domain-Agnostic)
+# ============================================================================
+# All domain-specific keywords, entity patterns, and intent mappings
+# that were previously hardcoded in memory/compressor.rs
+memory_compressor:
+  domain_keywords:
+    # Product/service terms
+    product_terms:
+      - "gold"
+      - "loan"
+      - "interest"
+      - "emi"
+      - "disbursal"
+      - "foreclosure"
+      - "eligibility"
+      - "document"
+      - "repayment"
+      - "tenure"
+      - "balance"
+      - "transfer"
+      - "top-up"
+      - "topup"
+      - "branch"
+      - "rate"
+    # Unit terms
+    unit_terms:
+      - "gram"
+      - "grams"
+      - "gm"
+      - "tola"
+      - "lakh"
+      - "lakhs"
+      - "crore"
+      - "rupees"
+      - "rs"
+      - "percent"
+      - "amount"
+    # Quality/variant terms
+    quality_terms:
+      - "purity"
+      - "karat"
+      - "carat"
+      - "hallmark"
+      - "22k"
+      - "24k"
+      - "18k"
+      - "14k"
+    # Regional/Hindi terms
+    regional_terms:
+      - "sona"
+      - "karj"
+      - "karza"
+      - "byaj"
+      - "rin"
+      - "gehne"
+      - "jewelry"
+      - "jewellery"
+      - "ornaments"
+    # Auto-include competitor and brand names
+    include_competitor_names: true
+    include_brand_name: true
+
+  # Entity patterns for sentence scoring
+  entity_patterns:
+    asset_quantity:
+      patterns: ["gram", "grams", "gm", "tola", "g"]
+    amount:
+      patterns: ["lakh", "lakhs", "crore", "rupees", "rs", "₹"]
+    asset_quality:
+      patterns: ["22k", "24k", "18k", "14k", "karat", "carat", "hallmark"]
+    # competitor patterns auto-populated from competitors config
+
+  # Intent keywords for relevance scoring
+  intent_keywords:
+    rate_inquiry:
+      patterns: ["rate", "interest", "byaj", "percent", "percentage", "dar"]
+    product_inquiry:
+      patterns: ["loan", "borrow", "karj", "karza", "rin", "apply"]
+    eligibility:
+      patterns: ["eligible", "qualify", "can i get", "patrta", "criteria"]
+    branch:
+      patterns: ["branch", "location", "nearby", "visit", "shakha"]
+    competitor:
+      patterns: ["better", "compare", "switch", "transfer", "difference"]
+      include_competitor_aliases: true
+    amount:
+      patterns: ["how much", "kitna", "amount", "value", "rashi", "loan amount"]
+    document:
+      patterns: ["document", "documents", "papers", "kyc", "id proof", "dastavez"]
+
+  # Slot display mappings for DST summary
+  slot_display_mappings:
+    asset_quantity:
+      display: "Asset"
+      aliases: ["gold_weight", "weight"]
+    amount:
+      display: "Amount"
+      aliases: ["loan_amount"]
+    asset_quality:
+      display: "Quality"
+      aliases: ["gold_purity", "purity"]
+    customer_name:
+      display: "Name"
+      aliases: ["name"]
+    phone_number:
+      display: "Phone"
+      aliases: ["phone"]
+    competitor:
+      display: "Competitor"
+      aliases: ["current_lender"]
+    interest_rate:
+      display: "Rate"
+      aliases: ["rate"]
+    preferred_branch:
+      display: "Branch"
+      aliases: ["branch"]
+    urgency:
+      display: "Urgency"
+      aliases: []
+    purpose:
+      display: "Purpose"
+      aliases: ["loan_purpose"]
+
+  # Filler patterns by language (for sentence filtering)
+  filler_patterns:
+    en:
+      - "hello"
+      - "hi"
+      - "thank you"
+      - "thanks"
+      - "okay"
+      - "ok"
+      - "yes"
+      - "no"
+      - "sure"
+      - "alright"
+      - "great"
+      - "i see"
+      - "understood"
+      - "good morning"
+      - "good afternoon"
+      - "good evening"
+    hi:
+      - "namaste"
+      - "dhanyavaad"
+      - "haan"
+      - "nahi"
+      - "ji"
+      - "achha"
+      - "theek hai"
+      - "shukriya"

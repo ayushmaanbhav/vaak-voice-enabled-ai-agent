@@ -17,7 +17,7 @@ pub use utils::{calculate_emi, calculate_total_interest};
 
 // Re-export location management
 pub use locations::{
-    get_branches, get_mock_branches, load_branches_from_file, reload_branches, BranchData,
+    get_branches, find_locations, load_branches_from_file, reload_branches, BranchData,
 };
 
 // Re-export all tools

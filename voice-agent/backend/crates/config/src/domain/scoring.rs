@@ -211,7 +211,9 @@ impl Default for CategoryWeights {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UrgencyScoringConfig {
     pub has_signal_score: u32,
-    pub keyword_score: u32,
+    /// P21 FIX: Added alias for YAML field name compatibility
+    #[serde(alias = "keyword_score")]
+    pub per_keyword_score: u32,
     pub max_keywords: u32,
     pub max_score: u32,
     #[serde(default)]
@@ -246,7 +248,7 @@ impl Default for UrgencyScoringConfig {
 
         Self {
             has_signal_score: 10,
-            keyword_score: 5,
+            per_keyword_score: 5,
             max_keywords: 3,
             max_score: 25,
             keywords,
@@ -285,7 +287,9 @@ impl Default for EngagementScoringConfig {
 pub struct InformationScoringConfig {
     pub max_score: u32,
     pub contact_info_score: u32,
-    pub gold_details_score: u32,
+    /// P21 FIX: Renamed from gold_details_score to be domain-agnostic
+    #[serde(alias = "gold_details_score")]
+    pub asset_details_score: u32,
     pub loan_amount_score: u32,
     pub specific_requirements_score: u32,
 }
@@ -295,7 +299,7 @@ impl Default for InformationScoringConfig {
         Self {
             max_score: 25,
             contact_info_score: 8,
-            gold_details_score: 8,
+            asset_details_score: 8,
             loan_amount_score: 5,
             specific_requirements_score: 4,
         }

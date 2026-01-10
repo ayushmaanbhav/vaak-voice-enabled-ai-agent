@@ -435,12 +435,13 @@ mod tests {
 
     #[test]
     fn test_turn_creation() {
-        let turn = ConversationTurn::new(TurnRole::User, "I want a gold loan")
-            .with_intents(vec!["loan_inquiry".to_string()])
-            .with_entities(vec![("product".to_string(), "gold_loan".to_string())]);
+        // P21 FIX: Use domain-agnostic test data
+        let turn = ConversationTurn::new(TurnRole::User, "I want to inquire about your service")
+            .with_intents(vec!["service_inquiry".to_string()])
+            .with_entities(vec![("product".to_string(), "test_product".to_string())]);
 
         assert_eq!(turn.role, TurnRole::User);
-        assert!(turn.intents.contains(&"loan_inquiry".to_string()));
+        assert!(turn.intents.contains(&"service_inquiry".to_string()));
     }
 
     #[test]

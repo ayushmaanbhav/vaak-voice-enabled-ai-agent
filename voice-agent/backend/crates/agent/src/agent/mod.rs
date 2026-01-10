@@ -116,18 +116,25 @@ pub struct DomainAgent {
 }
 
 impl DomainAgent {
-    /// Create a new agent
-    pub fn new(session_id: impl Into<String>, config: AgentConfig) -> Self {
+    /// Create a new agent with domain configuration
+    ///
+    /// # P21 FIX: Accept domain config instead of creating default
+    /// This ensures the agent uses the loaded domain configuration from AppState
+    /// instead of creating its own default config, enabling true domain-agnosticism.
+    pub fn new(
+        session_id: impl Into<String>,
+        config: AgentConfig,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
+    ) -> Self {
         let (event_tx, _) = broadcast::channel(100);
         let session_id = session_id.into();
 
         let conversation = Arc::new(Conversation::new(&session_id, config.conversation.clone()));
 
-        // P15 FIX: Create domain config first, used for tools and persona
-        let domain_config = Arc::new(voice_agent_config::MasterDomainConfig::default());
+        // P21 FIX: Use provided domain config (loaded from YAML) instead of default
         let agent_view =
             Arc::new(voice_agent_config::AgentDomainView::new(domain_config.clone()));
-        let tools_view = Arc::new(voice_agent_config::ToolsDomainView::new(domain_config));
+        let tools_view = Arc::new(voice_agent_config::ToolsDomainView::new(domain_config.clone()));
 
         // Configure the conversation's agentic memory with persona settings
         // NOTE: We use conversation.agentic_memory() to avoid having two separate memory instances
@@ -260,8 +267,10 @@ impl DomainAgent {
         // Extract DST config before moving config into struct
         let dst_config = config.dst_config.clone();
 
-        // Phase 10: Initialize lead scoring engine
-        let lead_scoring = LeadScoringEngine::new();
+        // Phase 10: Initialize lead scoring engine with config-driven scoring values
+        // P21 FIX: Use scoring config from domain config instead of hardcoded defaults
+        let scoring_config = Arc::new(domain_config.scoring.clone());
+        let lead_scoring = LeadScoringEngine::with_scoring_config(scoring_config);
 
         Self {
             config,
@@ -280,8 +289,19 @@ impl DomainAgent {
             speculative,
             dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(dst_config)),
             lead_scoring: RwLock::new(lead_scoring),
-            domain_view: None,
+            // P21 FIX: Set domain view from provided config instead of None
+            domain_view: Some(agent_view),
         }
+    }
+
+    /// Create agent with default domain config (for backward compatibility and tests)
+    #[deprecated(note = "Use new() with explicit domain_config for production")]
+    pub fn new_with_defaults(session_id: impl Into<String>, config: AgentConfig) -> Self {
+        Self::new(
+            session_id,
+            config,
+            Arc::new(voice_agent_config::MasterDomainConfig::default()),
+        )
     }
 
     /// P1-2 FIX: Create speculative executor with SLM and LLM backends
@@ -315,6 +335,8 @@ impl DomainAgent {
 
         // P15 FIX: Create domain config first, used for tools and persona
         let domain_config = Arc::new(voice_agent_config::MasterDomainConfig::default());
+        // P21 FIX: Extract scoring config before domain_config is moved
+        let scoring_config = Arc::new(domain_config.scoring.clone());
         let agent_view =
             Arc::new(voice_agent_config::AgentDomainView::new(domain_config.clone()));
         let tools_view = Arc::new(voice_agent_config::ToolsDomainView::new(domain_config));
@@ -384,8 +406,9 @@ impl DomainAgent {
             None
         };
 
-        // Phase 10: Initialize lead scoring engine
-        let lead_scoring = LeadScoringEngine::new();
+        // Phase 10: Initialize lead scoring engine with config-driven scoring values
+        // P21 FIX: scoring_config was extracted earlier before domain_config was moved
+        let lead_scoring = LeadScoringEngine::with_scoring_config(scoring_config);
 
         Self {
             config: config.clone(),
@@ -404,7 +427,7 @@ impl DomainAgent {
             speculative,
             dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(config.dst_config.clone())),
             lead_scoring: RwLock::new(lead_scoring),
-            domain_view: None,
+            domain_view: Some(agent_view),
         }
     }
 
@@ -417,6 +440,8 @@ impl DomainAgent {
 
         // P15 FIX: Create domain config first, used for tools and persona
         let domain_config = Arc::new(voice_agent_config::MasterDomainConfig::default());
+        // P21 FIX: Extract scoring config before domain_config is moved
+        let scoring_config = Arc::new(domain_config.scoring.clone());
         let agent_view =
             Arc::new(voice_agent_config::AgentDomainView::new(domain_config.clone()));
         let tools_view = Arc::new(voice_agent_config::ToolsDomainView::new(domain_config));
@@ -466,8 +491,9 @@ impl DomainAgent {
         // P0 FIX: Initialize persuasion engine for objection handling
         let persuasion: Arc<dyn PersuasionStrategy> = Arc::new(PersuasionEngine::new());
 
-        // Phase 10: Initialize lead scoring engine
-        let lead_scoring = LeadScoringEngine::new();
+        // Phase 10: Initialize lead scoring engine with config-driven scoring values
+        // P21 FIX: scoring_config was extracted earlier before domain_config was moved
+        let lead_scoring = LeadScoringEngine::with_scoring_config(scoring_config);
 
         Self {
             config: config.clone(),
@@ -486,7 +512,7 @@ impl DomainAgent {
             speculative: None, // P1-2 FIX: No speculative without LLM
             dialogue_state: RwLock::new(DialogueStateTracker::with_tracking_config(config.dst_config.clone())),
             lead_scoring: RwLock::new(lead_scoring),
-            domain_view: None,
+            domain_view: Some(agent_view),
         }
     }
 
@@ -545,6 +571,10 @@ impl DomainAgent {
         // P13 FIX: Wire domain view to DST for config-driven instructions
         self.dialogue_state.write().set_domain_view(view.clone());
 
+        // P20 FIX: Wire lead classifier for config-driven MQL/SQL classification
+        let classifier = view.lead_classifier();
+        self.lead_scoring.write().set_classifier(classifier);
+
         self.domain_view = Some(view);
         self
     }
@@ -598,7 +628,10 @@ impl DomainAgent {
         tracing::debug!(customer_name = %name, "Set customer name for personalization");
     }
 
-    /// P4 FIX: Set customer segment for personalization
+    /// P4 FIX: Set customer segment for personalization (enum-based - deprecated)
+    ///
+    /// Use `set_segment_id` instead for config-driven segment support.
+    #[deprecated(note = "Use set_segment_id for config-driven segment support")]
     pub fn set_customer_segment(&self, segment: voice_agent_core::CustomerSegment) {
         use voice_agent_core::personalization::Persona;
 
@@ -606,6 +639,54 @@ impl DomainAgent {
         ctx.segment = Some(segment);
         ctx.persona = Persona::for_segment(segment);
         tracing::debug!(segment = ?segment, "Set customer segment for personalization");
+    }
+
+    /// P25 FIX: Set customer segment by config-driven ID
+    ///
+    /// This method accepts a string segment ID from config (e.g., "high_value",
+    /// "trust_seeker", "women", "professional") and uses config-driven persona
+    /// lookup instead of the hardcoded enum-based approach.
+    pub fn set_segment_id(&self, segment_id: impl Into<String>) {
+        use voice_agent_core::personalization::Persona;
+        use voice_agent_core::CustomerSegment;
+
+        let segment_id = segment_id.into();
+
+        // Try to get persona from config first (domain-agnostic)
+        if let Some(ref view) = self.domain_view {
+            if let Some(persona_config) = view.persona_config_for_segment(&segment_id) {
+                let persona = Persona::from_persona_config(&persona_config);
+                let mut ctx = self.personalization_ctx.write();
+
+                // Also set enum-based segment for backward compatibility
+                ctx.segment = CustomerSegment::from_segment_id(&segment_id);
+                ctx.persona = persona;
+
+                tracing::debug!(
+                    segment_id = %segment_id,
+                    persona_name = %ctx.persona.name,
+                    "Set customer segment from config"
+                );
+                return;
+            }
+        }
+
+        // Fallback to enum-based approach if config not available
+        if let Some(segment) = CustomerSegment::from_segment_id(&segment_id) {
+            let mut ctx = self.personalization_ctx.write();
+            ctx.segment = Some(segment);
+            ctx.persona = Persona::for_segment(segment);
+            tracing::debug!(
+                segment_id = %segment_id,
+                segment = ?segment,
+                "Set customer segment (fallback to enum)"
+            );
+        } else {
+            tracing::warn!(
+                segment_id = %segment_id,
+                "Unknown segment ID, ignoring"
+            );
+        }
     }
 
     /// P4 FIX: Get current personalization context (read-only)
@@ -730,8 +811,13 @@ impl PersonalizableAgent for DomainAgent {
         DomainAgent::set_customer_name(self, name)
     }
 
+    #[allow(deprecated)]
     fn set_customer_segment(&self, segment: voice_agent_core::CustomerSegment) {
         DomainAgent::set_customer_segment(self, segment)
+    }
+
+    fn set_segment_id(&self, segment_id: impl Into<String>) {
+        DomainAgent::set_segment_id(self, segment_id)
     }
 }
 
@@ -761,9 +847,14 @@ fn find_sentence_end(text: &str, terminators: &[char]) -> Option<usize> {
 mod tests {
     use super::*;
 
+    /// Create default domain config for tests
+    fn test_domain_config() -> Arc<voice_agent_config::MasterDomainConfig> {
+        Arc::new(voice_agent_config::MasterDomainConfig::default())
+    }
+
     #[tokio::test]
     async fn test_agent_creation() {
-        let agent = DomainAgent::new("test-session", AgentConfig::default());
+        let agent = DomainAgent::new("test-session", AgentConfig::default(), test_domain_config());
 
         assert_eq!(agent.name(), "Priya");
         assert_eq!(agent.stage(), ConversationStage::Greeting);
@@ -771,7 +862,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_process() {
-        let agent = DomainAgent::new("test", AgentConfig::default());
+        let agent = DomainAgent::new("test", AgentConfig::default(), test_domain_config());
 
         let response = agent.process("Hello").await.unwrap();
 
@@ -788,7 +879,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_conversation_flow() {
-        let agent = DomainAgent::new("test", AgentConfig::default());
+        let agent = DomainAgent::new("test", AgentConfig::default(), test_domain_config());
 
         let _ = agent.process("Hello").await.unwrap();
 
@@ -797,7 +888,8 @@ mod tests {
             .transition_stage(ConversationStage::Discovery)
             .unwrap();
 
-        let response = agent.process("I have a loan from Muthoot").await.unwrap();
+        // P23 FIX: Use generic provider reference - actual names come from domain config
+        let response = agent.process("I have a loan from another provider").await.unwrap();
 
         assert!(!response.is_empty());
     }

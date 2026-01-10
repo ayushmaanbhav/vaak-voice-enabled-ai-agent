@@ -1,0 +1,231 @@
+# Entity Type Definitions
+# P23 FIX: Config-driven entity types (replaces hardcoded enums)
+#
+# This file defines domain-specific entity types like competitor categories
+# and customer segments. These replace hardcoded Rust enums to enable
+# domain-agnostic operation.
+
+# Competitor types for this domain
+competitor_types:
+  bank:
+    display_name: "Bank"
+    description: "Scheduled commercial banks offering secured loans"
+    default_values:
+      rate: 11.0
+      processing_fee: 0.5
+      prepayment_penalty: false
+      typical_ltv: 0.75
+    aliases:
+      - scheduled_bank
+      - commercial_bank
+      - psu_bank
+      - private_bank
+
+  nbfc:
+    display_name: "NBFC"
+    description: "Non-Banking Financial Companies"
+    default_values:
+      rate: 18.0
+      processing_fee: 1.0
+      prepayment_penalty: true
+      typical_ltv: 0.70
+    aliases:
+      - finance_company
+      - non_bank
+      - nbfc_company
+
+  cooperative:
+    display_name: "Cooperative Bank"
+    description: "Cooperative banks and credit societies"
+    default_values:
+      rate: 14.0
+      processing_fee: 0.75
+      prepayment_penalty: false
+      typical_ltv: 0.65
+    aliases:
+      - coop_bank
+      - credit_society
+      - cooperative_society
+
+  informal:
+    display_name: "Informal Lender"
+    description: "Unregulated money lenders and pawnbrokers"
+    default_values:
+      rate: 24.0
+      processing_fee: 2.0
+      prepayment_penalty: true
+      typical_ltv: 0.50
+    aliases:
+      - moneylender
+      - pawnbroker
+      - local_lender
+      - unorganized
+
+# Customer segments for this domain
+customer_segments:
+  high_value:
+    display_name: "High Value"
+    description: "Customers with large loan requirements or high-value assets"
+    default_values:
+      warmth: 0.9
+      response_style: professional
+      priority: high
+      features_emphasis:
+        - competitive_rates
+        - premium_service
+        - dedicated_support
+    aliases:
+      - premium
+      - vip
+
+  trust_seeker:
+    display_name: "Trust Seeker"
+    description: "Customers who prioritize trust and reputation"
+    default_values:
+      warmth: 0.95
+      response_style: reassuring
+      priority: medium
+      features_emphasis:
+        - brand_trust
+        - safety
+        - transparency
+    aliases:
+      - safety_conscious
+      - brand_conscious
+
+  first_time:
+    display_name: "First Time"
+    description: "Customers new to this type of product/service"
+    default_values:
+      warmth: 0.9
+      response_style: educational
+      priority: medium
+      features_emphasis:
+        - simple_process
+        - guidance
+        - no_hidden_charges
+    aliases:
+      - new_customer
+      - first_timer
+
+  price_sensitive:
+    display_name: "Price Sensitive"
+    description: "Customers primarily focused on rates and costs"
+    default_values:
+      warmth: 0.85
+      response_style: factual
+      priority: medium
+      features_emphasis:
+        - low_rates
+        - no_processing_fee
+        - cost_savings
+    aliases:
+      - cost_conscious
+      - rate_shopper
+      - budget_focused
+
+  urgent:
+    display_name: "Urgent"
+    description: "Customers with time-sensitive requirements"
+    default_values:
+      warmth: 0.9
+      response_style: efficient
+      priority: high
+      features_emphasis:
+        - quick_disbursement
+        - minimal_documentation
+        - doorstep_service
+    aliases:
+      - emergency
+      - time_sensitive
+
+  switcher:
+    display_name: "Switcher"
+    description: "Customers looking to switch from another provider"
+    default_values:
+      warmth: 0.85
+      response_style: comparative
+      priority: high
+      features_emphasis:
+        - better_rates
+        - balance_transfer
+        - competitor_comparison
+    aliases:
+      - balance_transfer
+      - refinance
+
+# Asset quality types (moved from slots for flexibility)
+asset_quality_types:
+  tier_1:
+    display_name: "24K"
+    description: "Highest quality (99.9% purity)"
+    default_values:
+      quality_factor: 0.999
+      ltv_eligible: true
+    aliases:
+      - 24k
+      - 24_karat
+      - pure
+
+  tier_2:
+    display_name: "22K"
+    description: "Standard quality (91.6% purity)"
+    default_values:
+      quality_factor: 0.916
+      ltv_eligible: true
+    aliases:
+      - 22k
+      - 22_karat
+      - standard
+
+  tier_3:
+    display_name: "18K"
+    description: "Economy quality (75% purity)"
+    default_values:
+      quality_factor: 0.750
+      ltv_eligible: true
+    aliases:
+      - 18k
+      - 18_karat
+
+  tier_4:
+    display_name: "14K"
+    description: "Lower quality (58.5% purity)"
+    default_values:
+      quality_factor: 0.585
+      ltv_eligible: false
+    aliases:
+      - 14k
+      - 14_karat
+
+# Repayment types
+repayment_types:
+  bullet:
+    display_name: "Bullet Repayment"
+    description: "Full principal at maturity, only interest during tenure"
+    default_values:
+      interest_only: true
+      emi_required: false
+    aliases:
+      - interest_only
+      - balloon
+
+  emi:
+    display_name: "EMI"
+    description: "Equated Monthly Installments"
+    default_values:
+      interest_only: false
+      emi_required: true
+    aliases:
+      - monthly_emi
+      - equated
+
+  flexible:
+    display_name: "Flexible"
+    description: "Flexible repayment schedule"
+    default_values:
+      interest_only: false
+      emi_required: false
+    aliases:
+      - custom
+      - variable

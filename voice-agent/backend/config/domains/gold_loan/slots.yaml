@@ -81,22 +81,48 @@ slots:
     type: enum
     display_name: "Gold Purity"  # Domain-specific display
     description: "Quality grade/tier of collateral asset"
+    # P18 FIX: Parsing configuration for config-driven quality tier parsing
+    # Replaces hardcoded parse_purity_id() and format_purity_display()
+    parsing:
+      default_id: "tier_2"
+      numeric_patterns:
+        - value: 24
+          tier_id: "tier_1"
+        - value: 22
+          tier_id: "tier_2"
+        - value: 18
+          tier_id: "tier_3"
+        - value: 14
+          tier_id: "tier_4"
+      text_patterns:
+        tier_1: ["24k", "24 karat", "24kt", "pure gold", "pure", "999"]
+        tier_2: ["22k", "22 karat", "22kt", "standard gold", "standard", "916"]
+        tier_3: ["18k", "18 karat", "18kt", "750"]
+        tier_4: ["14k", "14 karat", "14kt", "585"]
     values:
       - id: tier_1
         display: "24 karat"
+        short_code: "24K"
         quality_factor: 0.999
+        description: "Pure gold (99.9%)"
         patterns: ["24k", "24 karat", "24kt", "pure gold"]
       - id: tier_2
         display: "22 karat"
+        short_code: "22K"
         quality_factor: 0.916
+        description: "Standard jewelry gold (91.6%)"
         patterns: ["22k", "22 karat", "22kt", "standard gold"]
       - id: tier_3
         display: "18 karat"
+        short_code: "18K"
         quality_factor: 0.750
+        description: "Fashion jewelry gold (75%)"
         patterns: ["18k", "18 karat", "18kt"]
       - id: tier_4
         display: "14 karat"
+        short_code: "14K"
         quality_factor: 0.583
+        description: "Economy gold (58.3%)"
         patterns: ["14k", "14 karat", "14kt"]
     default: tier_2
 

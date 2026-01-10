@@ -158,12 +158,3 @@ pub fn find_locations(
         .collect()
 }
 
-/// Alias for backward compatibility
-#[deprecated(note = "Use find_locations instead")]
-pub fn get_mock_branches(
-    city: Option<&str>,
-    pincode: Option<&str>,
-    area: Option<&str>,
-) -> Vec<BranchData> {
-    find_locations(city, pincode, area)
-}

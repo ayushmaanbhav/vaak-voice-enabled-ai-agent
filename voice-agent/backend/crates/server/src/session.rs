@@ -347,11 +347,17 @@ pub struct Session {
 }
 
 impl Session {
-    /// Create a new session
-    pub fn new(id: impl Into<String>, config: AgentConfig) -> Self {
+    /// Create a new session with domain configuration
+    ///
+    /// # P21 FIX: Accept domain config to pass to DomainAgent
+    pub fn new(
+        id: impl Into<String>,
+        config: AgentConfig,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
+    ) -> Self {
         let id = id.into();
         Self {
-            agent: Arc::new(DomainAgent::new(&id, config)),
+            agent: Arc::new(DomainAgent::new(&id, config, domain_config)),
             id,
             created_at: Instant::now(),
             last_activity: RwLock::new(Instant::now()),
@@ -362,13 +368,16 @@ impl Session {
     }
 
     /// Create a new session with vector store for RAG
+    ///
+    /// # P21 FIX: Accept domain config to pass to DomainAgent
     pub fn with_vector_store(
         id: impl Into<String>,
         config: AgentConfig,
         vector_store: Arc<voice_agent_rag::VectorStore>,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
     ) -> Self {
         let id = id.into();
-        let agent = DomainAgent::new(&id, config).with_vector_store(vector_store);
+        let agent = DomainAgent::new(&id, config, domain_config).with_vector_store(vector_store);
         Self {
             agent: Arc::new(agent),
             id,
@@ -381,14 +390,17 @@ impl Session {
     }
 
     /// Create a new session with full integration (RAG + persistence-wired tools)
+    ///
+    /// # P21 FIX: Accept domain config to pass to DomainAgent
     pub fn with_full_integration(
         id: impl Into<String>,
         config: AgentConfig,
         vector_store: Option<Arc<voice_agent_rag::VectorStore>>,
         tools: Arc<voice_agent_tools::ToolRegistry>,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
     ) -> Self {
         let id = id.into();
-        let mut agent = DomainAgent::new(&id, config).with_tools(tools);
+        let mut agent = DomainAgent::new(&id, config, domain_config).with_tools(tools);
         if let Some(vs) = vector_store {
             agent = agent.with_vector_store(vs);
         }
@@ -516,18 +528,27 @@ impl SessionManager {
         shutdown_tx
     }
 
-    /// Create a new session
-    pub fn create(&self, config: AgentConfig) -> Result<Arc<Session>, ServerError> {
-        self.create_with_vector_store(config, None)
+    /// Create a new session with domain configuration
+    ///
+    /// # P21 FIX: Accept domain config to pass through to agent
+    pub fn create(
+        &self,
+        config: AgentConfig,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
+    ) -> Result<Arc<Session>, ServerError> {
+        self.create_with_vector_store(config, None, domain_config)
     }
 
     /// P0 FIX: Create a new session with optional vector store for RAG
+    ///
+    /// # P21 FIX: Accept domain config to pass through to agent
     pub fn create_with_vector_store(
         &self,
         config: AgentConfig,
         vector_store: Option<Arc<voice_agent_rag::VectorStore>>,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
     ) -> Result<Arc<Session>, ServerError> {
-        self.create_with_full_integration(config, vector_store, None)
+        self.create_with_full_integration(config, vector_store, None, domain_config)
     }
 
     /// P0 FIX: Create a new session with full integration (RAG + persistence-wired tools)
@@ -535,13 +556,17 @@ impl SessionManager {
     /// This method creates a session with:
     /// - Vector store for RAG retrieval (optional)
     /// - Tool registry with persistence services wired (optional, uses default if None)
+    /// - Domain configuration for domain-agnostic operation
     ///
     /// Use this for production deployments where tool calls should persist to ScyllaDB.
+    ///
+    /// # P21 FIX: Accept domain config to pass through to agent
     pub fn create_with_full_integration(
         &self,
         config: AgentConfig,
         vector_store: Option<Arc<voice_agent_rag::VectorStore>>,
         tools: Option<Arc<voice_agent_tools::ToolRegistry>>,
+        domain_config: Arc<voice_agent_config::MasterDomainConfig>,
     ) -> Result<Arc<Session>, ServerError> {
         let mut sessions = self.sessions.write();
 
@@ -559,13 +584,14 @@ impl SessionManager {
         let rag_enabled = vector_store.is_some();
         let tools_wired = tools.is_some();
 
+        // P21 FIX: Pass domain_config to all Session constructors
         let session = match (vector_store, tools) {
             (Some(vs), Some(t)) => {
-                Arc::new(Session::with_full_integration(&id, config, Some(vs), t))
+                Arc::new(Session::with_full_integration(&id, config, Some(vs), t, domain_config))
             },
-            (Some(vs), None) => Arc::new(Session::with_vector_store(&id, config, vs)),
-            (None, Some(t)) => Arc::new(Session::with_full_integration(&id, config, None, t)),
-            (None, None) => Arc::new(Session::new(&id, config)),
+            (Some(vs), None) => Arc::new(Session::with_vector_store(&id, config, vs, domain_config)),
+            (None, Some(t)) => Arc::new(Session::with_full_integration(&id, config, None, t, domain_config)),
+            (None, None) => Arc::new(Session::new(&id, config, domain_config)),
         };
         sessions.insert(id.clone(), session.clone());
 
@@ -631,10 +657,15 @@ impl SessionManager {
 mod tests {
     use super::*;
 
+    /// Create default domain config for tests
+    fn test_domain_config() -> Arc<voice_agent_config::MasterDomainConfig> {
+        Arc::new(voice_agent_config::MasterDomainConfig::default())
+    }
+
     #[test]
     fn test_session_creation() {
         let manager = SessionManager::new(10);
-        let session = manager.create(AgentConfig::default()).unwrap();
+        let session = manager.create(AgentConfig::default(), test_domain_config()).unwrap();
 
         assert!(session.is_active());
         assert!(!session.is_expired(Duration::from_secs(60)));
@@ -643,7 +674,7 @@ mod tests {
     #[test]
     fn test_session_get() {
         let manager = SessionManager::new(10);
-        let session = manager.create(AgentConfig::default()).unwrap();
+        let session = manager.create(AgentConfig::default(), test_domain_config()).unwrap();
         let id = session.id.clone();
 
         let retrieved = manager.get(&id);
@@ -654,7 +685,7 @@ mod tests {
     #[test]
     fn test_session_remove() {
         let manager = SessionManager::new(10);
-        let session = manager.create(AgentConfig::default()).unwrap();
+        let session = manager.create(AgentConfig::default(), test_domain_config()).unwrap();
         let id = session.id.clone();
 
         manager.remove(&id);
@@ -665,7 +696,7 @@ mod tests {
     async fn test_in_memory_session_store() {
         let store = InMemorySessionStore::new();
         let manager = SessionManager::new(10);
-        let session = manager.create(AgentConfig::default()).unwrap();
+        let session = manager.create(AgentConfig::default(), test_domain_config()).unwrap();
 
         // Store metadata
         store.store_metadata(&session).await.unwrap();

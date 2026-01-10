@@ -23,44 +23,43 @@ pub use audit::{
 };
 pub use client::{ScyllaClient, ScyllaConfig};
 pub use error::PersistenceError;
-// Asset price types (domain-agnostic) with legacy aliases
-pub use gold_price::{
-    AssetPrice, AssetPriceService, AssetVariant, SimulatedAssetPriceService,
-    // Legacy aliases for backwards compatibility
-    GoldPrice, GoldPriceService, GoldPurity, SimulatedGoldPriceService,
-};
+// Asset price types (domain-agnostic)
+pub use gold_price::{AssetPrice, AssetPriceService, SimulatedAssetPriceService, TierDefinition};
 pub use sessions::{ScyllaSessionStore, SessionData, SessionStore};
 pub use sms::{SimulatedSmsService, SmsMessage, SmsService, SmsStatus, SmsType};
 
-/// Initialize the persistence layer with ScyllaDB
-pub async fn init(config: ScyllaConfig) -> Result<PersistenceLayer, PersistenceError> {
+/// Initialize the persistence layer with ScyllaDB and domain-specific tiers
+///
+/// # Arguments
+/// * `config` - ScyllaDB configuration
+/// * `base_price` - Base asset price per unit
+/// * `tiers` - Tier definitions from domain config (e.g., from ToolsDomainView::quality_tiers_full())
+pub async fn init(
+    config: ScyllaConfig,
+    base_price: f64,
+    tiers: Vec<TierDefinition>,
+) -> Result<PersistenceLayer, PersistenceError> {
     let client = ScyllaClient::connect(config).await?;
     client.ensure_schema().await?;
 
     Ok(PersistenceLayer {
         sessions: ScyllaSessionStore::new(client.clone()),
         sms: SimulatedSmsService::new(client.clone()),
-        asset_price: SimulatedAssetPriceService::new(client.clone(), 7500.0),
+        asset_price: SimulatedAssetPriceService::new(client.clone(), base_price, tiers),
         appointments: ScyllaAppointmentStore::new(client.clone()),
         audit: ScyllaAuditLog::new(client),
     })
 }
 
+
 /// Combined persistence layer with all services
 pub struct PersistenceLayer {
     pub sessions: ScyllaSessionStore,
     pub sms: SimulatedSmsService,
-    /// P16 FIX: Generic asset price service (gold_price alias kept for backwards compatibility)
+    /// Asset price service with config-driven tier support
     pub asset_price: SimulatedAssetPriceService,
     pub appointments: ScyllaAppointmentStore,
-    /// P0 FIX: Audit logging for RBI compliance
+    /// Audit logging for compliance
     pub audit: ScyllaAuditLog,
 }
 
-impl PersistenceLayer {
-    /// Legacy accessor for backwards compatibility
-    #[inline]
-    pub fn gold_price(&self) -> &SimulatedAssetPriceService {
-        &self.asset_price
-    }
-}

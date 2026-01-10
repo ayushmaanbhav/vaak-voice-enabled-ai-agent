@@ -4,93 +4,93 @@
 //! - Daily fluctuation within configurable bounds
 //! - Price caching in ScyllaDB
 //! - Historical price tracking
-//!
-//! Note: Currently implemented for gold pricing but designed to be
-//! domain-agnostic. The struct field names use domain-specific terminology
-//! for gold variants (24K, 22K, 18K) but are accessed through the
-//! AssetPriceService trait.
+//! - Dynamic tier support (any number of tiers with config-driven names)
 
 use crate::{PersistenceError, ScyllaClient};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Timelike, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-/// Asset price data (generic struct for collateral pricing)
+/// Asset price data with dynamic tier support
 ///
-/// Field names use gold terminology for backwards compatibility,
-/// but the struct represents any collateral asset pricing.
+/// Supports any number of pricing tiers with config-driven names.
+/// Examples:
+/// - Gold: {"24K": 7500, "22K": 6870, "18K": 5625}
+/// - Diamonds: {"VVS1": 50000, "VS1": 30000, "SI1": 15000}
+/// - Vehicles: {"Excellent": 100000, "Good": 80000, "Fair": 60000}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetPrice {
-    /// Price per unit (default variant)
-    pub price_per_gram: f64,
-    /// Highest purity/grade price per unit
-    pub price_24k: f64,
-    /// Standard purity/grade price per unit
-    pub price_22k: f64,
-    /// Lower purity/grade price per unit
-    pub price_18k: f64,
-    /// Source of the price
+    /// Base price per unit (default/reference price)
+    pub base_price_per_unit: f64,
+    /// Dynamic tier prices keyed by tier code from config
+    pub tier_prices: HashMap<String, f64>,
+    /// Source of the price (e.g., "api", "simulated", "manual")
     pub source: String,
     /// When the price was last updated
     pub updated_at: DateTime<Utc>,
 }
 
-/// Legacy alias for backwards compatibility
-pub type GoldPrice = AssetPrice;
 
 impl AssetPrice {
-    /// Calculate maximum loan amount based on asset weight and LTV ratio
-    pub fn calculate_max_loan(
-        &self,
-        weight: f64,
-        variant: AssetVariant,
-        ltv_ratio: f64,
-    ) -> f64 {
-        let price = match variant {
-            AssetVariant::HighGrade => self.price_24k,
-            AssetVariant::StandardGrade => self.price_22k,
-            AssetVariant::LowerGrade => self.price_18k,
-        };
-        weight * price * ltv_ratio
+    /// Create a new AssetPrice with the given base price
+    pub fn new(base_price_per_unit: f64, source: &str) -> Self {
+        Self {
+            base_price_per_unit,
+            tier_prices: HashMap::new(),
+            source: source.to_string(),
+            updated_at: Utc::now(),
+        }
     }
 
-    /// Legacy method for backwards compatibility
-    pub fn calculate_max_loan_gold(
-        &self,
-        gold_weight_grams: f64,
-        purity: AssetVariant,
-        ltv_ratio: f64,
-    ) -> f64 {
-        self.calculate_max_loan(gold_weight_grams, purity, ltv_ratio)
+    /// Add a tier price
+    pub fn with_tier(mut self, tier_code: &str, price: f64) -> Self {
+        self.tier_prices.insert(tier_code.to_string(), price);
+        self
+    }
+
+    /// Get price for a specific tier code, falls back to base price
+    pub fn price_for_tier(&self, tier_code: &str) -> f64 {
+        self.tier_prices
+            .get(tier_code)
+            .copied()
+            .unwrap_or(self.base_price_per_unit)
+    }
+
+    /// Calculate maximum loan amount based on asset quantity and LTV ratio
+    pub fn calculate_max_loan(&self, quantity: f64, tier_code: &str, ltv_ratio: f64) -> f64 {
+        let price = self.price_for_tier(tier_code);
+        quantity * price * ltv_ratio
+    }
+
+    /// Get all tier codes
+    pub fn tier_codes(&self) -> Vec<&str> {
+        self.tier_prices.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Get the base price per unit
+    #[inline]
+    pub fn base_price_per_unit(&self) -> f64 {
+        self.base_price_per_unit
     }
 }
 
-/// Asset variant/grade levels (generic for any collateral type)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AssetVariant {
-    /// Highest grade (e.g., 24K gold, 99.9% pure)
-    HighGrade,
-    /// Standard grade (e.g., 22K gold, 91.6% pure)
-    StandardGrade,
-    /// Lower grade (e.g., 18K gold, 75% pure)
-    LowerGrade,
-}
-
-/// Legacy alias for backwards compatibility
-pub type GoldPurity = AssetVariant;
-
-impl AssetVariant {
-    /// Alias constants for gold purity (backwards compatibility)
-    pub const K24: AssetVariant = AssetVariant::HighGrade;
-    pub const K22: AssetVariant = AssetVariant::StandardGrade;
-    pub const K18: AssetVariant = AssetVariant::LowerGrade;
+/// Tier definition for price calculation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierDefinition {
+    /// Tier code (e.g., "24K", "VVS1", "Grade A")
+    pub code: String,
+    /// Factor relative to base price (e.g., 1.0 for highest, 0.916 for 22K gold)
+    pub factor: f64,
+    /// Human-readable description
+    pub description: String,
 }
 
 /// Asset price service trait (domain-agnostic interface)
 #[async_trait]
 pub trait AssetPriceService: Send + Sync {
-    /// Get the current asset price
+    /// Get the current asset price with all tiers
     async fn get_current_price(&self) -> Result<AssetPrice, PersistenceError>;
 
     /// Get historical price for a specific date
@@ -103,34 +103,67 @@ pub trait AssetPriceService: Send + Sync {
     async fn refresh_price(&self) -> Result<AssetPrice, PersistenceError>;
 }
 
-/// Legacy alias for backwards compatibility
-pub trait GoldPriceService: AssetPriceService {}
 
-/// Simulated asset price service (currently configured for gold)
+/// Simulated asset price service with configurable tiers
 #[derive(Clone)]
 pub struct SimulatedAssetPriceService {
     client: ScyllaClient,
-    base_price_high_grade: f64,
+    base_price: f64,
+    tiers: Vec<TierDefinition>,
     fluctuation_percent: f64,
     cache_ttl_seconds: i64,
 }
 
-/// Legacy alias for backwards compatibility
-pub type SimulatedGoldPriceService = SimulatedAssetPriceService;
 
 impl SimulatedAssetPriceService {
     /// Create a new simulated asset price service
     ///
     /// # Arguments
     /// * `client` - ScyllaDB client
-    /// * `base_price_high_grade` - Base price for highest grade asset per unit
-    pub fn new(client: ScyllaClient, base_price_high_grade: f64) -> Self {
+    /// * `base_price` - Base price for highest tier per unit
+    /// * `tiers` - Tier definitions from config
+    pub fn new(client: ScyllaClient, base_price: f64, tiers: Vec<TierDefinition>) -> Self {
         Self {
             client,
-            base_price_high_grade,
+            base_price,
+            tiers,
             fluctuation_percent: 2.0, // ±2% daily fluctuation
             cache_ttl_seconds: 300,   // 5 minute cache
         }
+    }
+
+    /// Create from domain view configuration (preferred)
+    ///
+    /// P23 FIX: This is the preferred way to create asset price service.
+    /// All tier information comes from domain config (slots.yaml).
+    ///
+    /// # Arguments
+    /// * `view` - The ToolsDomainView providing config-driven tier definitions
+    /// * `client` - ScyllaDB client
+    ///
+    /// # Example
+    /// ```ignore
+    /// let view = ToolsDomainView::new(config);
+    /// let service = SimulatedAssetPriceService::from_tiers(
+    ///     client,
+    ///     view.asset_price_per_unit(),
+    ///     view.quality_tiers_full(),
+    /// );
+    /// ```
+    pub fn from_tiers(
+        client: ScyllaClient,
+        base_price: f64,
+        tier_data: Vec<(String, f64, String)>,
+    ) -> Self {
+        let tiers = tier_data
+            .into_iter()
+            .map(|(code, factor, description)| TierDefinition {
+                code,
+                factor,
+                description,
+            })
+            .collect();
+        Self::new(client, base_price, tiers)
     }
 
     /// Set custom fluctuation percentage
@@ -147,39 +180,46 @@ impl SimulatedAssetPriceService {
 
     /// Generate a simulated price with realistic fluctuation
     fn generate_price(&self) -> AssetPrice {
-        generate_price_with_params(self.base_price_high_grade, self.fluctuation_percent)
+        let mut rng = rand::thread_rng();
+
+        // Generate fluctuation: -fluctuation_percent% to +fluctuation_percent%
+        let fluctuation = (rng.gen::<f64>() - 0.5) * 2.0 * (self.fluctuation_percent / 100.0);
+        let base_with_fluctuation = self.base_price * (1.0 + fluctuation);
+
+        let mut price = AssetPrice::new(base_with_fluctuation, "simulated");
+
+        // Calculate price for each tier
+        for tier in &self.tiers {
+            let tier_price = base_with_fluctuation * tier.factor;
+            price.tier_prices.insert(tier.code.clone(), tier_price);
+        }
+
+        // Set base to the standard tier if available (typically the most common)
+        if let Some(standard_price) = price.tier_prices.get("22K").or_else(|| {
+            // Find tier with factor closest to 0.9 as "standard"
+            self.tiers
+                .iter()
+                .filter(|t| t.factor > 0.8 && t.factor < 1.0)
+                .min_by(|a, b| {
+                    (a.factor - 0.9)
+                        .abs()
+                        .partial_cmp(&(b.factor - 0.9).abs())
+                        .unwrap()
+                })
+                .and_then(|t| price.tier_prices.get(&t.code))
+        }) {
+            price.base_price_per_unit = *standard_price;
+        }
+
+        price
     }
-}
 
-/// Generate a simulated asset price (used by tests)
-fn generate_price_with_params(base_price_high_grade: f64, fluctuation_percent: f64) -> AssetPrice {
-    let mut rng = rand::thread_rng();
-
-    // Generate fluctuation: -fluctuation_percent% to +fluctuation_percent%
-    let fluctuation = (rng.gen::<f64>() - 0.5) * 2.0 * (fluctuation_percent / 100.0);
-    let price_24k = base_price_high_grade * (1.0 + fluctuation);
-
-    // Calculate other grades based on high grade
-    // These factors could be made configurable in future
-    let price_22k = price_24k * 0.916; // Standard grade
-    let price_18k = price_24k * 0.75; // Lower grade
-
-    AssetPrice {
-        price_per_gram: price_22k, // Default to standard grade
-        price_24k,
-        price_22k,
-        price_18k,
-        source: "simulated".to_string(),
-        updated_at: Utc::now(),
-    }
-}
-
-impl SimulatedAssetPriceService {
     /// Get cached price from ScyllaDB
     async fn get_cached_price(&self) -> Result<Option<AssetPrice>, PersistenceError> {
+        // Query the latest price - DB stores in JSON format for flexibility
         let query = format!(
-            "SELECT price_per_gram, price_24k, price_22k, price_18k, updated_at, source
-             FROM {}.gold_price_latest WHERE singleton = 1",
+            "SELECT base_price, tier_prices_json, updated_at, source
+             FROM {}.asset_price_latest WHERE singleton = 1",
             self.client.keyspace()
         );
 
@@ -187,25 +227,18 @@ impl SimulatedAssetPriceService {
 
         if let Some(rows) = result.rows {
             if let Some(row) = rows.into_iter().next() {
-                let (price_per_gram, price_24k, price_22k, price_18k, updated_at, source): (
-                    f64,
-                    f64,
-                    f64,
-                    f64,
-                    i64,
-                    String,
-                ) = row
-                    .into_typed()
+                let (base_price, tier_prices_json, updated_at, source): (f64, String, i64, String) =
+                    row.into_typed()
+                        .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
+
+                let tier_prices: HashMap<String, f64> = serde_json::from_str(&tier_prices_json)
                     .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
 
                 return Ok(Some(AssetPrice {
-                    price_per_gram,
-                    price_24k,
-                    price_22k,
-                    price_18k,
+                    base_price_per_unit: base_price,
+                    tier_prices,
                     source,
-                    updated_at: DateTime::from_timestamp_millis(updated_at)
-                        .unwrap_or_else(Utc::now),
+                    updated_at: DateTime::from_timestamp_millis(updated_at).unwrap_or_else(Utc::now),
                 }));
             }
         }
@@ -215,10 +248,13 @@ impl SimulatedAssetPriceService {
 
     /// Update the latest price cache
     async fn update_cache(&self, price: &AssetPrice) -> Result<(), PersistenceError> {
+        let tier_prices_json = serde_json::to_string(&price.tier_prices)
+            .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
+
         let query = format!(
-            "INSERT INTO {}.gold_price_latest (
-                singleton, price_per_gram, price_24k, price_22k, price_18k, updated_at, source
-            ) VALUES (1, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO {}.asset_price_latest (
+                singleton, base_price, tier_prices_json, updated_at, source
+            ) VALUES (1, ?, ?, ?, ?)",
             self.client.keyspace()
         );
 
@@ -227,10 +263,8 @@ impl SimulatedAssetPriceService {
             .query_unpaged(
                 query,
                 (
-                    price.price_per_gram,
-                    price.price_24k,
-                    price.price_22k,
-                    price.price_18k,
+                    price.base_price_per_unit,
+                    &tier_prices_json,
                     price.updated_at.timestamp_millis(),
                     &price.source,
                 ),
@@ -246,10 +280,13 @@ impl SimulatedAssetPriceService {
         let date = now.date_naive();
         let hour = now.hour() as i32;
 
+        let tier_prices_json = serde_json::to_string(&price.tier_prices)
+            .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
+
         let query = format!(
-            "INSERT INTO {}.gold_prices (
-                date, hour, price_per_gram, price_24k, price_22k, price_18k, source, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO {}.asset_prices (
+                date, hour, base_price, tier_prices_json, source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)",
             self.client.keyspace()
         );
 
@@ -260,10 +297,8 @@ impl SimulatedAssetPriceService {
                 (
                     date.to_string(),
                     hour,
-                    price.price_per_gram,
-                    price.price_24k,
-                    price.price_22k,
-                    price.price_18k,
+                    price.base_price_per_unit,
+                    &tier_prices_json,
                     &price.source,
                     now.timestamp_millis(),
                 ),
@@ -297,8 +332,8 @@ impl AssetPriceService for SimulatedAssetPriceService {
         self.record_history(&price).await?;
 
         tracing::info!(
-            price_high_grade = price.price_24k,
-            price_standard = price.price_22k,
+            base_price = price.base_price_per_unit,
+            tier_count = price.tier_prices.len(),
             "Generated new simulated asset price"
         );
 
@@ -310,8 +345,8 @@ impl AssetPriceService for SimulatedAssetPriceService {
         date: NaiveDate,
     ) -> Result<Option<AssetPrice>, PersistenceError> {
         let query = format!(
-            "SELECT price_per_gram, price_24k, price_22k, price_18k, source, created_at
-             FROM {}.gold_prices WHERE date = ? LIMIT 1",
+            "SELECT base_price, tier_prices_json, source, created_at
+             FROM {}.asset_prices WHERE date = ? LIMIT 1",
             self.client.keyspace()
         );
 
@@ -323,25 +358,18 @@ impl AssetPriceService for SimulatedAssetPriceService {
 
         if let Some(rows) = result.rows {
             if let Some(row) = rows.into_iter().next() {
-                let (price_per_gram, price_24k, price_22k, price_18k, source, created_at): (
-                    f64,
-                    f64,
-                    f64,
-                    f64,
-                    String,
-                    i64,
-                ) = row
-                    .into_typed()
+                let (base_price, tier_prices_json, source, created_at): (f64, String, String, i64) =
+                    row.into_typed()
+                        .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
+
+                let tier_prices: HashMap<String, f64> = serde_json::from_str(&tier_prices_json)
                     .map_err(|e| PersistenceError::InvalidData(e.to_string()))?;
 
                 return Ok(Some(AssetPrice {
-                    price_per_gram,
-                    price_24k,
-                    price_22k,
-                    price_18k,
+                    base_price_per_unit: base_price,
+                    tier_prices,
                     source,
-                    updated_at: DateTime::from_timestamp_millis(created_at)
-                        .unwrap_or_else(Utc::now),
+                    updated_at: DateTime::from_timestamp_millis(created_at).unwrap_or_else(Utc::now),
                 }));
             }
         }
@@ -357,57 +385,70 @@ impl AssetPriceService for SimulatedAssetPriceService {
     }
 }
 
-// Blanket implementation for backwards compatibility
-impl<T: AssetPriceService> GoldPriceService for T {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn test_asset_price_dynamic_tiers() {
+        // P23 FIX: Use generic tier names - actual values come from domain config
+        let price = AssetPrice::new(100.0, "test")
+            .with_tier("tier_1", 100.0)
+            .with_tier("tier_2", 91.6)
+            .with_tier("tier_3", 75.0);
+
+        // Test tier lookups
+        assert!((price.price_for_tier("tier_1") - 100.0).abs() < 0.01);
+        assert!((price.price_for_tier("tier_2") - 91.6).abs() < 0.01);
+        assert!((price.price_for_tier("tier_3") - 75.0).abs() < 0.01);
+
+        // Test unknown tier falls back to base
+        assert!((price.price_for_tier("tier_4") - 100.0).abs() < 0.01);
+    }
+
+    #[test]
     fn test_asset_price_calculation() {
-        let price = AssetPrice {
-            price_per_gram: 6870.0,
-            price_24k: 7500.0,
-            price_22k: 6870.0,
-            price_18k: 5625.0,
-            source: "test".to_string(),
-            updated_at: Utc::now(),
-        };
+        // P23 FIX: Use generic tier names - actual values come from domain config
+        let price = AssetPrice::new(91.6, "test")
+            .with_tier("tier_1", 100.0)
+            .with_tier("tier_2", 91.6)
+            .with_tier("tier_3", 75.0);
 
-        // 100 units of standard grade asset at 75% LTV
-        let max_loan = price.calculate_max_loan(100.0, AssetVariant::StandardGrade, 0.75);
-        assert!((max_loan - 515250.0).abs() < 1.0); // 100 * 6870 * 0.75 = 515250
+        // 100 units of tier_2 at 75% LTV
+        let max_loan = price.calculate_max_loan(100.0, "tier_2", 0.75);
+        assert!((max_loan - 6870.0).abs() < 1.0); // 100 * 91.6 * 0.75 = 6870
+    }
 
-        // Test with legacy constants
-        let max_loan_legacy = price.calculate_max_loan(100.0, AssetVariant::K22, 0.75);
-        assert!((max_loan_legacy - 515250.0).abs() < 1.0);
+
+    #[test]
+    fn test_diamond_domain_example() {
+        // Example: Diamond pricing with different tier structure
+        let price = AssetPrice::new(30000.0, "test")
+            .with_tier("VVS1", 50000.0)
+            .with_tier("VS1", 30000.0)
+            .with_tier("SI1", 15000.0);
+
+        assert!((price.price_for_tier("VVS1") - 50000.0).abs() < 0.01);
+        assert!((price.price_for_tier("VS1") - 30000.0).abs() < 0.01);
+        assert!((price.price_for_tier("SI1") - 15000.0).abs() < 0.01);
+
+        // Loan calculation works with any tier code
+        let max_loan = price.calculate_max_loan(2.0, "VS1", 0.60);
+        assert!((max_loan - 36000.0).abs() < 1.0); // 2 * 30000 * 0.60 = 36000
     }
 
     #[test]
-    fn test_price_generation_bounds() {
-        // Generate 100 prices and check they're within bounds
-        for _ in 0..100 {
-            let price = generate_price_with_params(7500.0, 2.0);
-            assert!(price.price_24k >= 7350.0 && price.price_24k <= 7650.0); // ±2%
-            assert!(price.price_22k < price.price_24k);
-            assert!(price.price_18k < price.price_22k);
-        }
-    }
+    fn test_tier_codes() {
+        let price = AssetPrice::new(100.0, "test")
+            .with_tier("A", 100.0)
+            .with_tier("B", 80.0)
+            .with_tier("C", 60.0);
 
-    #[test]
-    fn test_type_aliases() {
-        // Verify that type aliases work for backwards compatibility
-        let _price: GoldPrice = AssetPrice {
-            price_per_gram: 6870.0,
-            price_24k: 7500.0,
-            price_22k: 6870.0,
-            price_18k: 5625.0,
-            source: "test".to_string(),
-            updated_at: Utc::now(),
-        };
-
-        let _purity: GoldPurity = AssetVariant::StandardGrade;
-        let _k22: AssetVariant = AssetVariant::K22;
+        let codes = price.tier_codes();
+        assert!(codes.contains(&"A"));
+        assert!(codes.contains(&"B"));
+        assert!(codes.contains(&"C"));
+        assert_eq!(codes.len(), 3);
     }
 }

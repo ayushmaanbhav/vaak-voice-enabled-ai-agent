@@ -48,7 +48,7 @@ pub mod dynamic;
 // Core types from slots module
 pub use slots::{
     SlotValue, UrgencyLevel, GoalId, NextBestAction, DEFAULT_GOAL,
-    PurityId, purity_ids, parse_purity_id, format_purity_display,
+    QualityTierId, quality_tier_ids,
 };
 
 // Primary dialogue state implementation

@@ -1,23 +1,32 @@
-//! P2-5 FIX: Loan Entity Extraction
+//! P2-5 FIX: Domain-Agnostic Entity Extraction
 //!
-//! Extracts loan-specific entities from text:
-//! - Loan amounts (with lakh/crore support)
-//! - Gold weight (grams, tola)
+//! Extracts entities from text for collateral-based services:
+//! - Offer amounts (with regional unit support: lakh/crore)
+//! - Collateral weight (grams, tola, kg)
 //! - Interest rates (percentage)
 //! - Tenures (months, years)
 //! - Customer names
+//! - Collateral quality tier (e.g., karat for jewelry)
+//!
+//! # Design Principle
+//!
+//! This module uses domain-agnostic terminology:
+//! - `collateral_weight` instead of gold_weight
+//! - `collateral_quality` instead of gold_purity
+//! - `current_provider` instead of current_lender
+//!
+//! Domain-specific providers (competitors) are loaded from config.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use voice_agent_text_processing::entities::LoanEntityExtractor;
+//! use voice_agent_text_processing::entities::EntityExtractor;
 //!
-//! let extractor = LoanEntityExtractor::new();
-//! let entities = extractor.extract("I want 5 lakh loan for 12 months at 10% interest");
+//! let extractor = EntityExtractor::new();
+//! let entities = extractor.extract("I want 5 lakh for 12 months at 10% interest");
 //!
-//! assert_eq!(entities.amount, Some(Currency { value: 500000, unit: "INR" }));
-//! assert_eq!(entities.tenure, Some(Duration { value: 12, unit: "months" }));
-//! assert_eq!(entities.rate, Some(Percentage { value: 10.0 }));
+//! assert_eq!(entities.amount.unwrap().rupees(), 500000.0);
+//! assert_eq!(entities.tenure.unwrap().months(), 12.0);
 //! ```
 
 use once_cell::sync::Lazy;
@@ -104,43 +113,45 @@ impl Duration {
 }
 
 /// All entities extracted from text
+///
+/// P18 FIX: Uses domain-agnostic field names with backward-compatible aliases.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct LoanEntities {
-    /// Loan amount
+pub struct ExtractedEntities {
+    /// Requested/offer amount
     pub amount: Option<Currency>,
-    /// Gold weight
-    pub gold_weight: Option<Weight>,
+    /// Collateral weight (domain-agnostic: could be gold, silver, etc.)
+    pub collateral_weight: Option<Weight>,
     /// Interest rate
     pub interest_rate: Option<Percentage>,
-    /// Loan tenure
+    /// Service tenure
     pub tenure: Option<Duration>,
     /// Customer name (if mentioned)
     pub customer_name: Option<String>,
-    /// Gold purity (karat)
-    pub gold_purity: Option<u8>,
-    /// Current lender (for balance transfer)
-    pub current_lender: Option<String>,
+    /// Collateral quality tier (e.g., karat for jewelry, grade for other assets)
+    pub collateral_quality: Option<u8>,
+    /// Current provider (for balance transfer scenarios)
+    pub current_provider: Option<String>,
 }
 
-impl LoanEntities {
+impl ExtractedEntities {
     /// Check if any entities were extracted
     pub fn is_empty(&self) -> bool {
         self.amount.is_none()
-            && self.gold_weight.is_none()
+            && self.collateral_weight.is_none()
             && self.interest_rate.is_none()
             && self.tenure.is_none()
             && self.customer_name.is_none()
-            && self.gold_purity.is_none()
-            && self.current_lender.is_none()
+            && self.collateral_quality.is_none()
+            && self.current_provider.is_none()
     }
 
-    /// Merge with another LoanEntities, preferring non-None values from other
-    pub fn merge(&mut self, other: &LoanEntities) {
+    /// Merge with another ExtractedEntities, preferring non-None values from other
+    pub fn merge(&mut self, other: &ExtractedEntities) {
         if other.amount.is_some() {
             self.amount = other.amount.clone();
         }
-        if other.gold_weight.is_some() {
-            self.gold_weight = other.gold_weight.clone();
+        if other.collateral_weight.is_some() {
+            self.collateral_weight = other.collateral_weight.clone();
         }
         if other.interest_rate.is_some() {
             self.interest_rate = other.interest_rate.clone();
@@ -151,11 +162,11 @@ impl LoanEntities {
         if other.customer_name.is_some() {
             self.customer_name = other.customer_name.clone();
         }
-        if other.gold_purity.is_some() {
-            self.gold_purity = other.gold_purity;
+        if other.collateral_quality.is_some() {
+            self.collateral_quality = other.collateral_quality;
         }
-        if other.current_lender.is_some() {
-            self.current_lender = other.current_lender.clone();
+        if other.current_provider.is_some() {
+            self.current_provider = other.current_provider.clone();
         }
     }
 }
@@ -190,54 +201,61 @@ static NAME_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 // P0 FIX: LENDER_PATTERNS removed - lenders must be loaded from domain config
-// Use LoanEntityExtractor::with_lenders() to provide domain-specific lender patterns
+// Use EntityExtractor::with_lenders() to provide domain-specific lender patterns
 // from config/domains/{domain}/competitors.yaml
 
-/// Loan entity extractor
+/// Domain-agnostic entity extractor
 ///
-/// P0 FIX: Made domain-agnostic by requiring lender patterns from config.
-/// Use `with_lenders()` to provide competitor names from domain config.
-pub struct LoanEntityExtractor {
+/// P18 FIX: Renamed from EntityExtractor to EntityExtractor for domain-agnostic operation.
+/// Use `with_providers()` to load competitor/provider names from domain config.
+/// P1.1 FIX: Quality tier validation range is now configurable.
+pub struct EntityExtractor {
     /// Whether to extract Hindi/Devanagari numbers
     pub support_hindi: bool,
-    /// Config-driven lender patterns (competitor names from domain config)
-    lender_patterns: Vec<(String, Regex)>,
+    /// Config-driven provider patterns (competitor names from domain config)
+    provider_patterns: Vec<(String, Regex)>,
+    /// P1.1 FIX: Quality tier validation range (min, max) - e.g., (10, 24) for karat
+    quality_tier_range: (u8, u8),
 }
 
-impl Default for LoanEntityExtractor {
+impl Default for EntityExtractor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LoanEntityExtractor {
+impl EntityExtractor {
     /// Create a new extractor with default settings
     ///
-    /// NOTE: For domain-agnostic operation, use `with_lenders()` to provide
+    /// NOTE: For domain-agnostic operation, use `with_providers()` to provide
     /// competitor names from domain config. The default extractor has no
-    /// lender patterns and will not extract current_lender values.
+    /// provider patterns and will not extract current_provider values.
+    ///
+    /// P1.1 FIX: Quality tier validation defaults to (10, 24) for karat-style grading.
+    /// Use `with_quality_tier_range()` or `with_config()` for custom validation.
     pub fn new() -> Self {
         Self {
             support_hindi: true,
-            lender_patterns: Vec::new(), // P0 FIX: Empty by default, load from config
+            provider_patterns: Vec::new(), // P0 FIX: Empty by default, load from config
+            quality_tier_range: (10, 24),  // Default karat range
         }
     }
 
-    /// Create extractor with config-driven lender patterns
+    /// Create extractor with config-driven provider patterns
     ///
     /// # Arguments
-    /// * `lender_names` - List of competitor/lender names from domain config
+    /// * `provider_names` - List of competitor/provider names from domain config
     ///
     /// # Example
     /// ```ignore
     /// let competitors = config.competitors.iter().map(|c| c.name.clone()).collect();
-    /// let extractor = LoanEntityExtractor::with_lenders(competitors);
+    /// let extractor = EntityExtractor::with_providers(competitors);
     /// ```
-    pub fn with_lenders(lender_names: Vec<String>) -> Self {
-        let lender_patterns = lender_names
+    pub fn with_providers(provider_names: Vec<String>) -> Self {
+        let provider_patterns = provider_names
             .into_iter()
             .filter_map(|name| {
-                // Create case-insensitive regex for the lender name
+                // Create case-insensitive regex for the provider name
                 let pattern = format!(r"(?i)\b{}\b", regex::escape(&name));
                 Regex::new(&pattern)
                     .ok()
@@ -247,33 +265,89 @@ impl LoanEntityExtractor {
 
         Self {
             support_hindi: true,
-            lender_patterns,
+            provider_patterns,
+            quality_tier_range: (10, 24), // Default karat range
         }
     }
 
-    /// Add lender patterns from config (builder pattern)
-    pub fn add_lenders(mut self, lender_names: Vec<String>) -> Self {
-        for name in lender_names {
+    /// P1.1 FIX: Create extractor with custom quality tier validation range
+    ///
+    /// # Arguments
+    /// * `min` - Minimum valid quality tier value
+    /// * `max` - Maximum valid quality tier value
+    ///
+    /// # Example
+    /// ```ignore
+    /// // For karat-based jewelry (10-24 karat)
+    /// let extractor = EntityExtractor::with_quality_tier_range(10, 24);
+    ///
+    /// // For grade-based assessment (1-5)
+    /// let extractor = EntityExtractor::with_quality_tier_range(1, 5);
+    /// ```
+    pub fn with_quality_tier_range(min: u8, max: u8) -> Self {
+        Self {
+            support_hindi: true,
+            provider_patterns: Vec::new(),
+            quality_tier_range: (min, max),
+        }
+    }
+
+    /// P1.1 FIX: Create extractor with full config (providers + quality range)
+    ///
+    /// # Arguments
+    /// * `provider_names` - List of competitor/provider names from domain config
+    /// * `quality_min` - Minimum valid quality tier value
+    /// * `quality_max` - Maximum valid quality tier value
+    pub fn with_config(provider_names: Vec<String>, quality_min: u8, quality_max: u8) -> Self {
+        let provider_patterns = provider_names
+            .into_iter()
+            .filter_map(|name| {
+                let pattern = format!(r"(?i)\b{}\b", regex::escape(&name));
+                Regex::new(&pattern)
+                    .ok()
+                    .map(|regex| (name, regex))
+            })
+            .collect();
+
+        Self {
+            support_hindi: true,
+            provider_patterns,
+            quality_tier_range: (quality_min, quality_max),
+        }
+    }
+
+    /// Add provider patterns from config (builder pattern)
+    pub fn add_providers(mut self, provider_names: Vec<String>) -> Self {
+        for name in provider_names {
             let pattern = format!(r"(?i)\b{}\b", regex::escape(&name));
             if let Ok(regex) = Regex::new(&pattern) {
-                self.lender_patterns.push((name, regex));
+                self.provider_patterns.push((name, regex));
             }
         }
         self
     }
 
-    /// Extract all loan entities from text
-    pub fn extract(&self, text: &str) -> LoanEntities {
-        LoanEntities {
+    /// P1.1 FIX: Set quality tier validation range (builder pattern)
+    pub fn with_tier_range(mut self, min: u8, max: u8) -> Self {
+        self.quality_tier_range = (min, max);
+        self
+    }
+
+    /// Extract all entities from text
+    pub fn extract(&self, text: &str) -> ExtractedEntities {
+        ExtractedEntities {
             amount: self.extract_amount(text),
-            gold_weight: self.extract_weight(text),
+            collateral_weight: self.extract_weight(text),
             interest_rate: self.extract_rate(text),
             tenure: self.extract_tenure(text),
             customer_name: self.extract_name(text),
-            gold_purity: self.extract_purity(text),
-            current_lender: self.extract_lender(text),
+            collateral_quality: self.extract_quality_tier(text),
+            current_provider: self.extract_provider(text),
         }
     }
+}
+
+impl EntityExtractor {
 
     /// Extract loan amount
     pub fn extract_amount(&self, text: &str) -> Option<Currency> {
@@ -304,7 +378,8 @@ impl LoanEntityExtractor {
                 let hindi_num = caps.get(1)?.as_str();
                 let multiplier_str = caps.get(2).map(|m| m.as_str());
 
-                let base = self.hindi_to_number(hindi_num)?;
+                // P2.2 FIX: Use shared Hindi module
+                let base = crate::hindi::word_to_number(hindi_num)?;
                 let multiplier = match multiplier_str {
                     Some("लाख") => 100_000.0,
                     Some("करोड़") => 10_000_000.0,
@@ -324,7 +399,7 @@ impl LoanEntityExtractor {
         None
     }
 
-    /// Extract gold weight
+    /// Extract collateral weight (domain-agnostic)
     pub fn extract_weight(&self, text: &str) -> Option<Weight> {
         let caps = WEIGHT_PATTERN.captures(text)?;
         let num_str = caps.get(1)?.as_str();
@@ -384,26 +459,32 @@ impl LoanEntityExtractor {
         Some(caps.get(1)?.as_str().trim().to_string())
     }
 
-    /// Extract gold purity (karat)
-    pub fn extract_purity(&self, text: &str) -> Option<u8> {
+    /// Extract collateral quality tier (e.g., karat for jewelry)
+    ///
+    /// Returns a numeric quality tier (e.g., 18, 22, 24 for karat).
+    ///
+    /// P1.1 FIX: Validation range is now configurable via `quality_tier_range`.
+    /// Use `with_quality_tier_range()` or `with_config()` for custom validation.
+    pub fn extract_quality_tier(&self, text: &str) -> Option<u8> {
         let caps = PURITY_PATTERN.captures(text)?;
-        let karat: u8 = caps.get(1)?.as_str().parse().ok()?;
+        let tier: u8 = caps.get(1)?.as_str().parse().ok()?;
 
-        // Validate karat value (typically 18, 20, 22, 24)
-        if (10..=24).contains(&karat) {
-            Some(karat)
+        // P1.1 FIX: Use config-driven validation range
+        let (min, max) = self.quality_tier_range;
+        if (min..=max).contains(&tier) {
+            Some(tier)
         } else {
             None
         }
     }
 
-    /// Extract current lender name
+    /// Extract current provider name
     ///
-    /// P0 FIX: Uses config-driven lender patterns. Returns None if no patterns configured.
-    /// For domain-specific extraction, create extractor with `with_lenders()`.
-    pub fn extract_lender(&self, text: &str) -> Option<String> {
-        // P0 FIX: Use instance lender_patterns instead of hardcoded static patterns
-        for (name, pattern) in &self.lender_patterns {
+    /// Uses config-driven provider patterns. Returns None if no patterns configured.
+    /// For domain-specific extraction, create extractor with `with_providers()`.
+    pub fn extract_provider(&self, text: &str) -> Option<String> {
+        // Use instance provider_patterns instead of hardcoded static patterns
+        for (name, pattern) in &self.provider_patterns {
             if pattern.is_match(text) {
                 return Some(name.clone());
             }
@@ -411,31 +492,7 @@ impl LoanEntityExtractor {
         None
     }
 
-    /// Convert Hindi number word to f64
-    fn hindi_to_number(&self, hindi: &str) -> Option<f64> {
-        match hindi {
-            "एक" => Some(1.0),
-            "दो" => Some(2.0),
-            "तीन" => Some(3.0),
-            "चार" => Some(4.0),
-            "पांच" | "पाँच" => Some(5.0),
-            "छह" | "छः" => Some(6.0),
-            "सात" => Some(7.0),
-            "आठ" => Some(8.0),
-            "नौ" => Some(9.0),
-            "दस" => Some(10.0),
-            "बीस" => Some(20.0),
-            "तीस" => Some(30.0),
-            "चालीस" => Some(40.0),
-            "पचास" => Some(50.0),
-            "साठ" => Some(60.0),
-            "सत्तर" => Some(70.0),
-            "अस्सी" => Some(80.0),
-            "नब्बे" => Some(90.0),
-            "सौ" => Some(100.0),
-            _ => None,
-        }
-    }
+    // P2.2 FIX: Removed duplicate hindi_to_number() - now uses crate::hindi::word_to_number()
 }
 
 #[cfg(test)]
@@ -444,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_extract_amount_lakh() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_amount("I want 5 lakh loan");
         assert!(result.is_some());
@@ -454,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_extract_amount_crore() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_amount("Need 1 crore for business");
         assert!(result.is_some());
@@ -464,7 +521,7 @@ mod tests {
 
     #[test]
     fn test_extract_amount_with_currency_symbol() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_amount("Rs. 50000 loan needed");
         assert!(result.is_some());
@@ -474,7 +531,7 @@ mod tests {
 
     #[test]
     fn test_extract_weight_grams() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_weight("I have 50 grams of gold");
         assert!(result.is_some());
@@ -484,7 +541,7 @@ mod tests {
 
     #[test]
     fn test_extract_weight_tola() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_weight("Gold weighing 10 tola");
         assert!(result.is_some());
@@ -495,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_extract_rate() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_rate("Interest rate is 10.5%");
         assert!(result.is_some());
@@ -505,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_extract_tenure_months() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_tenure("12 month loan");
         assert!(result.is_some());
@@ -515,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_extract_tenure_years() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_tenure("2 year tenure");
         assert!(result.is_some());
@@ -525,57 +582,57 @@ mod tests {
 
     #[test]
     fn test_extract_name() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_name("My name is Rajesh Kumar");
         assert_eq!(result, Some("Rajesh Kumar".to_string()));
     }
 
     #[test]
-    fn test_extract_purity() {
-        let extractor = LoanEntityExtractor::new();
+    fn test_extract_quality_tier() {
+        let extractor = EntityExtractor::new();
 
-        let result = extractor.extract_purity("22k gold");
+        let result = extractor.extract_quality_tier("22k gold");
         assert_eq!(result, Some(22));
 
-        let result = extractor.extract_purity("18 karat gold");
+        let result = extractor.extract_quality_tier("18 karat gold");
         assert_eq!(result, Some(18));
     }
 
     #[test]
-    fn test_extract_lender() {
-        // P0 FIX: Test with config-driven lender patterns
-        let extractor = LoanEntityExtractor::with_lenders(vec![
-            "Muthoot".to_string(),
-            "IIFL".to_string(),
-            "Manappuram".to_string(),
+    fn test_extract_provider() {
+        // Test with config-driven provider patterns
+        let extractor = EntityExtractor::with_providers(vec![
+            "Provider A".to_string(),
+            "Provider B".to_string(),
+            "Provider C".to_string(),
         ]);
 
-        let result = extractor.extract_lender("I have loan from Muthoot Finance");
-        assert_eq!(result, Some("Muthoot".to_string()));
+        let result = extractor.extract_provider("I have loan from Provider A Finance");
+        assert_eq!(result, Some("Provider A".to_string()));
 
-        let result = extractor.extract_lender("Currently with IIFL");
-        assert_eq!(result, Some("IIFL".to_string()));
+        let result = extractor.extract_provider("Currently with Provider B");
+        assert_eq!(result, Some("Provider B".to_string()));
     }
 
     #[test]
-    fn test_extract_lender_no_config() {
-        // P0 FIX: Test that default extractor returns None for lenders
-        let extractor = LoanEntityExtractor::new();
+    fn test_extract_provider_no_config() {
+        // Test that default extractor returns None for providers
+        let extractor = EntityExtractor::new();
 
-        let result = extractor.extract_lender("I have loan from Muthoot Finance");
+        let result = extractor.extract_provider("I have loan from Provider A Finance");
         assert_eq!(result, None); // No patterns configured = no extraction
     }
 
     #[test]
     fn test_extract_all_entities() {
-        // P0 FIX: Test with config-driven lender patterns
-        let extractor = LoanEntityExtractor::with_lenders(vec![
-            "Muthoot".to_string(),
-            "IIFL".to_string(),
+        // Test with config-driven provider patterns
+        let extractor = EntityExtractor::with_providers(vec![
+            "Provider A".to_string(),
+            "Provider B".to_string(),
         ]);
 
-        let text = "My name is Rahul. I want 5 lakh loan for 12 months at 10% interest. I have 50 grams of 22k gold. Currently with Muthoot.";
+        let text = "My name is Rahul. I want 5 lakh loan for 12 months at 10% interest. I have 50 grams of 22k gold. Currently with Provider A.";
         let entities = extractor.extract(text);
 
         assert!(entities.amount.is_some());
@@ -587,17 +644,18 @@ mod tests {
         assert!(entities.interest_rate.is_some());
         assert_eq!(entities.interest_rate.as_ref().unwrap().value, 10.0);
 
-        assert!(entities.gold_weight.is_some());
-        assert_eq!(entities.gold_weight.as_ref().unwrap().grams(), 50.0);
+        // Use domain-agnostic field names
+        assert!(entities.collateral_weight.is_some());
+        assert_eq!(entities.collateral_weight.as_ref().unwrap().grams(), 50.0);
 
-        assert_eq!(entities.gold_purity, Some(22));
+        assert_eq!(entities.collateral_quality, Some(22));
         assert_eq!(entities.customer_name, Some("Rahul".to_string()));
-        assert_eq!(entities.current_lender, Some("Muthoot".to_string()));
+        assert_eq!(entities.current_provider, Some("Provider A".to_string()));
     }
 
     #[test]
     fn test_hindi_amount() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
 
         let result = extractor.extract_amount("पांच लाख");
         assert!(result.is_some());
@@ -607,14 +665,14 @@ mod tests {
 
     #[test]
     fn test_merge_entities() {
-        let mut entities1 = LoanEntities::default();
+        let mut entities1 = ExtractedEntities::default();
         entities1.amount = Some(Currency {
             value: 50000000, // 5 lakh in paise
             unit: "INR".to_string(),
             text: "5 lakh".to_string(),
         });
 
-        let mut entities2 = LoanEntities::default();
+        let mut entities2 = ExtractedEntities::default();
         entities2.tenure = Some(Duration {
             days: 360,
             unit: "months".to_string(),
@@ -629,8 +687,39 @@ mod tests {
 
     #[test]
     fn test_empty_text() {
-        let extractor = LoanEntityExtractor::new();
+        let extractor = EntityExtractor::new();
         let entities = extractor.extract("");
         assert!(entities.is_empty());
+    }
+
+    #[test]
+    fn test_configurable_quality_tier_range() {
+        // P1.1 FIX: Test that quality tier range is configurable
+
+        // Default extractor uses karat range (10-24)
+        let default_extractor = EntityExtractor::new();
+        assert_eq!(default_extractor.extract_quality_tier("22k gold"), Some(22));
+        assert_eq!(default_extractor.extract_quality_tier("24k gold"), Some(24));
+        assert_eq!(default_extractor.extract_quality_tier("5k gold"), None); // Out of default range
+
+        // Custom range extractor (1-10)
+        let custom_extractor = EntityExtractor::with_quality_tier_range(1, 10);
+        assert_eq!(custom_extractor.extract_quality_tier("5k quality"), Some(5));
+        assert_eq!(custom_extractor.extract_quality_tier("10k quality"), Some(10));
+        assert_eq!(custom_extractor.extract_quality_tier("22k quality"), None); // Out of custom range
+
+        // Builder pattern
+        let builder_extractor = EntityExtractor::new().with_tier_range(1, 5);
+        assert_eq!(builder_extractor.extract_quality_tier("3k grade"), Some(3));
+        assert_eq!(builder_extractor.extract_quality_tier("22k grade"), None); // Out of range
+
+        // Full config
+        let config_extractor = EntityExtractor::with_config(
+            vec!["TestProvider".to_string()],
+            14,
+            24,
+        );
+        assert_eq!(config_extractor.extract_quality_tier("18k gold"), Some(18));
+        assert_eq!(config_extractor.extract_quality_tier("10k gold"), None); // Below custom min
     }
 }

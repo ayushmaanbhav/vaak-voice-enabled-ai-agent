@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Domain-specific context for grammar correction and processing
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DomainContext {
-    /// Domain name (e.g., "gold_loan")
+    /// Domain name (matches directory name in config/domains/)
     pub domain: String,
     /// Domain-specific vocabulary that should be preserved
     pub vocabulary: Vec<String>,
@@ -46,7 +46,7 @@ impl DomainContext {
     /// come from config files rather than hardcoded defaults.
     ///
     /// # Arguments
-    /// * `domain` - Domain identifier (e.g., "gold_loan")
+    /// * `domain` - Domain identifier (from DOMAIN_ID env var)
     /// * `vocabulary` - Domain-specific terms to preserve
     /// * `phrases` - Common phrases in this domain
     /// * `abbreviations` - Abbreviation mappings as (short, full) tuples

@@ -118,6 +118,10 @@ impl EscalationTrigger {
 }
 
 /// Score breakdown by category
+///
+/// Note: For new domains, prefer using `DynamicScoreBreakdown` which supports
+/// config-driven categories. This struct maintains backward compatibility with
+/// existing code that uses the fixed urgency/engagement/information/intent categories.
 #[derive(Debug, Clone, Default)]
 pub struct ScoreBreakdown {
     /// Urgency score (0-25)
@@ -142,6 +146,160 @@ impl ScoreBreakdown {
     /// Check if any score is at maximum
     pub fn has_max_score(&self) -> bool {
         self.urgency >= 25 || self.engagement >= 25 || self.information >= 25 || self.intent >= 25
+    }
+
+    /// Convert to DynamicScoreBreakdown for generic processing
+    pub fn to_dynamic(&self) -> DynamicScoreBreakdown {
+        let mut dynamic = DynamicScoreBreakdown::new();
+        dynamic.set_category("urgency", self.urgency);
+        dynamic.set_category("engagement", self.engagement);
+        dynamic.set_category("information", self.information);
+        dynamic.set_category("intent", self.intent);
+        dynamic.penalty = self.penalty;
+        dynamic
+    }
+}
+
+/// P22 FIX: Dynamic score breakdown with config-driven categories
+///
+/// This struct replaces the fixed ScoreBreakdown with a flexible HashMap-based
+/// approach that allows categories to be defined in YAML config.
+///
+/// # Example
+///
+/// ```ignore
+/// let mut breakdown = DynamicScoreBreakdown::new();
+/// breakdown.set_category("urgency", 15);
+/// breakdown.set_category("custom_category", 10);
+/// let total = breakdown.total(&weights);
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct DynamicScoreBreakdown {
+    /// Category scores (category_id -> score)
+    pub categories: std::collections::HashMap<String, u32>,
+    /// Category maximum scores (for capping)
+    pub category_max: std::collections::HashMap<String, u32>,
+    /// Category weights (for weighted total calculation)
+    pub category_weights: std::collections::HashMap<String, f32>,
+    /// Total penalty points (negative)
+    pub penalty: i32,
+}
+
+impl DynamicScoreBreakdown {
+    /// Create a new empty breakdown
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create with predefined categories from config
+    pub fn with_categories(category_defs: &[(String, u32, f32)]) -> Self {
+        let mut breakdown = Self::new();
+        for (id, max_score, weight) in category_defs {
+            breakdown.category_max.insert(id.clone(), *max_score);
+            breakdown.category_weights.insert(id.clone(), *weight);
+        }
+        breakdown
+    }
+
+    /// Set a category score (automatically caps to max if defined)
+    pub fn set_category(&mut self, category: &str, score: u32) {
+        let max = self.category_max.get(category).copied().unwrap_or(25);
+        self.categories.insert(category.to_string(), score.min(max));
+    }
+
+    /// Get a category score
+    pub fn get_category(&self, category: &str) -> u32 {
+        self.categories.get(category).copied().unwrap_or(0)
+    }
+
+    /// Add to a category score
+    pub fn add_to_category(&mut self, category: &str, points: u32) {
+        let current = self.get_category(category);
+        self.set_category(category, current + points);
+    }
+
+    /// Set category max score
+    pub fn set_category_max(&mut self, category: &str, max: u32) {
+        self.category_max.insert(category.to_string(), max);
+    }
+
+    /// Set category weight
+    pub fn set_category_weight(&mut self, category: &str, weight: f32) {
+        self.category_weights.insert(category.to_string(), weight);
+    }
+
+    /// Calculate total score (weighted, capped at 0-100)
+    pub fn total(&self) -> u32 {
+        let weighted_sum: f32 = self.categories
+            .iter()
+            .map(|(cat, score)| {
+                let weight = self.category_weights.get(cat).copied().unwrap_or(1.0);
+                *score as f32 * weight
+            })
+            .sum();
+
+        let total_with_penalty = weighted_sum as i32 + self.penalty;
+        total_with_penalty.max(0).min(100) as u32
+    }
+
+    /// Calculate total with external weights (for config-driven weighting)
+    pub fn total_with_weights(&self, weights: &std::collections::HashMap<String, f32>) -> u32 {
+        let weighted_sum: f32 = self.categories
+            .iter()
+            .map(|(cat, score)| {
+                let weight = weights.get(cat).copied().unwrap_or(1.0);
+                *score as f32 * weight
+            })
+            .sum();
+
+        let total_with_penalty = weighted_sum as i32 + self.penalty;
+        total_with_penalty.max(0).min(100) as u32
+    }
+
+    /// Check if any category is at its maximum score
+    pub fn has_max_score(&self) -> bool {
+        self.categories.iter().any(|(cat, score)| {
+            let max = self.category_max.get(cat).copied().unwrap_or(25);
+            *score >= max
+        })
+    }
+
+    /// Get all category names
+    pub fn category_names(&self) -> Vec<&str> {
+        self.categories.keys().map(|s| s.as_str()).collect()
+    }
+
+    // ===== Legacy accessors for backward compatibility =====
+
+    /// Get urgency score (legacy accessor)
+    pub fn urgency(&self) -> u32 {
+        self.get_category("urgency")
+    }
+
+    /// Get engagement score (legacy accessor)
+    pub fn engagement(&self) -> u32 {
+        self.get_category("engagement")
+    }
+
+    /// Get information score (legacy accessor)
+    pub fn information(&self) -> u32 {
+        self.get_category("information")
+    }
+
+    /// Get intent score (legacy accessor)
+    pub fn intent(&self) -> u32 {
+        self.get_category("intent")
+    }
+
+    /// Convert to fixed ScoreBreakdown (for legacy code)
+    pub fn to_fixed(&self) -> ScoreBreakdown {
+        ScoreBreakdown {
+            urgency: self.urgency(),
+            engagement: self.engagement(),
+            information: self.information(),
+            intent: self.intent(),
+            penalty: self.penalty,
+        }
     }
 }
 

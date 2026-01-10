@@ -15,12 +15,15 @@ pub struct CompetitorsConfig {
     /// Comparison talking points
     #[serde(default)]
     pub comparison_points: Vec<ComparisonPoint>,
-    /// Our (Kotak) features for comparison
+    /// Our features for comparison
     #[serde(default)]
     pub our_features: Vec<String>,
     /// Default assumptions
     #[serde(default)]
     pub defaults: CompetitorDefaults,
+    /// Comparison message templates by language (e.g., "en" -> "Save {currency}{monthly_savings}/month!")
+    #[serde(default)]
+    pub comparison_message_templates: HashMap<String, String>,
 }
 
 impl Default for CompetitorsConfig {
@@ -30,6 +33,7 @@ impl Default for CompetitorsConfig {
             comparison_points: Vec::new(),
             our_features: Vec::new(),
             defaults: CompetitorDefaults::default(),
+            comparison_message_templates: HashMap::new(),
         }
     }
 }
@@ -305,6 +309,7 @@ comparison_points:
             comparison_points: vec![],
             our_features: vec![],
             defaults: CompetitorDefaults::default(),
+            comparison_message_templates: HashMap::new(),
         };
 
         // Direct match

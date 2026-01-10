@@ -246,7 +246,7 @@ impl TextProcessor for TextProcessingPipeline {
 /// Configuration for the text processing pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextProcessingConfig {
-    /// Domain (e.g., "gold_loan")
+    /// Domain identifier (from DOMAIN_ID env var)
     #[serde(default = "default_domain")]
     pub domain: String,
     /// Grammar correction config
@@ -267,7 +267,9 @@ pub struct TextProcessingConfig {
 }
 
 fn default_domain() -> String {
-    "gold_loan".to_string()
+    // P21 FIX: Use generic default instead of hardcoded "gold_loan"
+    // In production, this should always be set explicitly from DOMAIN_ID env var
+    "unconfigured".to_string()
 }
 
 impl Default for TextProcessingConfig {

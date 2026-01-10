@@ -2,6 +2,94 @@
 //!
 //! Constructs prompts for domain-agnostic voice agents.
 //! Domain-specific content should be loaded from config.
+//!
+//! # Domain-Agnostic Defaults
+//!
+//! For deprecated methods that don't take config parameters, defaults are loaded from:
+//! 1. `BRAND_DEFAULTS` (set at app startup from domain config YAML)
+//! 2. Generic placeholders (only used if domain config not loaded)
+//!
+//! Production code should use config-driven methods like `system_prompt_from_config()`.
+//! Domain config is loaded from: config/domains/{domain}/domain.yaml
+
+use std::sync::OnceLock;
+
+/// P19 FIX: Brand defaults loaded from domain config YAML at app startup.
+/// This allows deprecated methods to still be domain-agnostic.
+/// Generic placeholders are used until init() is called with domain config.
+#[derive(Debug, Clone)]
+pub struct BrandDefaults {
+    pub agent_name: String,
+    pub company_name: String,
+    pub product_name: String,
+    pub helpline: String,
+}
+
+impl Default for BrandDefaults {
+    fn default() -> Self {
+        // P19 FIX: Generic placeholders - real values come from domain config YAML
+        // See config/domains/{domain}/domain.yaml brand section
+        Self {
+            agent_name: "Agent".to_string(),
+            company_name: "Company".to_string(),
+            product_name: "Services".to_string(),
+            helpline: "Contact Support".to_string(),
+        }
+    }
+}
+
+/// Global brand defaults - set from domain config YAML at app startup
+static BRAND_DEFAULTS: OnceLock<BrandDefaults> = OnceLock::new();
+
+impl BrandDefaults {
+    /// Set brand defaults from domain config YAML at app startup.
+    /// Should be called once during initialization with values from MasterDomainConfig.brand.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // domain_id from DOMAIN_ID env var
+    /// let config = MasterDomainConfig::load(&domain_id, "config/")?;
+    /// BrandDefaults::init(
+    ///     &config.brand.agent_name,
+    ///     &config.brand.company_name,
+    ///     &config.brand.product_name,
+    ///     &config.brand.helpline,
+    /// );
+    /// ```
+    pub fn init(
+        agent_name: impl Into<String>,
+        company_name: impl Into<String>,
+        product_name: impl Into<String>,
+        helpline: impl Into<String>,
+    ) {
+        let _ = BRAND_DEFAULTS.set(BrandDefaults {
+            agent_name: agent_name.into(),
+            company_name: company_name.into(),
+            product_name: product_name.into(),
+            helpline: helpline.into(),
+        });
+    }
+
+    /// Initialize from domain config BrandConfig (convenience method)
+    pub fn init_from_brand(brand: &voice_agent_config::domain::BrandConfig) {
+        Self::init(
+            &brand.agent_name,
+            &brand.company_name,
+            &brand.product_name,
+            &brand.helpline,
+        );
+    }
+
+    /// Get current brand defaults (initialized from config or generic fallback)
+    pub fn get() -> &'static BrandDefaults {
+        BRAND_DEFAULTS.get_or_init(BrandDefaults::default)
+    }
+
+    /// Check if brand defaults have been initialized from domain config
+    pub fn is_initialized() -> bool {
+        BRAND_DEFAULTS.get().is_some()
+    }
+}
 
 
 // P0 FIX: Re-export PersonaConfig from config crate (single source of truth)
@@ -22,10 +110,11 @@ pub use voice_agent_core::llm_types::ToolDefinition;
 ///
 /// # Example
 /// ```ignore
-/// let tool = ToolBuilder::new("check_eligibility", "Check loan eligibility")
-///     .param("gold_weight", "number", "Weight of gold in grams", true)
-///     .param("gold_purity", "string", "Purity (22K, 18K)", false)
-///     .string_enum("gold_purity", &["24K", "22K", "18K", "14K"])
+/// // P23 FIX: Use generic parameter names - actual values come from domain config
+/// let tool = ToolBuilder::new("check_eligibility", "Check eligibility")
+///     .param("quantity", "number", "Quantity value", true)
+///     .param("quality_tier", "string", "Quality tier", false)
+///     .string_enum("quality_tier", &["tier_1", "tier_2", "tier_3"])
 ///     .build();
 /// ```
 #[derive(Debug, Clone, Default)]
@@ -178,25 +267,27 @@ pub struct ParsedToolCall {
 // directly from voice_agent_core::llm_types (re-exported above)
 
 /// P13 FIX: Key product facts for system prompt (config-driven)
+/// P23 FIX: Renamed fields to be domain-agnostic (no NBFC references)
 #[derive(Debug, Clone)]
 pub struct ProductFacts {
     /// Our best interest rate (e.g., 9.5)
     pub our_rate: f64,
-    /// Typical NBFC rate range (e.g., 18.0)
-    pub nbfc_rate_low: f64,
-    /// Higher end of NBFC range (e.g., 24.0)
-    pub nbfc_rate_high: f64,
+    /// Typical competitor rate range - low end
+    pub competitor_rate_low: f64,
+    /// Typical competitor rate range - high end
+    pub competitor_rate_high: f64,
     /// LTV percentage (e.g., 75.0)
     pub ltv_percent: f64,
 }
 
 impl Default for ProductFacts {
     fn default() -> Self {
+        // P23 FIX: Use sentinel values - actual rates should come from config
         Self {
-            our_rate: 10.5,
-            nbfc_rate_low: 18.0,
-            nbfc_rate_high: 24.0,
-            ltv_percent: 75.0,
+            our_rate: 0.0,
+            competitor_rate_low: 0.0,
+            competitor_rate_high: 0.0,
+            ltv_percent: 0.0,
         }
     }
 }
@@ -215,7 +306,7 @@ pub struct PromptBuilder {
 pub struct BrandConfig {
     pub agent_name: String,
     pub company_name: String,
-    pub agent_role: String,
+    pub product_name: String,
     pub helpline: String,
 }
 
@@ -260,17 +351,13 @@ impl PromptBuilder {
             self.persona.urgency,
         );
 
-        // Build key facts from product_facts
-        // NOTE: For domain-specific key facts (e.g., regulatory info, security features),
-        // define them in prompts/system.yaml and use prompts_config.key_facts()
-        let key_facts = format!(
-            "- Interest rates: Starting from {:.1}% p.a. (vs {:.0}-{:.0}% competitor rates)\n\
-             - LTV: Up to {:.0}% of collateral value\n\
-             - Processing: Same-day disbursement\n\
-             - Regulated financial institution with secure storage",
+        // P21 FIX: Build key facts from config template (domain-agnostic)
+        // The template is defined in prompts/system.yaml and can include domain-specific
+        // information like regulatory details, security features, etc.
+        let key_facts = prompts_config.build_key_facts(
             self.product_facts.our_rate,
-            self.product_facts.nbfc_rate_low,
-            self.product_facts.nbfc_rate_high,
+            self.product_facts.competitor_rate_low,
+            self.product_facts.competitor_rate_high,
             self.product_facts.ltv_percent,
         );
 
@@ -284,56 +371,6 @@ impl PromptBuilder {
         );
 
         self.messages.push(Message::system(system));
-        self
-    }
-
-    /// Legacy system_prompt method (deprecated)
-    ///
-    /// P16 COMPAT: Provides backwards compatibility during migration.
-    /// Use system_prompt_from_config() with PromptsConfig for domain-agnostic operation.
-    ///
-    /// Migration guide:
-    ///   let prompts_config = master_domain_config.prompts.clone();
-    ///   let brand = BrandConfig { agent_name, company_name, agent_role, helpline };
-    ///   prompt_builder.system_prompt_from_config(&prompts_config, &brand, language)
-    #[deprecated(note = "Use system_prompt_from_config() for domain-agnostic operation")]
-    pub fn system_prompt(mut self, language: &str) -> Self {
-        let persona_traits = self.build_persona_traits();
-
-        // Default brand config for backwards compatibility
-        let agent_name = "Priya";
-        let company_name = "Kotak";
-
-        // Build key facts from product_facts
-        let key_facts = format!(
-            "- Interest rates: Starting from {:.1}% p.a. (vs {:.0}-{:.0}% competitor rates)\n\
-             - LTV: Up to {:.0}% of collateral value\n\
-             - Processing: Same-day disbursement\n\
-             - Regulated financial institution with secure storage",
-            self.product_facts.our_rate,
-            self.product_facts.nbfc_rate_low,
-            self.product_facts.nbfc_rate_high,
-            self.product_facts.ltv_percent,
-        );
-
-        let system_content = format!(
-            "You are {agent_name}, a helpful voice assistant for {company_name} gold loan services.\n\n\
-             ## Your Personality\n{traits}\n\n\
-             ## Key Facts\n{facts}\n\n\
-             ## Guidelines\n\
-             - Be conversational yet professional\n\
-             - Keep responses concise (1-2 sentences for voice)\n\
-             - Language: {language}\n\
-             - Focus on customer needs\n\
-             - Never fabricate information",
-            agent_name = agent_name,
-            company_name = company_name,
-            traits = persona_traits,
-            facts = key_facts,
-            language = language,
-        );
-
-        self.messages.insert(0, Message::system(system_content));
         self
     }
 
@@ -428,33 +465,6 @@ impl PromptBuilder {
                 )));
             }
         }
-        self
-    }
-
-    /// Legacy with_stage_guidance method (deprecated)
-    ///
-    /// P16 COMPAT: Provides backwards compatibility during migration.
-    /// Use with_stage_guidance_from_config() with PromptsConfig for domain-agnostic operation.
-    ///
-    /// Migration guide:
-    ///   let prompts_config = master_domain_config.prompts.clone();
-    ///   prompt_builder.with_stage_guidance_from_config(stage, &prompts_config)
-    #[deprecated(note = "Use with_stage_guidance_from_config() for domain-agnostic operation")]
-    pub fn with_stage_guidance(mut self, stage: &str) -> Self {
-        // Default stage guidance for backwards compatibility
-        let guidance = match stage {
-            "greeting" => "Focus on warm welcome and understanding the customer's needs.",
-            "qualification" => "Gather information about collateral and loan requirements.",
-            "presentation" => "Present relevant loan options and benefits.",
-            "objection_handling" => "Address concerns empathetically while highlighting advantages.",
-            "closing" => "Guide toward next steps and branch visit.",
-            _ => "Be helpful and professional.",
-        };
-
-        self.messages.push(Message::system(format!(
-            "## Current Stage: {}\n{}",
-            stage, guidance
-        )));
         self
     }
 
@@ -954,12 +964,12 @@ mod tests {
 
     #[test]
     fn test_tool_builder_creates_valid_definition() {
-        // P16 FIX: gold_loan_tools() removed - test ToolBuilder directly
+        // P23 FIX: Use generic parameter names - actual values come from domain config
         let tool = ToolBuilder::new("check_eligibility", "Check eligibility")
-            .param("weight", "number", "Weight in grams", true)
-            .param("purity", "string", "Purity level", false)
-            .string_enum("purity", &["24K", "22K", "18K", "14K"])
-            .number_range("weight", Some(1.0), Some(10000.0))
+            .param("quantity", "number", "Quantity value", true)
+            .param("quality_tier", "string", "Quality tier", false)
+            .string_enum("quality_tier", &["tier_1", "tier_2", "tier_3"])
+            .number_range("quantity", Some(1.0), Some(10000.0))
             .build();
 
         assert_eq!(tool.name, "check_eligibility");
@@ -971,12 +981,12 @@ mod tests {
             .unwrap()
             .as_object()
             .unwrap();
-        assert!(props.contains_key("weight"));
-        assert!(props.contains_key("purity"));
+        assert!(props.contains_key("quantity"));
+        assert!(props.contains_key("quality_tier"));
 
         // Verify enum constraint
-        let purity_schema = props.get("purity").unwrap();
-        assert!(purity_schema.get("enum").is_some());
+        let tier_schema = props.get("quality_tier").unwrap();
+        assert!(tier_schema.get("enum").is_some());
     }
 
     #[test]
@@ -1019,7 +1029,7 @@ mod tests {
         ];
 
         let messages = PromptBuilder::new()
-            .system_prompt("en")
+            .with_context("You are a helpful assistant.")
             .with_tools(&tools)
             .user_message("Can you check my eligibility?")
             .build();

@@ -289,7 +289,7 @@ impl DomainCalculator for ConfigDrivenCalculator {
     }
 
     fn get_rate_for_amount(&self, amount: f64) -> f64 {
-        // EXACT LOGIC preserved from tools/src/gold_loan/tools.rs:140-159
+        // Rate tier selection logic - selects rate based on amount thresholds
         for tier in &self.rate_tiers {
             if let Some(max) = tier.max_amount {
                 if amount <= max {
@@ -434,13 +434,9 @@ mod tests {
         )
     }
 
-    fn gold_loan_calculator() -> ConfigDrivenCalculator {
-        test_calculator()
-    }
-
     #[test]
     fn test_emi_calculation_exact() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // Test case from original code: P=100000, rate=12%, months=12 → EMI≈8884.88
         let emi = calc.calculate_emi(100_000.0, 12.0, 12);
         assert!((emi - 8884.88).abs() < 0.01, "EMI should be ~8884.88, got {}", emi);
@@ -448,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_emi_zero_rate() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // Edge case: zero rate should return simple division
         let emi = calc.calculate_emi(12000.0, 0.0, 12);
         assert_eq!(emi, 1000.0);
@@ -456,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_asset_value_calculation() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // 100g * 7500 * 0.916 (22K) = 687000
         let value = calc.calculate_asset_value(100.0, 7500.0, 0.916);
         assert_eq!(value, 687_000.0);
@@ -464,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_max_loan_calculation() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // 687000 * 75% = 515250
         let max_loan = calc.calculate_max_loan(687_000.0);
         assert_eq!(max_loan, 515_250.0);
@@ -472,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_rate_tier_selection_exact() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // Tier 1: <= 1 lakh → 11.5%
         assert_eq!(calc.get_rate_for_amount(50_000.0), 11.5);
         assert_eq!(calc.get_rate_for_amount(100_000.0), 11.5);
@@ -486,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_quality_factors() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         assert_eq!(calc.get_quality_factor("K24"), Some(1.0));
         assert_eq!(calc.get_quality_factor("K22"), Some(0.916));
         assert_eq!(calc.get_quality_factor("K18"), Some(0.75));
@@ -496,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_total_interest() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         let total = calc.calculate_total_interest(100_000.0, 12.0, 12);
         // EMI ≈ 8884.88, total paid = 8884.88 * 12 = 106618.56
         // Interest = 106618.56 - 100000 = 6618.56
@@ -505,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_savings_calculation() {
-        let calc = gold_loan_calculator();
+        let calc = test_calculator();
         // Compare 18% (NBFC) vs our rate for 5 lakh loan
         let savings = calc.calculate_savings(500_000.0, 18.0, 12);
 

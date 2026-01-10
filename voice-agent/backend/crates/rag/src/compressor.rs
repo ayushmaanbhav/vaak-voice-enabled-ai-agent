@@ -162,19 +162,13 @@ impl Summarizer for RuleBasedSummarizer {
             summary_parts.push(format!("Amount discussed: {}", amount));
         }
 
-        // Extract gold weight
-        if let Some(weight) = Self::extract_pattern(text, &["gram", "gm", "tola"], 3) {
-            summary_parts.push(format!("Gold: {}", weight));
+        // P18 FIX: Extract collateral weight (generic - gram/kg are standard units)
+        if let Some(weight) = Self::extract_pattern(text, &["gram", "gm", "kg", "tola"], 3) {
+            summary_parts.push(format!("Collateral: {}", weight));
         }
 
-        // Extract lender mentions
-        let lenders = ["muthoot", "manappuram", "iifl"];
-        for lender in lenders {
-            if text.to_lowercase().contains(lender) {
-                summary_parts.push(format!("Current lender: {}", lender.to_uppercase()));
-                break;
-            }
-        }
+        // P18 FIX: Provider detection removed - should be config-driven at runtime
+        // Competitor names should come from domain config, not hardcoded here
 
         // Build summary
         let summary = if summary_parts.is_empty() {

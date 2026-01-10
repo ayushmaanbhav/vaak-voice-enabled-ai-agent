@@ -24,8 +24,25 @@ impl DomainAgent {
         let persona = self.config.persona.clone();
 
         let mut builder = PromptBuilder::new()
-            .with_persona(persona)
-            .system_prompt(&self.config.language);
+            .with_persona(persona.clone());
+
+        // Build system prompt from config if domain_view is available
+        if let Some(ref view) = self.domain_view {
+            let prompts_config = view.prompts_config();
+            let brand = voice_agent_llm::BrandConfig {
+                agent_name: view.agent_name().to_string(),
+                company_name: view.company_name().to_string(),
+                product_name: view.product_name().to_string(),
+                helpline: view.helpline().to_string(),
+            };
+            builder = builder.system_prompt_from_config(prompts_config, &brand, &self.config.language);
+        } else {
+            tracing::warn!(
+                "No domain_view configured - using minimal system prompt. \
+                 Configure domain YAML files for production use."
+            );
+            builder = builder.with_context("You are a helpful assistant.");
+        }
 
         // P4 FIX: Add personalization instructions based on detected signals
         // This dynamically adapts the prompt based on customer behavior
@@ -47,7 +64,12 @@ impl DomainAgent {
         // Add context from memory with query-based archival retrieval
         // Phase 10: Use get_context_for_query to include relevant archival memories
         let stage = self.conversation.stage();
-        let context_budget = stage.context_budget_tokens();
+        // P1.5 FIX: Use config-driven context budget, fall back to hardcoded defaults
+        let context_budget = self
+            .domain_view
+            .as_ref()
+            .map(|v| v.stage_context_budget(stage.as_str()))
+            .unwrap_or_else(|| stage.context_budget_tokens());
         let context = self.conversation.get_context_for_query(user_input, context_budget);
         if !context.is_empty() {
             builder = builder.with_context(&context);
@@ -58,7 +80,12 @@ impl DomainAgent {
         // P2 FIX: Stage-aware RAG - use rag_context_fraction to determine how much RAG to include
         if self.config.rag_enabled {
             let stage = self.conversation.stage();
-            let rag_fraction = stage.rag_context_fraction();
+            // P1.5 FIX: Use config-driven RAG fraction, fall back to hardcoded defaults
+            let rag_fraction = self
+                .domain_view
+                .as_ref()
+                .map(|v| v.stage_rag_fraction(stage.as_str()))
+                .unwrap_or_else(|| stage.rag_context_fraction());
 
             // Skip RAG entirely for stages that don't need it (greeting, farewell)
             if rag_fraction > 0.0 {
@@ -144,8 +171,13 @@ impl DomainAgent {
             builder = builder.with_context(&format!("## Tool Result\n{}", result));
         }
 
-        // Add stage guidance
-        builder = builder.with_stage_guidance(self.conversation.stage().display_name());
+        // Add stage guidance from config if domain_view is available
+        if let Some(ref view) = self.domain_view {
+            let stage_name = self.conversation.stage().as_str();
+            if let Some(guidance) = view.stage_guidance(stage_name) {
+                builder = builder.with_stage_guidance_from_config(guidance, view.prompts_config());
+            }
+        }
 
         // P0 FIX: Detect objections and add persuasion guidance to prompt
         // Uses acknowledge-reframe-evidence pattern from PersuasionEngine
@@ -167,10 +199,7 @@ impl DomainAgent {
             );
             builder = builder.with_context(&persuasion_guidance);
 
-            tracing::debug!(
-                objection_type = ?crate::persuasion::ObjectionType::detect(user_input),
-                "Detected objection, adding persuasion guidance to prompt"
-            );
+            tracing::debug!("Detected objection, adding persuasion guidance to prompt");
         }
 
         // Add conversation history
@@ -202,7 +231,12 @@ impl DomainAgent {
         // Different stages need different amounts of context - early stages need less,
         // presentation/objection handling stages need more for RAG and full history
         let stage = self.conversation.stage();
-        let stage_budget = stage.context_budget_tokens();
+        // P1.5 FIX: Use config-driven context budget, fall back to hardcoded defaults
+        let stage_budget = self
+            .domain_view
+            .as_ref()
+            .map(|v| v.stage_context_budget(stage.as_str()))
+            .unwrap_or_else(|| stage.context_budget_tokens());
         // Use the minimum of configured limit and stage-aware budget
         let effective_budget = self.config.context_window_tokens.min(stage_budget);
 

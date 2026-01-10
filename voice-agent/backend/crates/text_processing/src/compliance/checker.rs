@@ -264,6 +264,22 @@ mod tests {
         RuleBasedComplianceChecker::new(default_rules(), false)
     }
 
+    // P18 FIX: Helper with explicit competitor config for domain-agnostic testing
+    fn create_checker_with_competitors() -> RuleBasedComplianceChecker {
+        use super::super::rules::{CompetitorRules, ComplianceRules};
+        let mut rules = default_rules();
+        rules.competitor_rules = CompetitorRules {
+            competitors: vec![
+                "Muthoot".to_string(),
+                "Manappuram".to_string(),
+                "Kotak".to_string(),
+            ],
+            allow_disparagement: false,
+            allow_comparison: true,
+        };
+        RuleBasedComplianceChecker::new(rules, false)
+    }
+
     #[tokio::test]
     async fn test_forbidden_phrase() {
         let checker = create_checker();
@@ -321,7 +337,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_competitor_disparagement() {
-        let checker = create_checker();
+        // P18 FIX: Use checker with explicit competitors for domain-agnostic testing
+        let checker = create_checker_with_competitors();
         let text = "Muthoot is a fraud company, use Kotak instead";
 
         let result = checker.check(text).await.unwrap();

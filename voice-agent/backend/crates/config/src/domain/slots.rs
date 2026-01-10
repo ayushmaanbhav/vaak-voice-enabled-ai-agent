@@ -89,14 +89,70 @@ impl SlotsConfig {
             .unwrap_or_default()
     }
 
-    /// Get purity factor for a gold purity value
-    pub fn purity_factor(&self, purity_id: &str) -> f64 {
+    /// P18 FIX: Get quality factor for a tier (domain-agnostic)
+    /// Replaces domain-specific purity_factor method
+    pub fn quality_factor(&self, slot_name: &str, tier_id: &str) -> f64 {
         self.slots
-            .get("gold_purity")
+            .get(slot_name)
             .and_then(|s| s.values.as_ref())
-            .and_then(|values| values.iter().find(|v| v.id == purity_id))
-            .and_then(|v| v.purity_factor)
+            .and_then(|values| values.iter().find(|v| v.id == tier_id))
+            .and_then(|v| v.quality_factor)
             .unwrap_or(1.0)
+    }
+
+    // ====== P18 FIX: Config-Driven Quality Tier Parsing ======
+
+    /// Parse free text to quality tier ID using config patterns
+    ///
+    /// P18 FIX: Replaces hardcoded parse_purity_id() in dst/slots.rs
+    /// Returns the tier ID that best matches the input text
+    pub fn parse_quality_tier(&self, slot_name: &str, text: &str) -> Option<String> {
+        let slot = self.slots.get(slot_name)?;
+        let parsing = slot.parsing.as_ref()?;
+        let lower = text.to_lowercase();
+
+        // Try numeric patterns first (e.g., "24" -> tier_1)
+        for rule in &parsing.numeric_patterns {
+            if lower.contains(&rule.value.to_string()) {
+                return Some(rule.tier_id.clone());
+            }
+        }
+
+        // Try text patterns (e.g., "24k", "24 karat" -> tier_1)
+        for (tier_id, patterns) in &parsing.text_patterns {
+            for pattern in patterns {
+                if lower.contains(&pattern.to_lowercase()) {
+                    return Some(tier_id.clone());
+                }
+            }
+        }
+
+        // Return default if configured
+        if !parsing.default_id.is_empty() {
+            Some(parsing.default_id.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Get display string for a tier ID
+    ///
+    /// P18 FIX: Replaces hardcoded format_purity_display() in dst/slots.rs
+    pub fn format_quality_display(&self, slot_name: &str, tier_id: &str) -> Option<&str> {
+        let slot = self.slots.get(slot_name)?;
+        slot.values.as_ref()?
+            .iter()
+            .find(|v| v.id == tier_id)
+            .map(|v| v.display.as_str())
+    }
+
+    /// Get all tier IDs for a slot
+    pub fn quality_tier_ids(&self, slot_name: &str) -> Vec<&str> {
+        self.slots
+            .get(slot_name)
+            .and_then(|s| s.values.as_ref())
+            .map(|v| v.iter().map(|e| e.id.as_str()).collect())
+            .unwrap_or_default()
     }
 
     /// Get typical rate for a lender
@@ -142,6 +198,78 @@ impl SlotsConfig {
     pub fn has_slot_aliases(&self) -> bool {
         !self.slot_aliases.is_empty()
     }
+
+    /// P19 FIX: Get display label for a slot
+    /// Returns the configured display_name if set, otherwise formats the slot name
+    /// (e.g., "asset_quantity" -> "Asset Quantity")
+    pub fn get_slot_display_label(&self, slot_name: &str) -> String {
+        // Check canonical slot name first
+        let canonical = self.canonical_fact_key(slot_name);
+        if let Some(slot) = self.slots.get(canonical) {
+            if let Some(ref display) = slot.display_name {
+                return display.clone();
+            }
+        }
+        // Check original slot name
+        if let Some(slot) = self.slots.get(slot_name) {
+            if let Some(ref display) = slot.display_name {
+                return display.clone();
+            }
+        }
+        // Fallback: format slot name (snake_case -> Title Case)
+        slot_name
+            .split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(c) => c.to_uppercase().chain(chars).collect(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// P21 FIX: Get all slot names defined in config
+    /// Returns a vector of all slot identifiers
+    pub fn all_slot_names(&self) -> Vec<&str> {
+        self.slots.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// P21 FIX: Get all slot display labels as (slot_name, display_label) pairs
+    /// Useful for building display mappings without hardcoding slot names
+    pub fn all_slot_display_labels(&self) -> Vec<(String, String)> {
+        self.slots
+            .keys()
+            .map(|name| {
+                let label = self.get_slot_display_label(name);
+                (name.clone(), label)
+            })
+            .collect()
+    }
+
+    /// P20 FIX: Get asset unit from asset_quantity slot (e.g., "grams")
+    /// Returns default "unit" if not configured
+    pub fn asset_unit(&self) -> &str {
+        self.slots
+            .get("asset_quantity")
+            .and_then(|s| s.unit.as_deref())
+            .unwrap_or("unit")
+    }
+
+    /// P20 FIX: Get unit for a specific slot
+    pub fn slot_unit(&self, slot_name: &str) -> Option<&str> {
+        self.slots
+            .get(slot_name)
+            .and_then(|s| s.unit.as_deref())
+    }
+
+    /// P20 FIX: Get currency for a specific slot
+    pub fn slot_currency(&self, slot_name: &str) -> Option<&str> {
+        self.slots
+            .get(slot_name)
+            .and_then(|s| s.currency.as_deref())
+    }
 }
 
 /// Definition for a single slot
@@ -153,6 +281,9 @@ pub struct SlotDefinition {
     /// Human-readable description
     #[serde(default)]
     pub description: String,
+    /// P19 FIX: Display label for UI/summary (e.g., "Gold Weight" for asset_quantity slot)
+    #[serde(default)]
+    pub display_name: Option<String>,
     /// Validation regex (for string/number types)
     #[serde(default)]
     pub validation: Option<String>,
@@ -174,6 +305,15 @@ pub struct SlotDefinition {
     /// Unit conversions (e.g., tola -> grams)
     #[serde(default)]
     pub unit_conversions: Option<HashMap<String, f64>>,
+    /// P18 FIX: Parsing configuration for enum slots (quality tiers)
+    #[serde(default)]
+    pub parsing: Option<EnumParsingConfig>,
+    /// P20 FIX: Unit of measurement (e.g., "grams" for asset_quantity)
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// P20 FIX: Currency code (e.g., "INR" for offer_amount)
+    #[serde(default)]
+    pub currency: Option<String>,
 }
 
 /// Slot type enumeration
@@ -191,17 +331,77 @@ pub enum SlotType {
 pub struct EnumValue {
     /// Unique identifier
     pub id: String,
-    /// Display name
+    /// Display name (full form, e.g., "24 karat")
     pub display: String,
+    /// P20 FIX: Short code for compact display (e.g., "24K")
+    /// If not set, falls back to first pattern or id
+    #[serde(default)]
+    pub short_code: Option<String>,
+    /// P20 FIX: Description of this tier (e.g., "Pure gold (99.9%)")
+    #[serde(default)]
+    pub description: Option<String>,
     /// Pattern strings for extraction
     #[serde(default)]
     pub patterns: Vec<String>,
-    /// Purity factor (for gold_purity)
-    #[serde(default)]
-    pub purity_factor: Option<f64>,
-    /// Typical rate (for lenders)
+    /// P18 FIX: Renamed from purity_factor to quality_factor for domain-agnostic design
+    /// Quality/variant factor (e.g., purity for gold, condition for used items)
+    #[serde(default, alias = "purity_factor")]
+    pub quality_factor: Option<f64>,
+    /// Typical rate (for lenders/competitors)
     #[serde(default)]
     pub typical_rate: Option<f64>,
+}
+
+impl EnumValue {
+    /// Legacy accessor for purity_factor (now quality_factor)
+    pub fn purity_factor(&self) -> Option<f64> {
+        self.quality_factor
+    }
+
+    /// P20 FIX: Get short code for this tier (e.g., "24K")
+    /// Falls back to first pattern (uppercased) or id if not set
+    pub fn short_code(&self) -> &str {
+        self.short_code
+            .as_deref()
+            .or_else(|| self.patterns.first().map(|s| s.as_str()))
+            .unwrap_or(&self.id)
+    }
+
+    /// P20 FIX: Get description for this tier
+    /// Returns empty string if not set
+    pub fn description(&self) -> &str {
+        self.description.as_deref().unwrap_or("")
+    }
+}
+
+// ============================================================================
+// P18 FIX: Enum Parsing Configuration (Domain-Agnostic Quality Tiers)
+// ============================================================================
+
+/// Numeric pattern rule for parsing (e.g., "24" -> "tier_1")
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NumericPatternRule {
+    /// Numeric value to match in text
+    pub value: i32,
+    /// Tier ID to return when matched
+    pub tier_id: String,
+}
+
+/// Parsing configuration for enum slots (domain-agnostic quality tiers)
+///
+/// P18 FIX: Replaces hardcoded parse_purity_id() and format_purity_display()
+/// functions with config-driven parsing.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EnumParsingConfig {
+    /// Default tier ID if no pattern matches
+    #[serde(default)]
+    pub default_id: String,
+    /// Numeric patterns (e.g., "24" in text -> tier_1)
+    #[serde(default)]
+    pub numeric_patterns: Vec<NumericPatternRule>,
+    /// Text patterns by tier ID (tier_id -> list of patterns)
+    #[serde(default)]
+    pub text_patterns: HashMap<String, Vec<String>>,
 }
 
 /// Goal definition

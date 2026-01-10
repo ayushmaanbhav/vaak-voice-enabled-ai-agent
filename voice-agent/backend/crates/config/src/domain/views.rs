@@ -16,7 +16,9 @@ use super::slots::{GoalDefinition, SlotDefinition, SlotsConfig};
 use super::sms_templates::SmsTemplatesConfig;
 use super::stages::{StageDefinition, StagesConfig, TransitionTrigger};
 use super::tools::{ToolSchema, ToolsConfig};
-use super::MasterDomainConfig;
+use super::{
+    MasterDomainConfig, MemoryCompressorConfig, CurrencyConfig,
+};
 
 /// View for the agent crate
 /// Provides access to conversation stages, DST slots, scoring, objections
@@ -55,6 +57,13 @@ impl AgentDomainView {
     /// Get helpline number
     pub fn helpline(&self) -> &str {
         &self.config.brand.helpline
+    }
+
+    // ====== Prompts Configuration ======
+
+    /// Get the prompts configuration
+    pub fn prompts_config(&self) -> &PromptsConfig {
+        &self.config.prompts
     }
 
     // ====== DST Instructions ======
@@ -108,6 +117,22 @@ impl AgentDomainView {
         self.config.slots.get_slot(name)
     }
 
+    /// P19 FIX: Get display label for a slot (e.g., "asset_quantity" -> "Gold Weight")
+    pub fn get_slot_display_label(&self, slot_name: &str) -> String {
+        self.config.slots.get_slot_display_label(slot_name)
+    }
+
+    /// P21 FIX: Get all slot names defined in config
+    pub fn all_slot_names(&self) -> Vec<&str> {
+        self.config.slots.all_slot_names()
+    }
+
+    /// P21 FIX: Get all slot display labels as a HashMap
+    /// Useful for building display mappings without hardcoding slot names
+    pub fn all_slot_display_labels(&self) -> std::collections::HashMap<String, String> {
+        self.config.slots.all_slot_display_labels().into_iter().collect()
+    }
+
     /// Get a goal definition by name
     pub fn get_goal(&self, name: &str) -> Option<&GoalDefinition> {
         self.config.slots.get_goal(name)
@@ -123,9 +148,13 @@ impl AgentDomainView {
         self.config.slots.extraction_patterns(slot_name, language)
     }
 
-    /// Get purity factor for a gold purity value
-    pub fn purity_factor(&self, purity_id: &str) -> f64 {
-        self.config.slots.purity_factor(purity_id)
+    /// Get quality factor for a quality tier
+    ///
+    /// # Arguments
+    /// * `slot_name` - The slot name (e.g., "asset_quality_tier")
+    /// * `tier_id` - The tier ID (e.g., "tier_1")
+    pub fn quality_factor(&self, slot_name: &str, tier_id: &str) -> f64 {
+        self.config.slots.quality_factor(slot_name, tier_id)
     }
 
     /// Get typical rate for a lender (from slot enum values)
@@ -401,6 +430,81 @@ impl AgentDomainView {
         &self.config.segments.default_segment
     }
 
+    /// P25 FIX: Get persona config for a segment
+    ///
+    /// Returns the embedded SegmentPersonaConfig for config-driven persona creation.
+    /// This replaces the hardcoded Persona::for_segment() match statement.
+    pub fn persona_config_for_segment(&self, segment_id: &str) -> Option<voice_agent_core::traits::PersonaConfig> {
+        self.config.segments.get_persona_config(segment_id).map(|seg_persona| {
+            voice_agent_core::traits::PersonaConfig {
+                name: seg_persona.name.clone(),
+                tone: seg_persona.tone.clone(),
+                warmth: seg_persona.warmth,
+                empathy: seg_persona.empathy,
+                language_complexity: seg_persona.language_complexity.clone(),
+                urgency: seg_persona.urgency.clone(),
+                use_customer_name: seg_persona.use_customer_name,
+                acknowledge_emotions: seg_persona.acknowledge_emotions,
+                use_hinglish: seg_persona.use_hinglish,
+                max_response_words: seg_persona.max_response_words,
+            }
+        })
+    }
+
+    // ====== P18 FIX: SegmentAdapter Config Builder ======
+
+    /// Build SegmentAdapterConfig from domain configuration
+    ///
+    /// This bridges voice_agent_config to voice_agent_core::SegmentAdapterConfig,
+    /// loading all domain-specific content from YAML files.
+    ///
+    /// ```ignore
+    /// let adapter_config = view.build_segment_adapter_config();
+    /// let adapter = SegmentAdapter::from_config(adapter_config);
+    /// ```
+    pub fn build_segment_adapter_config(&self) -> voice_agent_core::SegmentAdapterConfig {
+        use voice_agent_core::{ObjectionResponseConfig, SegmentAdapterConfig};
+
+        let mut config = SegmentAdapterConfig::default();
+
+        // Load segment features from features.yaml
+        for (segment_id, feature_ids) in &self.config.features.segment_features {
+            config.segment_features.insert(segment_id.clone(), feature_ids.clone());
+        }
+
+        // Load value propositions from features.yaml
+        for (segment_id, propositions) in &self.config.features.value_propositions {
+            config.value_propositions.insert(segment_id.clone(), propositions.clone());
+        }
+
+        // Load objection responses from objections.yaml
+        // Maps config ObjectionResponse to core ObjectionResponseConfig
+        for (objection_id, definition) in &self.config.objections.objections {
+            // Get English response as default
+            if let Some(response) = definition.responses.get("en") {
+                // Map config fields to core fields
+                // Config: acknowledge, reframe, evidence, call_to_action
+                // Core: acknowledgment, response, follow_up, highlight_feature
+                config.objection_responses.insert(
+                    objection_id.clone(),
+                    ObjectionResponseConfig {
+                        segment: "trust_seeker".to_string(), // Default segment
+                        acknowledgment: response.acknowledge.clone(),
+                        response: format!("{} {}", response.reframe, response.evidence),
+                        follow_up: if response.call_to_action.is_empty() {
+                            None
+                        } else {
+                            Some(response.call_to_action.clone())
+                        },
+                        highlight_feature: "security".to_string(), // Default feature
+                    },
+                );
+            }
+        }
+
+        config
+    }
+
     // ====== P16 FIX: Additional Agent Methods ======
 
     /// Get product name from brand config
@@ -500,6 +604,11 @@ impl AgentDomainView {
         self.config.tools.get_argument_mapping(tool)
     }
 
+    /// P20 FIX: Get common argument mappings that apply to all tools
+    pub fn get_common_argument_mappings(&self) -> &std::collections::HashMap<String, String> {
+        self.config.tools.get_common_argument_mappings()
+    }
+
     /// Map a slot name to the corresponding tool argument name
     pub fn map_slot_to_argument<'a>(&'a self, tool: &str, slot: &'a str) -> &'a str {
         self.config.tools.get_argument_mapping(tool)
@@ -561,6 +670,362 @@ impl AgentDomainView {
             self.vocabulary_entities().to_vec(),
             self.all_competitor_names(),
         )
+    }
+
+    // ====== P18 FIX: Memory Compressor Configuration (Domain-Agnostic) ======
+
+    /// Get the memory compressor configuration
+    /// Used by ExtractiveCompressor for config-driven sentence scoring
+    pub fn memory_compressor_config(&self) -> &MemoryCompressorConfig {
+        &self.config.memory_compressor
+    }
+
+    // ====== P18 FIX: Currency Configuration (Domain-Agnostic) ======
+
+    /// Get the full currency configuration
+    pub fn currency_config(&self) -> &CurrencyConfig {
+        &self.config.currency
+    }
+
+    /// Get the savings unit amount (e.g., 100000 for "lakh")
+    /// Used for calculating per-unit savings in comparisons
+    pub fn savings_unit_amount(&self) -> f64 {
+        self.config.currency.display_units.savings_unit.amount
+    }
+
+    /// Get the savings unit name (e.g., "lakh")
+    pub fn savings_unit_name(&self) -> &str {
+        &self.config.currency.display_units.savings_unit.name
+    }
+
+    /// Get the currency symbol (e.g., "₹")
+    pub fn currency_symbol(&self) -> &str {
+        &self.config.currency.symbol
+    }
+
+    /// Get the currency code (e.g., "INR")
+    pub fn currency_code(&self) -> &str {
+        &self.config.currency.code
+    }
+
+    /// P2.6 FIX: Get the currency field suffix (e.g., "inr" for "_inr" suffixes)
+    pub fn currency_field_suffix(&self) -> &str {
+        &self.config.currency.field_suffix
+    }
+
+    // ====== P18 FIX: Quality Tier Configuration (Domain-Agnostic) ======
+
+    /// Parse free text to quality tier ID using config patterns
+    /// Replaces hardcoded parse_purity_id() with config-driven parsing
+    pub fn parse_quality_tier(&self, slot_name: &str, text: &str) -> Option<String> {
+        self.config.slots.parse_quality_tier(slot_name, text)
+    }
+
+    /// Get display string for a quality tier ID
+    /// Replaces hardcoded format_purity_display() with config-driven lookup
+    pub fn format_quality_display(&self, slot_name: &str, tier_id: &str) -> Option<&str> {
+        self.config.slots.format_quality_display(slot_name, tier_id)
+    }
+
+    /// Get all tier IDs for a slot
+    pub fn quality_tier_ids(&self, slot_name: &str) -> Vec<&str> {
+        self.config.slots.quality_tier_ids(slot_name)
+    }
+
+    // ====== P18 FIX: Intent Detector Configuration (Domain-Agnostic) ======
+
+    /// Get competitor patterns for IntentDetector::add_competitor_patterns()
+    ///
+    /// Returns tuples of (id, display_name, regex_pattern) for each competitor.
+    /// This method converts owned strings to references for the IntentDetector API.
+    pub fn competitor_intent_patterns(&self) -> Vec<(&str, &str, String)> {
+        self.config.competitors
+            .iter()
+            .map(|(id, entry)| {
+                // Build pattern from ID and aliases
+                let mut all_names = vec![id.as_str()];
+                all_names.extend(entry.aliases.iter().map(|s| s.as_str()));
+
+                // Create regex pattern that matches any of the names
+                let alternatives = all_names
+                    .iter()
+                    .map(|name| regex::escape(name))
+                    .collect::<Vec<_>>()
+                    .join("|");
+
+                let pattern = format!(r"(?i)\b({})\b", alternatives);
+
+                (id.as_str(), entry.display_name.as_str(), pattern)
+            })
+            .collect()
+    }
+
+    /// P2.1 FIX: Get quality tier patterns for IntentDetector::add_variant_patterns()
+    ///
+    /// Returns tuples of (tier_value, regex_pattern) for each quality tier.
+    /// This allows domain-specific quality tiers (gold purity, car condition, etc.)
+    /// to be detected from user utterances.
+    pub fn quality_tier_intent_patterns(&self) -> Vec<(String, String)> {
+        self.config
+            .extraction_patterns
+            .asset_quality
+            .tiers
+            .iter()
+            .flat_map(|tier| {
+                // Collect all patterns from all languages
+                tier.patterns
+                    .values()
+                    .flatten()
+                    .map(|pattern| (tier.value.clone(), pattern.clone()))
+            })
+            .collect()
+    }
+
+    /// P2.1 FIX: Get location patterns for IntentDetector
+    ///
+    /// Returns a combined regex pattern for all configured cities.
+    /// This replaces the hardcoded 9-city list with config-driven cities.
+    pub fn location_intent_pattern(&self) -> String {
+        let city_names: Vec<String> = self
+            .config
+            .extraction_patterns
+            .locations
+            .cities
+            .iter()
+            .flat_map(|city| {
+                let mut names = vec![regex::escape(&city.name)];
+                names.extend(city.aliases.iter().map(|a| regex::escape(a)));
+                // Also include the pattern_en if it's a different simple name
+                if !city.pattern_en.is_empty() && !city.pattern_en.contains('|') {
+                    names.push(regex::escape(&city.pattern_en));
+                }
+                names
+            })
+            .collect();
+
+        if city_names.is_empty() {
+            // Fallback to a minimal pattern if no cities configured
+            return r"(?i)\b(mumbai|delhi|bangalore)\b".to_string();
+        }
+
+        format!(r"(?i)\b({})\b", city_names.join("|"))
+    }
+
+    // ====== P18 FIX: RAG Configuration (Domain-Agnostic) ======
+
+    /// Get the RAG collection name for this domain.
+    /// Returns configured name or derives from domain_id (e.g., "my_domain" -> "my_domain_knowledge")
+    pub fn rag_collection_name(&self) -> String {
+        self.config
+            .rag_collection_name
+            .clone()
+            .unwrap_or_else(|| format!("{}_knowledge", self.config.domain_id))
+    }
+
+    // ====== P20 FIX: Config-Driven Trait Providers ======
+    //
+    // These methods provide access to config-driven trait implementations
+    // that replace hardcoded enums and patterns throughout the codebase.
+    // Each provider is created from YAML config through DomainBridge.
+
+    /// Get a feature provider for config-driven feature management
+    ///
+    /// Replaces hardcoded Feature enum with config-driven features.
+    /// Use for personalization, segment-specific feature highlighting, etc.
+    ///
+    /// ```ignore
+    /// let provider = view.feature_provider();
+    /// let features = provider.features_for_segment("high_value");
+    /// ```
+    pub fn feature_provider(
+        &self,
+    ) -> Arc<dyn voice_agent_core::traits::FeatureProvider> {
+        let bridge = super::DomainBridge::new(self.config.clone());
+        bridge.feature_provider()
+    }
+
+    /// Get an objection provider for config-driven objection handling
+    ///
+    /// Replaces hardcoded Objection enum with config-driven objections.
+    /// Use for objection detection, ACRE responses, etc.
+    ///
+    /// ```ignore
+    /// let provider = view.objection_provider();
+    /// if let Some((id, confidence)) = provider.detect_objection(text, "en", &[]) {
+    ///     let response = provider.get_acre_response(&id, "en", &vars);
+    /// }
+    /// ```
+    pub fn objection_provider(
+        &self,
+    ) -> Arc<dyn voice_agent_core::traits::ObjectionProvider> {
+        let bridge = super::DomainBridge::new(self.config.clone());
+        bridge.objection_provider()
+    }
+
+    /// Get a tool argument provider for config-driven tool defaults
+    ///
+    /// Replaces hardcoded tool defaults and intent-to-tool mappings.
+    /// Use for tool resolution and argument preparation.
+    ///
+    /// ```ignore
+    /// let provider = view.tool_argument_provider();
+    /// if let Some(tool) = provider.resolve_tool_for_intent("check_eligibility", &["weight"]) {
+    ///     let defaults = provider.get_tool_defaults(&tool);
+    /// }
+    /// ```
+    pub fn tool_argument_provider(
+        &self,
+    ) -> Arc<dyn voice_agent_core::traits::ToolArgumentProvider> {
+        let bridge = super::DomainBridge::new(self.config.clone());
+        bridge.tool_argument_provider()
+    }
+
+    /// Get a lead classifier for config-driven MQL/SQL classification
+    ///
+    /// Replaces hardcoded lead classification rules with config-driven rules.
+    /// Use for lead scoring and qualification.
+    ///
+    /// ```ignore
+    /// let classifier = view.lead_classifier();
+    /// let classification = classifier.classify(&signals);
+    /// let qualification = classifier.qualification_level(score);
+    /// ```
+    pub fn lead_classifier(&self) -> Arc<dyn voice_agent_core::traits::LeadClassifier> {
+        let bridge = super::DomainBridge::new(self.config.clone());
+        bridge.lead_classifier()
+    }
+
+    /// Get the underlying config for advanced use cases
+    ///
+    /// Prefer using specific methods over direct config access.
+    pub fn config(&self) -> &MasterDomainConfig {
+        &self.config
+    }
+
+    /// Get the domain ID
+    pub fn domain_id(&self) -> &str {
+        &self.config.domain_id
+    }
+
+    // ====== P16 FIX: Compliance Configuration ======
+
+    /// Get AI disclosure message for a language (RBI compliance)
+    ///
+    /// Returns the localized AI disclosure message that must be played
+    /// at the start of conversations per regulatory requirements.
+    /// Falls back to English if requested language is not available.
+    ///
+    /// ```ignore
+    /// let disclosure = view.ai_disclosure("hi");
+    /// // Returns Hindi disclosure message
+    /// ```
+    pub fn ai_disclosure(&self, language: &str) -> &str {
+        self.config.compliance.get_ai_disclosure(language)
+    }
+
+    /// Check if a phrase is forbidden by compliance rules
+    pub fn is_forbidden_phrase(&self, text: &str) -> bool {
+        self.config.compliance.is_forbidden(text)
+    }
+
+    /// Check if an interest rate is within allowed bounds
+    pub fn is_rate_compliant(&self, rate: f64) -> bool {
+        self.config.compliance.is_rate_valid(rate)
+    }
+
+    // ====== P22 FIX: Intent Configuration ======
+
+    /// Get the full intents configuration
+    pub fn intents_config(&self) -> &super::IntentsConfig {
+        &self.config.intents
+    }
+
+    /// Get an intent definition by name
+    pub fn get_intent(&self, name: &str) -> Option<&super::IntentDefinition> {
+        self.config.intents.get_intent(name)
+    }
+
+    /// Get all intent names
+    pub fn intent_names(&self) -> Vec<&str> {
+        self.config.intents.intent_names()
+    }
+
+    /// Get required slots for an intent
+    pub fn required_slots_for_intent(&self, intent: &str) -> Vec<&str> {
+        self.config
+            .intents
+            .get_intent(intent)
+            .map(|i| i.required_slots.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Get the default intent when none matches
+    pub fn default_intent(&self) -> &str {
+        &self.config.intents.default_intent
+    }
+
+    /// Get minimum confidence threshold for intent detection
+    pub fn intent_min_confidence(&self) -> f32 {
+        self.config.intents.min_confidence
+    }
+
+    // ====== P22 FIX: Full Vocabulary Configuration ======
+
+    /// Get the full vocabulary configuration (ASR boost, phonetic corrections)
+    pub fn vocabulary_full(&self) -> &super::FullVocabularyConfig {
+        &self.config.vocabulary_full
+    }
+
+    /// Get phonetic correction for a word
+    pub fn phonetic_correction(&self, word: &str) -> Option<&str> {
+        self.config.vocabulary_full.phonetic_correction(word)
+    }
+
+    /// Get term boost for ASR
+    pub fn term_boost(&self, term: &str) -> f64 {
+        self.config.vocabulary_full.term_boost(term)
+    }
+
+    /// Convert Hindi number word to numeric value
+    pub fn hindi_to_number(&self, word: &str) -> Option<i64> {
+        self.config.vocabulary_full.hindi_to_number(word)
+    }
+
+    /// Expand abbreviation to full form
+    pub fn expand_abbreviation(&self, abbrev: &str) -> Option<&str> {
+        self.config.vocabulary_full.expand_abbreviation(abbrev)
+    }
+
+    // ====== P22 FIX: Entity Configuration ======
+
+    /// Get the full entities configuration
+    pub fn entities_config(&self) -> &super::EntitiesConfig {
+        &self.config.entities
+    }
+
+    /// Get display name for an entity type
+    pub fn entity_display_name(&self, entity_type: &str, language: &str) -> Option<&str> {
+        self.config.entities.display_name(entity_type, language)
+    }
+
+    /// Get unit for an entity type
+    pub fn entity_unit(&self, entity_type: &str, language: &str) -> Option<&str> {
+        self.config.entities.unit(entity_type, language)
+    }
+
+    /// Get extraction priority order for entity type
+    pub fn entity_extraction_order(&self, entity_type: &str) -> usize {
+        self.config.entities.extraction_order(entity_type)
+    }
+
+    /// Resolve entity alias to canonical name
+    pub fn resolve_entity_alias<'a>(&'a self, name: &'a str) -> Option<&'a str> {
+        self.config.entities.resolve_alias(name)
+    }
+
+    /// Format entity value for display
+    pub fn format_entity_value(&self, entity_type: &str, value: &str, language: &str) -> String {
+        self.config.entities.format_value(entity_type, value, language)
     }
 }
 
@@ -804,6 +1269,11 @@ impl ToolsDomainView {
         self.asset_price_per_unit()
     }
 
+    /// P20 FIX: Get asset unit from config (e.g., "gram" for gold, "unit" for others)
+    pub fn asset_unit(&self) -> &str {
+        self.config.slots.asset_unit()
+    }
+
     /// Get loan limits
     pub fn min_loan_amount(&self) -> f64 {
         self.config.constants.loan_limits.min
@@ -863,13 +1333,15 @@ impl ToolsDomainView {
         self.config.branches.get_branch(branch_id)
     }
 
-    /// Get branches with the primary service (domain-specific)
+    /// Get branches with the primary service (domain-agnostic)
     pub fn service_branches(&self) -> Vec<&BranchEntry> {
-        self.config.branches.gold_loan_branches()
+        self.config.branches.service_locations()
     }
 
-    /// Legacy alias
-    pub fn gold_loan_branches(&self) -> Vec<&BranchEntry> {
+    /// Legacy alias for backward compatibility
+    /// P21 FIX: Deprecated - use the domain-agnostic service_branches() method
+    #[deprecated(since = "0.20.0", note = "Use service_branches() for domain-agnostic access")]
+    pub fn legacy_service_branches(&self) -> Vec<&BranchEntry> {
         self.service_branches()
     }
 
@@ -1031,7 +1503,8 @@ impl ToolsDomainView {
         weight * self.asset_price_per_unit() * variant_factor
     }
 
-    /// Legacy alias for calculate_gold_value
+    /// Legacy alias for backward compatibility
+    #[deprecated(since = "0.20.0", note = "Use calculate_asset_value() instead")]
     pub fn calculate_gold_value(&self, weight_grams: f64, purity: &str) -> f64 {
         self.calculate_asset_value(weight_grams, purity)
     }
@@ -1266,6 +1739,23 @@ impl ToolsDomainView {
         &self.config.brand.product_name
     }
 
+    // ====== P23 FIX: Currency Configuration ======
+
+    /// Get the currency symbol (e.g., "₹")
+    pub fn currency_symbol(&self) -> &str {
+        &self.config.currency.symbol
+    }
+
+    /// Get the currency code (e.g., "INR")
+    pub fn currency_code(&self) -> &str {
+        &self.config.currency.code
+    }
+
+    /// P2.6 FIX: Get the currency field suffix (e.g., "inr" for "_inr" suffixes)
+    pub fn currency_field_suffix(&self) -> &str {
+        &self.config.currency.field_suffix
+    }
+
     // ====== P16 FIX: Tool Response Templates ======
 
     /// Get a response template for a tool and scenario
@@ -1301,7 +1791,8 @@ impl ToolsDomainView {
         vars.insert("product_name".to_string(), self.config.brand.product_name.clone());
         vars.insert("helpline".to_string(), self.config.brand.helpline.clone());
         vars.insert("agent_name".to_string(), self.config.brand.agent_name.clone());
-        vars.insert("currency".to_string(), "₹".to_string());
+        // P23 FIX: Use config-driven currency symbol instead of hardcoded "₹"
+        vars.insert("currency".to_string(), self.config.currency.symbol.clone());
         vars
     }
 
@@ -1326,6 +1817,147 @@ impl ToolsDomainView {
     /// Get all configured intent names
     pub fn mapped_intents(&self) -> Vec<&str> {
         self.config.tools.mapped_intents()
+    }
+
+    // ====== P20 FIX: Quality Tier Configuration ======
+
+    /// Get the default quality tier display value
+    ///
+    /// Reads from slots.yaml asset_quality_tier.default or parsing.default_id.
+    /// Returns the display value, not the tier ID.
+    ///
+    /// Falls back to generic "tier_2" if not configured.
+    pub fn default_quality_tier_display(&self) -> String {
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            // Get the default tier ID
+            let default_id = slot_def
+                .default
+                .as_deref()
+                .or_else(|| slot_def.parsing.as_ref().map(|p| p.default_id.as_str()))
+                .unwrap_or("tier_2");
+
+            // Look up the display value for this tier ID
+            if let Some(values) = &slot_def.values {
+                for value in values {
+                    if value.id == default_id {
+                        return value.display.clone();
+                    }
+                }
+            }
+
+            // Fallback to ID if display not found
+            return default_id.to_string();
+        }
+
+        // P23 FIX: Use generic fallback - config should define domain-specific tiers
+        tracing::warn!("asset_quality_tier slot not found in config - using generic fallback");
+        "tier_2".to_string()
+    }
+
+    /// Get all quality tier display values
+    ///
+    /// Reads from slots.yaml asset_quality_tier.values[].display
+    pub fn quality_tier_displays(&self) -> Vec<String> {
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            if let Some(values) = &slot_def.values {
+                return values.iter().map(|v| v.display.clone()).collect();
+            }
+        }
+
+        // P23 FIX: Use generic fallback - config should define domain-specific tiers
+        tracing::warn!("asset_quality_tier values not found in config - using generic fallback");
+        vec!["tier_1".to_string(), "tier_2".to_string(), "tier_3".to_string()]
+    }
+
+    /// P20 FIX: Get all quality tiers with full information
+    ///
+    /// Returns tuples of (short_code, factor, description) for all tiers.
+    /// Used by price tool for dynamic tier display.
+    pub fn quality_tiers_full(&self) -> Vec<(String, f64, String)> {
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            if let Some(values) = &slot_def.values {
+                return values
+                    .iter()
+                    .map(|v| {
+                        (
+                            v.short_code().to_string(),
+                            v.quality_factor.unwrap_or(1.0),
+                            v.description().to_string(),
+                        )
+                    })
+                    .collect();
+            }
+        }
+
+        // P23 FIX: Use generic fallback - config should define domain-specific tiers
+        tracing::warn!("asset_quality_tier values not found in config - using generic fallback");
+        vec![
+            ("tier_1".to_string(), 1.0, "Highest quality".to_string()),
+            ("tier_2".to_string(), 0.916, "Standard quality".to_string()),
+            ("tier_3".to_string(), 0.75, "Economy quality".to_string()),
+        ]
+    }
+
+    /// P20 FIX: Get tier short codes only
+    pub fn quality_tier_short_codes(&self) -> Vec<String> {
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            if let Some(values) = &slot_def.values {
+                return values.iter().map(|v| v.short_code().to_string()).collect();
+            }
+        }
+
+        // P23 FIX: Use generic fallback - config should define domain-specific tiers
+        tracing::warn!("asset_quality_tier values not found in config - using generic fallback");
+        vec!["tier_1".to_string(), "tier_2".to_string(), "tier_3".to_string()]
+    }
+
+    /// P20 FIX: Get tier description by short code
+    pub fn tier_description(&self, short_code: &str) -> String {
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            if let Some(values) = &slot_def.values {
+                for v in values {
+                    if v.short_code().eq_ignore_ascii_case(short_code) {
+                        return v.description().to_string();
+                    }
+                }
+            }
+        }
+
+        format!("{} quality tier", short_code)
+    }
+
+    /// Get quality factor for a display value (e.g., "22K" -> 0.916)
+    ///
+    /// Supports both tier IDs (tier_1, tier_2) and display values (24K, 22K)
+    pub fn quality_factor_by_display(&self, display_or_id: &str) -> f64 {
+        // First try the variant_factors from constants (for backward compat)
+        if let Some(factor) = self.config.constants.variant_factors.get(display_or_id) {
+            return *factor;
+        }
+
+        // Then try slot-based lookup
+        let slot = self.config.slots.get_slot("asset_quality_tier");
+        if let Some(slot_def) = slot {
+            if let Some(values) = &slot_def.values {
+                for value in values {
+                    // Match by display or ID
+                    if value.display.eq_ignore_ascii_case(display_or_id)
+                        || value.id.eq_ignore_ascii_case(display_or_id)
+                    {
+                        // quality_factor is optional in the struct
+                        return value.quality_factor.unwrap_or(1.0);
+                    }
+                }
+            }
+        }
+
+        // Default to 1.0 if not found
+        1.0
     }
 }
 

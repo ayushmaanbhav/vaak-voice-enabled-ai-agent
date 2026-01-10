@@ -1,6 +1,7 @@
 //! Competitor Comparison Tool
 //!
-//! Compare gold loan offerings with other major lenders.
+//! Compare loan offerings with other major lenders.
+//! P21 FIX: Made domain-agnostic (was gold loan specific).
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -75,7 +76,8 @@ impl Tool for CompetitorComparisonTool {
     }
 
     fn description(&self) -> &str {
-        "Compare our gold loan offerings with other major lenders including interest rates, LTV, and features"
+        // P21 FIX: Domain-agnostic description
+        "Compare our loan offerings with other major lenders including interest rates, LTV, and features"
     }
 
     fn schema(&self) -> ToolSchema {
@@ -109,20 +111,37 @@ impl Tool for CompetitorComparisonTool {
     }
 
     async fn execute(&self, input: Value) -> Result<ToolOutput, ToolError> {
-        let competitor = input
-            .get("competitor")
-            .and_then(|v| v.as_str())
-            .unwrap_or("all");
+        // P24 FIX: Use config-driven parameter aliases
+        let competitor = self.view
+            .tools_config()
+            .get_string_param_with_aliases(&input, "service_provider")
+            .or_else(|| input.get("competitor").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .unwrap_or_else(|| "all".to_string());
+        let competitor = competitor.as_str();
 
-        let loan_amount = input
-            .get("loan_amount")
+        // P24 FIX: Use config-driven defaults from tool_defaults section
+        let default_amount = self.view
+            .tools_config()
+            .get_tool_default("compare_providers", "default_amount")
             .and_then(|v| v.as_f64())
             .unwrap_or(100000.0);
+
+        let loan_amount = self.view
+            .tools_config()
+            .get_numeric_param_with_aliases(&input, "offer_amount")
+            .or_else(|| input.get("loan_amount").and_then(|v| v.as_f64()))
+            .unwrap_or(default_amount);
+
+        let default_tenure = self.view
+            .tools_config()
+            .get_tool_default("compare_providers", "default_tenure_months")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(12);
 
         let tenure_months = input
             .get("tenure_months")
             .and_then(|v| v.as_i64())
-            .unwrap_or(12);
+            .unwrap_or(default_tenure);
 
         // P15 FIX: All values from config, no hardcoded fallbacks
         let competitors = self.get_competitors();
@@ -171,10 +190,13 @@ impl Tool for CompetitorComparisonTool {
             comparisons.push(comparison);
 
             if our_rate < rate {
+                // P3.2 FIX: Use config-driven currency symbol
+                let currency = self.view.currency_symbol();
                 our_advantages.push(format!(
-                    "{}% lower rate than {} (saving ₹{:.0}/month)",
+                    "{}% lower rate than {} (saving {}{:.0}/month)",
                     ((rate - our_rate) * 100.0).round() / 100.0,
                     name,
+                    currency,
                     monthly_savings
                 ));
             }
@@ -182,6 +204,23 @@ impl Tool for CompetitorComparisonTool {
 
         // P15 FIX: Get our features from config
         let our_features = self.get_our_features();
+
+        // P3.2 FIX: Use config-driven currency symbol
+        let currency = self.view.currency_symbol();
+        let summary = format!(
+            "For a loan of {}{:.0}, {} offers {}% p.a. with monthly interest of {}{:.0}. {}",
+            currency,
+            loan_amount,
+            company_name,
+            our_rate,
+            currency,
+            our_monthly_interest,
+            if our_advantages.is_empty() {
+                format!("{} rates are competitive with the market.", company_name)
+            } else {
+                format!("You can save compared to: {}", our_advantages.join(", "))
+            }
+        );
 
         let result = json!({
             "comparison_for": {
@@ -198,18 +237,7 @@ impl Tool for CompetitorComparisonTool {
             },
             "competitors": comparisons,
             "our_advantages": our_advantages,
-            "summary": format!(
-                "For a loan of ₹{:.0}, {} offers {}% p.a. with monthly interest of ₹{:.0}. {}",
-                loan_amount,
-                company_name,
-                our_rate,
-                our_monthly_interest,
-                if our_advantages.is_empty() {
-                    format!("{} rates are competitive with the market.", company_name)
-                } else {
-                    format!("You can save compared to: {}", our_advantages.join(", "))
-                }
-            )
+            "summary": summary
         });
 
         Ok(ToolOutput::json(result))

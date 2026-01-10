@@ -3,6 +3,10 @@
 //! P2-3 FIX: Consolidated duplicate config definitions.
 //! - RagConfig now uses the detailed version from settings.rs
 //! - MemoryConfig now includes P1 token limits with serde support
+//!
+//! P19 FIX: Serde defaults are generic placeholders. Actual agent name, company name,
+//! etc. come from domain config YAML (config/domains/{domain}/domain.yaml) at runtime.
+//! Use MasterDomainConfig.brand for the real values.
 
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +50,8 @@ pub struct AgentConfig {
 }
 
 fn default_agent_name() -> String {
-    "Priya".to_string()
+    // P19 FIX: Generic placeholder - real value comes from domain config brand.agent_name
+    "Agent".to_string()
 }
 fn default_agent_language() -> String {
     "en".to_string()
@@ -101,7 +106,8 @@ pub struct PersonaConfig {
 }
 
 fn default_persona_name() -> String {
-    "Priya".to_string()
+    // P19 FIX: Generic placeholder - real value comes from domain config brand.agent_name
+    "Agent".to_string()
 }
 
 fn default_warmth() -> f32 {

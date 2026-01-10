@@ -676,11 +676,11 @@ mod tests {
     fn test_tool_conversion() {
         use crate::prompt::ToolBuilder;
 
-        // P16 FIX: Create tool with ToolBuilder instead of hardcoded gold_loan_tools()
-        let tool = ToolBuilder::new("check_eligibility", "Check loan eligibility")
-            .param("weight", "number", "Weight in grams", true)
-            .param("purity", "string", "Purity level", false)
-            .string_enum("purity", &["24K", "22K", "18K", "14K"])
+        // P23 FIX: Use generic parameter names - actual values come from domain config
+        let tool = ToolBuilder::new("check_eligibility", "Check eligibility")
+            .param("quantity", "number", "Quantity value", true)
+            .param("quality_tier", "string", "Quality tier", false)
+            .string_enum("quality_tier", &["tier_1", "tier_2", "tier_3"])
             .build();
 
         // Verify structure matches Claude API expectations
@@ -690,8 +690,8 @@ mod tests {
 
         // Verify parameters have proper structure
         let props = tool.parameters.get("properties").unwrap();
-        assert!(props.get("weight").is_some());
-        assert!(props.get("purity").is_some());
+        assert!(props.get("quantity").is_some());
+        assert!(props.get("quality_tier").is_some());
     }
 
     #[test]

@@ -13,17 +13,22 @@ use crate::ConfigError;
 use super::branches::BranchesConfig;
 use super::competitors::CompetitorsConfig;
 use super::documents::DocumentsConfig;
+use super::entities::EntitiesConfig;
 use super::features::FeaturesConfig;
 use super::goals::GoalsConfig;
+use super::intents::IntentsConfig;
 use super::objections::ObjectionsConfig;
+use super::personas::PersonasConfig;
 use super::prompts::PromptsConfig;
 use super::scoring::ScoringConfig;
 use super::segments::SegmentsConfig;
+use super::signals::SignalsConfig;
 use super::slots::SlotsConfig;
 use super::sms_templates::SmsTemplatesConfig;
 use super::stages::StagesConfig;
 use super::tool_responses::ToolResponsesConfig;
 use super::tools::ToolsConfig;
+use super::vocabulary::FullVocabularyConfig;
 
 /// Brand configuration - domain-agnostic
 ///
@@ -205,7 +210,7 @@ impl Default for PhoneticCorrectorParams {
 }
 
 /// P16 FIX: Phonetic ASR error correction configuration
-/// Moved from hardcoded PhoneticCorrector::gold_loan() to config-driven
+/// Moved from hardcoded defaults to config-driven domain-specific corrections
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PhoneticCorrectionsConfig {
     /// Direct confusion rules: misspelling -> correct
@@ -303,10 +308,176 @@ fn default_boost() -> f64 {
     1.0
 }
 
+// ============================================================================
+// P18 FIX: Memory Compressor Configuration (Domain-Agnostic)
+// ============================================================================
+
+/// Domain keywords configuration for memory compressor
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DomainKeywordsConfig {
+    /// Product/service specific terms (e.g., loan, insurance, policy)
+    #[serde(default)]
+    pub product_terms: Vec<String>,
+    /// Unit terms (e.g., gram, lakh, percent)
+    #[serde(default)]
+    pub unit_terms: Vec<String>,
+    /// Quality/variant terms (e.g., purity grades, quality tiers)
+    #[serde(default)]
+    pub quality_terms: Vec<String>,
+    /// Regional language terms (Hindi, Tamil, etc.)
+    #[serde(default)]
+    pub regional_terms: Vec<String>,
+    /// Whether to automatically include competitor names from config
+    #[serde(default)]
+    pub include_competitor_names: bool,
+    /// Whether to automatically include brand name from config
+    #[serde(default)]
+    pub include_brand_name: bool,
+}
+
+/// Entity pattern configuration for memory compressor
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EntityPatternConfig {
+    /// Pattern strings to match for this entity type
+    #[serde(default)]
+    pub patterns: Vec<String>,
+}
+
+/// Intent keyword configuration for memory compressor
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IntentKeywordConfig {
+    /// Keywords/patterns to match for this intent
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    /// Whether to include competitor aliases as patterns
+    #[serde(default)]
+    pub include_competitor_aliases: bool,
+}
+
+/// Slot display mapping configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SlotDisplayConfig {
+    /// Display label for this slot type
+    #[serde(default)]
+    pub display: String,
+    /// Alternative slot names that map to this display
+    #[serde(default)]
+    pub aliases: Vec<String>,
+}
+
+/// Memory compressor configuration (config-driven, domain-agnostic)
+///
+/// P18 FIX: All domain-specific keywords, entity patterns, and intent mappings
+/// are now loaded from config instead of being hardcoded.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MemoryCompressorConfig {
+    /// Domain keywords for sentence scoring
+    #[serde(default)]
+    pub domain_keywords: DomainKeywordsConfig,
+    /// Entity patterns for extraction (entity_type -> patterns)
+    #[serde(default)]
+    pub entity_patterns: HashMap<String, EntityPatternConfig>,
+    /// Intent keywords for relevance scoring (intent -> keywords)
+    #[serde(default)]
+    pub intent_keywords: HashMap<String, IntentKeywordConfig>,
+    /// Slot display mappings (slot_name -> display config)
+    #[serde(default)]
+    pub slot_display_mappings: HashMap<String, SlotDisplayConfig>,
+    /// Filler patterns by language (language_code -> patterns)
+    #[serde(default)]
+    pub filler_patterns: HashMap<String, Vec<String>>,
+}
+
+// ============================================================================
+// P18 FIX: Currency Configuration (Domain-Agnostic)
+// ============================================================================
+
+/// Display unit for currency amounts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayUnit {
+    /// Unit name (e.g., "lakh", "thousand", "million")
+    #[serde(default)]
+    pub name: String,
+    /// Amount this unit represents (e.g., 100000 for lakh)
+    #[serde(default = "default_unit_amount")]
+    pub amount: f64,
+}
+
+fn default_unit_amount() -> f64 {
+    1.0
+}
+
+impl Default for DisplayUnit {
+    fn default() -> Self {
+        Self {
+            name: "unit".to_string(),
+            amount: 1.0,
+        }
+    }
+}
+
+/// Display units configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DisplayUnitsConfig {
+    /// Primary unit for savings calculations (e.g., lakh)
+    #[serde(default)]
+    pub savings_unit: DisplayUnit,
+    /// Unit for large amounts (e.g., crore)
+    #[serde(default)]
+    pub large_unit: DisplayUnit,
+    /// Unit for small amounts
+    #[serde(default)]
+    pub small_unit: DisplayUnit,
+}
+
+fn default_currency_code() -> String {
+    "INR".to_string()
+}
+
+fn default_currency_symbol() -> String {
+    "₹".to_string()
+}
+
+/// Currency configuration (domain-agnostic)
+///
+/// P18 FIX: Currency and display unit configuration is now loaded from config
+/// instead of hardcoding "lakh" (100,000) as the savings unit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrencyConfig {
+    /// ISO 4217 currency code
+    #[serde(default = "default_currency_code")]
+    pub code: String,
+    /// Currency symbol
+    #[serde(default = "default_currency_symbol")]
+    pub symbol: String,
+    /// P2.6 FIX: Suffix for JSON field names (e.g., "inr" for "amount_inr")
+    /// This replaces hardcoded "_inr" suffixes in tool output fields.
+    #[serde(default = "default_field_suffix")]
+    pub field_suffix: String,
+    /// Display units for different amount ranges
+    #[serde(default)]
+    pub display_units: DisplayUnitsConfig,
+}
+
+fn default_field_suffix() -> String {
+    "inr".to_string()
+}
+
+impl Default for CurrencyConfig {
+    fn default() -> Self {
+        Self {
+            code: default_currency_code(),
+            symbol: default_currency_symbol(),
+            field_suffix: default_field_suffix(),
+            display_units: DisplayUnitsConfig::default(),
+        }
+    }
+}
+
 /// Master domain configuration - the complete config for a domain
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterDomainConfig {
-    /// Domain identifier (e.g., "gold_loan")
+    /// Domain identifier (matches directory name in config/domains/)
     pub domain_id: String,
     /// Human-readable domain name
     pub display_name: String,
@@ -344,6 +515,16 @@ pub struct MasterDomainConfig {
     /// P17 FIX: Domain boosting configuration for RAG
     #[serde(default)]
     pub domain_boost: DomainBoostConfig,
+    /// P18 FIX: Memory compressor configuration (domain-agnostic)
+    #[serde(default)]
+    pub memory_compressor: MemoryCompressorConfig,
+    /// P18 FIX: Currency and display unit configuration (domain-agnostic)
+    #[serde(default)]
+    pub currency: CurrencyConfig,
+    /// P18 FIX: RAG collection name for this domain (domain-agnostic)
+    /// Defaults to "{domain_id}_knowledge" pattern
+    #[serde(default)]
+    pub rag_collection_name: Option<String>,
     /// Slot definitions for DST (loaded from slots.yaml)
     #[serde(skip)]
     pub slots: SlotsConfig,
@@ -386,9 +567,32 @@ pub struct MasterDomainConfig {
     /// P16 FIX: Tool response templates (loaded from tools/responses.yaml)
     #[serde(skip)]
     pub tool_responses: ToolResponsesConfig,
-    /// Raw JSON for dynamic access
+    /// P21 FIX: Compliance rules (loaded from compliance.yaml)
     #[serde(skip)]
-    raw_config: Option<JsonValue>,
+    pub compliance: super::ComplianceConfig,
+    /// P21 FIX: Adaptation/personalization config (loaded from adaptation.yaml)
+    #[serde(skip)]
+    pub adaptation: super::AdaptationConfig,
+    /// P21 FIX: Extraction patterns for domain-agnostic slot extraction
+    #[serde(skip)]
+    pub extraction_patterns: super::ExtractionPatternsConfig,
+    /// P22 FIX: Intent definitions (loaded from intents.yaml)
+    #[serde(skip)]
+    pub intents: IntentsConfig,
+    /// P22 FIX: Full vocabulary with ASR boost, phonetic corrections (loaded from vocabulary.yaml)
+    #[serde(skip)]
+    pub vocabulary_full: FullVocabularyConfig,
+    /// P22 FIX: Entity type definitions (loaded from entities.yaml)
+    #[serde(skip)]
+    pub entities: EntitiesConfig,
+    /// P23 FIX: Signal definitions for lead scoring (loaded from signals.yaml)
+    #[serde(skip)]
+    pub signals: SignalsConfig,
+    /// P24 FIX: Persona configurations for tone/style (loaded from personas.yaml)
+    #[serde(skip)]
+    pub personas: PersonasConfig,
+    // P23 FIX: Removed raw_config field - was never accessed
+    // Use typed config fields instead
 }
 
 fn default_version() -> String {
@@ -413,6 +617,9 @@ impl Default for MasterDomainConfig {
             relevance_terms: Vec::new(),
             query_expansion: QueryExpansionConfig::default(),
             domain_boost: DomainBoostConfig::default(),
+            memory_compressor: MemoryCompressorConfig::default(),
+            currency: CurrencyConfig::default(),
+            rag_collection_name: None, // Will derive from domain_id
             slots: SlotsConfig::default(),
             stages: StagesConfig::default(),
             scoring: ScoringConfig::default(),
@@ -427,7 +634,15 @@ impl Default for MasterDomainConfig {
             features: FeaturesConfig::default(),
             documents: DocumentsConfig::default(),
             tool_responses: ToolResponsesConfig::default(),
-            raw_config: None,
+            compliance: super::ComplianceConfig::default(),
+            adaptation: super::AdaptationConfig::default(),
+            extraction_patterns: super::ExtractionPatternsConfig::default(),
+            intents: IntentsConfig::default(),
+            vocabulary_full: FullVocabularyConfig::default(),
+            entities: EntitiesConfig::default(),
+            signals: SignalsConfig::default(),
+            personas: PersonasConfig::default(),
+            // P23 FIX: Removed raw_config - use typed config fields
         }
     }
 }
@@ -476,7 +691,7 @@ impl MasterDomainConfig {
         let mut config: MasterDomainConfig = serde_json::from_value(merged.clone())
             .map_err(|e| ConfigError::ParseError(format!("Failed to parse merged config: {}", e)))?;
 
-        config.raw_config = Some(merged);
+        // P23 FIX: Removed raw_config storage - use typed config fields instead
 
         // 5. Load slots configuration (optional)
         let slots_path = config_dir.join(format!("domains/{}/slots.yaml", domain_id));
@@ -789,6 +1004,181 @@ impl MasterDomainConfig {
             tracing::debug!("No tool response templates found at {:?}", responses_path);
         }
 
+        // 19. P21 FIX: Load compliance rules (optional)
+        let compliance_path = config_dir.join(format!("domains/{}/compliance.yaml", domain_id));
+        if compliance_path.exists() {
+            match super::ComplianceConfig::load(&compliance_path) {
+                Ok(compliance) => {
+                    tracing::info!(
+                        version = %compliance.version,
+                        forbidden_phrases = compliance.forbidden_phrases.len(),
+                        claims_rules = compliance.claims_requiring_disclaimer.len(),
+                        "Loaded compliance configuration"
+                    );
+                    config.compliance = compliance;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load compliance config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No compliance config found at {:?}", compliance_path);
+        }
+
+        // 20. P21 FIX: Load adaptation/personalization config (optional)
+        let adaptation_path = config_dir.join(format!("domains/{}/adaptation.yaml", domain_id));
+        if adaptation_path.exists() {
+            match super::AdaptationConfig::load(&adaptation_path) {
+                Ok(adaptation) => {
+                    tracing::info!(
+                        schema_version = %adaptation.schema_version,
+                        variables = adaptation.variables.len(),
+                        segments = adaptation.segment_adaptations.len(),
+                        features = adaptation.enabled_features.len(),
+                        "Loaded adaptation configuration"
+                    );
+                    config.adaptation = adaptation;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load adaptation config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No adaptation config found at {:?}", adaptation_path);
+        }
+
+        // 21. P21 FIX: Load extraction patterns config (optional)
+        let extraction_path = config_dir.join(format!("domains/{}/extraction_patterns.yaml", domain_id));
+        if extraction_path.exists() {
+            match super::ExtractionPatternsConfig::load(&extraction_path) {
+                Ok(patterns) => {
+                    tracing::info!(
+                        quality_tiers = patterns.asset_quality.tiers.len(),
+                        cities = patterns.locations.cities.len(),
+                        purposes = patterns.purposes.categories.len(),
+                        "Loaded extraction patterns configuration"
+                    );
+                    config.extraction_patterns = patterns;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load extraction patterns config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No extraction patterns config found at {:?}", extraction_path);
+        }
+
+        // 22. P22 FIX: Load intents configuration (optional)
+        let intents_path = config_dir.join(format!("domains/{}/intents.yaml", domain_id));
+        if intents_path.exists() {
+            match IntentsConfig::load(&intents_path) {
+                Ok(intents) => {
+                    tracing::info!(
+                        intents_count = intents.intents.len(),
+                        default_intent = %intents.default_intent,
+                        "Loaded intents configuration"
+                    );
+                    config.intents = intents;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load intents config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No intents config found at {:?}", intents_path);
+        }
+
+        // 23. P22 FIX: Load full vocabulary configuration (optional)
+        let vocabulary_path = config_dir.join(format!("domains/{}/vocabulary.yaml", domain_id));
+        if vocabulary_path.exists() {
+            match FullVocabularyConfig::load(&vocabulary_path) {
+                Ok(vocab) => {
+                    tracing::info!(
+                        domain_terms = vocab.domain_terms.len(),
+                        abbreviations = vocab.abbreviations.len(),
+                        phonetic_corrections = vocab.phonetic_corrections.len(),
+                        hindi_numbers = vocab.hindi_numbers.len(),
+                        "Loaded full vocabulary configuration"
+                    );
+                    config.vocabulary_full = vocab;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load vocabulary config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No vocabulary config found at {:?}", vocabulary_path);
+        }
+
+        // 24. P22 FIX: Load entities configuration (optional)
+        let entities_path = config_dir.join(format!("domains/{}/entities.yaml", domain_id));
+        if entities_path.exists() {
+            match EntitiesConfig::load(&entities_path) {
+                Ok(entities) => {
+                    tracing::info!(
+                        entity_types = entities.entity_types.len(),
+                        categories = entities.categories.len(),
+                        extraction_priority = entities.extraction_priority.len(),
+                        "Loaded entities configuration"
+                    );
+                    config.entities = entities;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load entities config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No entities config found at {:?}", entities_path);
+        }
+
+        // 25. P23 FIX: Load signals configuration for lead scoring (optional)
+        let signals_path = config_dir.join(format!("domains/{}/signals.yaml", domain_id));
+        if signals_path.exists() {
+            match SignalsConfig::load(&signals_path) {
+                Ok(signals) => {
+                    tracing::info!(
+                        signal_count = signals.signals.len(),
+                        categories = signals.categories.len(),
+                        escalation_triggers = signals.escalation_triggers.len(),
+                        "Loaded signals configuration"
+                    );
+                    config.signals = signals;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load signals config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No signals config found at {:?}", signals_path);
+        }
+
+        // 26. P24 FIX: Load personas configuration for tone/style (optional)
+        let personas_path = config_dir.join(format!("domains/{}/personas.yaml", domain_id));
+        if personas_path.exists() {
+            match PersonasConfig::load(&personas_path) {
+                Ok(personas) => {
+                    tracing::info!(
+                        tones = personas.tones.len(),
+                        warmth_thresholds = personas.warmth_thresholds.len(),
+                        complexity_levels = personas.complexity_levels.len(),
+                        adaptation_rules = personas.adaptation_rules.len(),
+                        "Loaded personas configuration"
+                    );
+                    config.personas = personas;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load personas config: {}", e);
+                }
+            }
+        } else {
+            tracing::debug!("No personas config found at {:?}", personas_path);
+        }
+
+        // 27. P16 FIX: Apply variable substitution to all text configs
+        // This allows YAML files to use {{variable_name}} placeholders
+        // that are replaced with values from adaptation.yaml variables
+        config.substitute_all_variables();
+
         tracing::info!(
             domain_id = %config.domain_id,
             display_name = %config.display_name,
@@ -808,7 +1198,7 @@ impl MasterDomainConfig {
                 "DOMAIN_ID environment variable is not set. \
                  This is a domain-agnostic system - you MUST specify which domain to use. \
                  Set DOMAIN_ID to the name of the domain config directory \
-                 (e.g., DOMAIN_ID=gold_loan for config/domains/gold_loan/).".to_string()
+                 (e.g., DOMAIN_ID=my_domain for config/domains/my_domain/).".to_string()
             ))?;
 
         if domain_id.is_empty() {
@@ -820,21 +1210,8 @@ impl MasterDomainConfig {
         Self::load(&domain_id, config_dir)
     }
 
-    /// Get a constant value by dot-notation key path
-    /// e.g., "interest_rates.base_rate" or "ltv_percent"
-    pub fn get_constant(&self, key_path: &str) -> Option<JsonValue> {
-        let raw = self.raw_config.as_ref()?;
-        let constants = raw.get("constants")?;
-
-        let parts: Vec<&str> = key_path.split('.').collect();
-        let mut current = constants;
-
-        for part in parts {
-            current = current.get(part)?;
-        }
-
-        Some(current.clone())
-    }
+    // P23 FIX: Removed get_constant() - was never called
+    // Use typed config fields (e.g., self.constants.interest_rates) instead of raw JSON access
 
     /// Get the best interest rate for a given loan amount
     pub fn get_rate_for_amount(&self, amount: f64) -> f64 {
@@ -884,6 +1261,76 @@ impl MasterDomainConfig {
         }
 
         None
+    }
+
+    /// P16 FIX: Apply variable substitution to all text configs
+    ///
+    /// Replaces {{variable_name}} placeholders with values from adaptation.yaml
+    /// This enables domain-agnostic config files that use variables for
+    /// company names, rates, and other domain-specific content.
+    pub fn substitute_all_variables(&mut self) {
+        // Skip if no variables defined
+        if self.adaptation.variables.is_empty() {
+            return;
+        }
+
+        // Helper closure to substitute in a string
+        let substitute = |s: &str| -> String {
+            let mut result = s.to_string();
+            for (key, value) in &self.adaptation.variables {
+                result = result.replace(&format!("{{{{{}}}}}", key), value);
+            }
+            result
+        };
+
+        // Substitute in stages config
+        for stage in self.stages.stages.values_mut() {
+            stage.guidance = substitute(&stage.guidance);
+            for question in &mut stage.suggested_questions {
+                *question = substitute(question);
+            }
+        }
+
+        // Substitute in segments config
+        for segment in self.segments.segments.values_mut() {
+            for props in segment.value_props.values_mut() {
+                for prop in props.iter_mut() {
+                    *prop = substitute(prop);
+                }
+            }
+        }
+
+        // Substitute in competitors config
+        for point in &mut self.competitors_config.comparison_points {
+            point.our_advantage = substitute(&point.our_advantage);
+        }
+        for feature in &mut self.competitors_config.our_features {
+            *feature = substitute(feature);
+        }
+
+        // P23 FIX: Substitute in objections config
+        for objection in self.objections.objections.values_mut() {
+            for responses in objection.responses.values_mut() {
+                responses.acknowledge = substitute(&responses.acknowledge);
+                responses.reframe = substitute(&responses.reframe);
+                responses.evidence = substitute(&responses.evidence);
+                responses.call_to_action = substitute(&responses.call_to_action);
+            }
+        }
+        // Substitute in default objection responses (if present)
+        if let Some(ref mut default_obj) = self.objections.default_objection {
+            for responses in default_obj.responses.values_mut() {
+                responses.acknowledge = substitute(&responses.acknowledge);
+                responses.reframe = substitute(&responses.reframe);
+                responses.evidence = substitute(&responses.evidence);
+                responses.call_to_action = substitute(&responses.call_to_action);
+            }
+        }
+
+        tracing::debug!(
+            variables_count = self.adaptation.variables.len(),
+            "Applied variable substitution to config"
+        );
     }
 }
 

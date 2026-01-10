@@ -716,12 +716,14 @@ fn create_new_session(
     let mut config = AgentConfig::default();
     config.language = language.to_string();
 
+    // P21 FIX: Pass domain config to ensure agent uses loaded domain configuration
     let session = state
         .sessions
         .create_with_full_integration(
             config,
             state.vector_store.clone(),
             Some(state.tools.clone()),
+            state.master_domain_config.clone(),
         )
         .map_err(|e| format!("Failed to create session: {}", e))?;
 

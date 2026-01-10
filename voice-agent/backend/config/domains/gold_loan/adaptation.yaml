@@ -1,0 +1,154 @@
+# Domain Adaptation Configuration
+# P20 FIX: Domain-specific variables for config-driven personalization
+#
+# This file contains domain-specific variable definitions that are used
+# for template substitution throughout other config files. This allows
+# domain-agnostic config structures while maintaining domain-specific content.
+
+schema_version: "1.0"
+
+# Domain-specific variables for template substitution
+# These can be referenced as {{variable_name}} in other config files
+variables:
+  # ====== Brand Identity ======
+  # Company and product branding (P16 FIX: for domain-agnostic stages/prompts)
+  company_name: "Kotak Mahindra Bank"
+  company_short_name: "Kotak"
+  product_name: "Gold Loan"
+  agent_role: "Gold Loan specialist"
+
+  # ====== Asset Terminology ======
+  collateral_type: "gold"
+  collateral_type_hindi: "सोना"
+  asset_unit: "grams"
+  asset_unit_hindi: "ग्राम"
+  asset_quality_term: "purity"
+  asset_quality_term_hindi: "शुद्धता"
+
+  # ====== Special Programs ======
+  special_program_name: "Shakti Gold"
+  special_program_benefit: "0.25% lower interest for women"
+  special_program_benefit_hindi: "महिलाओं के लिए 0.25% कम ब्याज"
+  switch_program_name: "Switch & Save"
+
+  # ====== Regulatory ======
+  regulator_name: "RBI"
+  regulator_full_name: "Reserve Bank of India"
+
+  # ====== Rates (P16 FIX: for domain-agnostic stages/prompts) ======
+  # Best promotional rate for premium customers
+  our_best_rate: "9.5"
+  promotional_rate: "9.5%"
+  # Standard starting rate advertised
+  our_standard_rate: "10.49"
+  standard_rate: "10.5%"
+  # Loan-to-Value percentage
+  ltv_percent: "75"
+  # Typical NBFC rate range for comparison
+  nbfc_rate_range: "12-24"
+
+  # ====== Competitor Comparison ======
+  typical_competitor_rate: "18%"
+  typical_savings_percent: "7-8%"
+
+# Segment-specific adaptations
+segment_adaptations:
+  women:
+    # Special program configuration
+    special_program:
+      enabled: true
+      program_id: "shakti_gold"
+      name: "{{special_program_name}}"
+      benefit: "{{special_program_benefit}}"
+      discount_percent: 0.25
+
+    # Primary features to emphasize
+    primary_features:
+      - women_benefits
+      - security
+      - doorstep_service
+
+    # Custom value propositions (override defaults)
+    value_propositions:
+      en:
+        - "{{special_program_name}} with {{special_program_benefit}}"
+        - "Women-priority branches with female staff"
+        - "Flexible EMI options to suit your schedule"
+      hi:
+        - "{{special_program_name}} {{special_program_benefit_hindi}}"
+        - "महिला-प्राथमिकता वाली ब्रांच में महिला स्टाफ"
+        - "आपके शेड्यूल के अनुसार फ्लेक्सिबल EMI विकल्प"
+
+  high_value:
+    primary_features:
+      - relationship_manager
+      - higher_limits
+      - quick_process
+
+  trust_seeker:
+    primary_features:
+      - rbi_regulated
+      - security
+      - transparency
+
+  price_sensitive:
+    # Emphasis on cost savings
+    primary_features:
+      - low_rates
+      - zero_foreclosure
+      - no_hidden_charges
+
+    # Custom value propositions
+    value_propositions:
+      en:
+        - "Starting at {{promotional_rate}} - among the lowest rates in the market"
+        - "Zero foreclosure charges - prepay anytime without penalty"
+        - "Use our calculator to see exactly how much you save"
+
+  first_time:
+    # Emphasis on simplicity
+    primary_features:
+      - no_hidden_charges
+      - quick_process
+      - transparency
+
+  professional:
+    # Emphasis on speed and digital
+    primary_features:
+      - quick_process
+      - digital
+      - flexibility
+
+# Collateral-specific terminology mappings
+# Maps generic terms to domain-specific terms
+terminology:
+  # Asset terms
+  asset: "gold"
+  asset_plural: "gold items"
+  collateral: "gold"
+
+  # Quality terms
+  quality_tier_1: "24K"
+  quality_tier_2: "22K"
+  quality_tier_3: "18K"
+  quality_tier_4: "14K"
+
+  # Provider types
+  provider_type_bank: "Bank"
+  provider_type_nbfc: "NBFC"
+
+# Feature flags for domain-specific behaviors
+enabled_features:
+  # Products/services
+  balance_transfer: true
+  doorstep_service: true
+  digital_gold_loan: false  # Future feature
+
+  # Special programs
+  women_special_rates: true
+  senior_citizen_rates: false
+
+  # Channels
+  phone_channel: true
+  whatsapp_channel: true
+  video_kyc: false

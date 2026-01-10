@@ -1,11 +1,105 @@
 # Gold Loan Domain - Tool Schemas
 # Defines LLM tool definitions in JSON Schema compatible format
+#
+# DOMAIN-AGNOSTIC DESIGN:
+# - parameter_aliases: Maps generic parameter names to domain-specific aliases
+# - tool_defaults: Configurable default values (no hardcoded values in Rust)
+# - All domain-specific terms in descriptions support variable substitution
+
+# Parameter aliases for backward compatibility and domain flexibility
+# Generic names (used in code) -> Domain-specific aliases (accepted from input)
+parameter_aliases:
+  # Asset-related parameters
+  collateral_weight:
+    - "gold_weight_grams"
+    - "weight_grams"
+    - "weight"
+    - "asset_weight"
+    - "quantity"
+  collateral_variant:
+    - "gold_purity"
+    - "purity"
+    - "quality"
+    - "asset_quality"
+    - "grade"
+  collateral_type:
+    - "gold_type"
+    - "item_type"
+    - "asset_type"
+
+  # Financial parameters
+  offer_amount:
+    - "loan_amount"
+    - "amount"
+    - "principal"
+  current_offer_amount:
+    - "current_loan_amount"
+    - "existing_amount"
+  service_provider:
+    - "lender"
+    - "current_lender"
+    - "provider"
+  annual_rate:
+    - "interest_rate"
+    - "rate"
+    - "current_interest_rate"
+
+# Tool-specific default values (moved from hardcoded Rust values)
+tool_defaults:
+  check_eligibility:
+    default_variant: "22K"  # Was hardcoded in eligibility.rs
+    min_weight: 1.0
+    max_weight: 10000.0
+
+  compare_providers:
+    default_amount: 100000  # Was hardcoded 100000 in competitor.rs
+    default_tenure_months: 12  # Was hardcoded 12 in competitor.rs
+    default_competitor: "all"
+
+  calculate_savings:
+    interest_rate_min: 10.0  # Was hardcoded 10.0 in savings.rs
+    interest_rate_max: 30.0  # Was hardcoded 30.0 in savings.rs
+    default_tenure_months: 12
+    default_lender: "Other"  # Was hardcoded "Other Lender" in savings.rs
+
+  find_locations:
+    max_results: 5  # Was hardcoded 5 in branch_locator.rs
+    default_radius_km: 10
+
+  capture_lead:
+    interest_level_default: "Medium"  # Was hardcoded "Medium" in lead_capture.rs
+    interest_levels: ["High", "Medium", "Low"]
+
+  get_document_checklist:
+    customer_type_default: "individual"  # Was hardcoded in document_checklist.rs
+    existing_customer_default: false
+    customer_types: ["individual", "business", "nri"]
+    service_types: ["new_loan", "balance_transfer", "top_up", "renewal"]
+
+  schedule_appointment:
+    time_slots: ["10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"]
+    purposes: ["New Application", "Transfer", "Top-up", "Closure", "Consultation"]
+    default_purpose: "New Application"
+
+  send_sms:
+    default_customer_name: "Customer"  # Was hardcoded "Customer" in sms.rs
+    message_types: ["appointment_confirmation", "appointment_reminder", "follow_up", "welcome", "promotional"]
 
 tools:
   check_eligibility:
     name: check_eligibility
     description: "Check if customer is eligible for a gold loan based on their gold weight and purity"
     category: "calculation"
+    metadata:
+      display_name: "Eligibility Check"
+      icon: "calculator"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: []
+      # P22 FIX: Execution type for factory-based tool creation
+      execution_type: "calculation"
+      calculator_method: "check_eligibility"
     parameters:
       - name: gold_weight_grams
         type: number
@@ -28,6 +122,16 @@ tools:
   calculate_savings:
     name: calculate_savings
     description: "Calculate monthly savings when switching from competitor to Kotak"
+    category: "calculation"
+    metadata:
+      display_name: "Savings Calculator"
+      icon: "piggy-bank"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: ["savings_calculator"]
+      execution_type: "calculation"
+      calculator_method: "calculate_savings"
     parameters:
       - name: current_lender
         type: string
@@ -55,6 +159,15 @@ tools:
   find_locations:
     name: find_locations
     description: "Find nearby Kotak Mahindra Bank branches that offer gold loans"
+    category: "location"
+    metadata:
+      display_name: "Branch Locator"
+      icon: "location"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: ["find_branches", "branch_locator"]
+      execution_type: "lookup"
     parameters:
       - name: city
         type: string
@@ -68,6 +181,15 @@ tools:
   schedule_callback:
     name: schedule_callback
     description: "Schedule a callback from Kotak branch team"
+    category: "communication"
+    metadata:
+      display_name: "Schedule Callback"
+      icon: "phone"
+      requires_domain_config: true
+      requires_integrations: true
+      timeout_secs: 60
+      aliases: []
+      execution_type: "integration"
     parameters:
       - name: phone
         type: string
@@ -82,6 +204,15 @@ tools:
   send_sms:
     name: send_sms
     description: "Send SMS with loan details or promotional information to customer"
+    category: "communication"
+    metadata:
+      display_name: "Send SMS"
+      icon: "message"
+      requires_domain_config: true
+      requires_integrations: true
+      timeout_secs: 30
+      aliases: []
+      execution_type: "integration"
     parameters:
       - name: phone
         type: string
@@ -97,6 +228,14 @@ tools:
     name: get_price
     description: "Get current gold rate per gram for different purities"
     category: "information"
+    metadata:
+      display_name: "Get Price"
+      icon: "gold"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: ["get_gold_price", "gold_rate"]
+      execution_type: "lookup"
     parameters:
       - name: purity
         type: string
@@ -112,6 +251,15 @@ tools:
   compare_providers:
     name: compare_providers
     description: "Compare Kotak's gold loan offering with other lenders"
+    category: "comparison"
+    metadata:
+      display_name: "Compare Providers"
+      icon: "compare"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: ["compare_lenders", "competitor_comparison"]
+      execution_type: "calculation"
     parameters:
       - name: competitor
         type: string
@@ -127,6 +275,15 @@ tools:
   capture_lead:
     name: capture_lead
     description: "Capture customer lead information for follow-up"
+    category: "crm"
+    metadata:
+      display_name: "Capture Lead"
+      icon: "user-plus"
+      requires_domain_config: true
+      requires_integrations: true
+      timeout_secs: 60
+      aliases: ["lead_capture"]
+      execution_type: "integration"
     parameters:
       - name: name
         type: string
@@ -162,6 +319,14 @@ tools:
     name: schedule_appointment
     description: "Schedule a branch visit appointment for gold valuation"
     category: "scheduling"
+    metadata:
+      display_name: "Schedule Appointment"
+      icon: "calendar"
+      requires_domain_config: true
+      requires_integrations: true
+      timeout_secs: 60
+      aliases: []
+      execution_type: "integration"
     parameters:
       - name: customer_name
         type: string
@@ -189,6 +354,57 @@ tools:
         description: "Purpose of visit"
         required: false
         enum: ["New Gold Loan", "Gold Loan Transfer", "Top-up", "Closure", "Consultation"]
+
+  escalate_to_human:
+    name: escalate_to_human
+    description: "Transfer the call to a human agent when customer requests or when needed"
+    category: "escalation"
+    metadata:
+      display_name: "Escalate to Human"
+      icon: "user"
+      requires_domain_config: false
+      requires_integrations: false
+      timeout_secs: 10
+      aliases: ["escalate", "human_agent", "transfer_to_human"]
+      execution_type: "generic"
+    parameters:
+      - name: reason
+        type: string
+        description: "Reason for escalation"
+        required: false
+        enum: ["customer_request", "complex_query", "complaint", "technical_issue"]
+      - name: priority
+        type: string
+        description: "Priority level for escalation"
+        required: false
+        enum: ["normal", "high", "urgent"]
+        default: "normal"
+
+  get_document_checklist:
+    name: get_document_checklist
+    description: "Get list of documents required for gold loan application"
+    category: "information"
+    metadata:
+      display_name: "Document Checklist"
+      icon: "document"
+      requires_domain_config: true
+      requires_integrations: false
+      timeout_secs: 30
+      aliases: ["document_checklist", "required_documents"]
+      execution_type: "lookup"
+    parameters:
+      - name: loan_type
+        type: string
+        description: "Type of loan application"
+        required: false
+        enum: ["new_loan", "balance_transfer", "top_up", "renewal"]
+        default: "new_loan"
+      - name: customer_type
+        type: string
+        description: "Type of customer"
+        required: false
+        enum: ["individual", "business", "nri"]
+        default: "individual"
 
 # Tool usage guidelines for the LLM
 usage_guidelines:

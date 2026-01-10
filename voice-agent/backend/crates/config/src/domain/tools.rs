@@ -36,6 +36,15 @@ pub struct ToolsConfig {
     /// P16 FIX: Tool argument name mappings
     #[serde(default)]
     pub argument_mappings: HashMap<String, HashMap<String, String>>,
+    /// P20 FIX: Common argument mappings that apply to ALL tools
+    /// Maps short slot names to standard argument names (e.g., "name" -> "customer_name")
+    #[serde(default)]
+    pub common_argument_mappings: HashMap<String, String>,
+    /// DOMAIN-AGNOSTIC FIX: Parameter aliases for backward compatibility
+    /// Maps generic parameter names to domain-specific aliases
+    /// e.g., "collateral_weight" -> ["gold_weight_grams", "weight_grams"]
+    #[serde(default)]
+    pub parameter_aliases: HashMap<String, Vec<String>>,
 }
 
 /// P16 FIX: Mapping from intent to tool with optional conditions
@@ -69,6 +78,9 @@ pub struct IntentToolMappingsConfig {
     /// Tool argument name mappings
     #[serde(default)]
     pub argument_mappings: HashMap<String, HashMap<String, String>>,
+    /// P20 FIX: Common argument mappings that apply to ALL tools
+    #[serde(default)]
+    pub common_argument_mappings: HashMap<String, String>,
 }
 
 impl IntentToolMappingsConfig {
@@ -124,6 +136,8 @@ impl Default for ToolsConfig {
             slot_aliases: HashMap::new(),
             tool_defaults: HashMap::new(),
             argument_mappings: HashMap::new(),
+            common_argument_mappings: HashMap::new(),
+            parameter_aliases: HashMap::new(),
         }
     }
 }
@@ -170,7 +184,7 @@ impl ToolsConfig {
     /// P16 FIX: Convert to Vec<ToolDefinition> for LLM crate
     ///
     /// Returns tool definitions in the format expected by voice_agent_core::ToolDefinition.
-    /// This replaces the hardcoded gold_loan_tools() function in the llm crate.
+    /// This provides config-driven tool definitions, replacing hardcoded tool functions.
     pub fn to_tool_definitions(&self) -> Vec<ToolDefinition> {
         self.tools
             .iter()
@@ -239,14 +253,83 @@ impl ToolsConfig {
         self.tool_defaults.get(tool)
     }
 
+    /// P25 FIX: Get a single tool default value by tool and key
+    ///
+    /// Convenience method for getting a specific default value.
+    /// Returns None if tool or key doesn't exist.
+    pub fn get_tool_default(&self, tool: &str, key: &str) -> Option<&serde_json::Value> {
+        self.tool_defaults.get(tool).and_then(|defaults| defaults.get(key))
+    }
+
     /// Get argument mapping for a tool
     pub fn get_argument_mapping(&self, tool: &str) -> Option<&HashMap<String, String>> {
         self.argument_mappings.get(tool)
     }
 
+    /// P20 FIX: Get common argument mappings that apply to all tools
+    pub fn get_common_argument_mappings(&self) -> &HashMap<String, String> {
+        &self.common_argument_mappings
+    }
+
     /// Normalize a slot name using slot_aliases
     pub fn normalize_slot<'a>(&'a self, slot: &'a str) -> &'a str {
         self.slot_aliases.get(slot).map(|s| s.as_str()).unwrap_or(slot)
+    }
+
+    // ====== DOMAIN-AGNOSTIC FIX: Parameter Alias Support ======
+
+    /// Get aliases for a parameter name
+    pub fn get_parameter_aliases(&self, param_name: &str) -> Option<&Vec<String>> {
+        self.parameter_aliases.get(param_name)
+    }
+
+    /// Get a parameter value from input, trying aliases if primary name not found
+    ///
+    /// This is the core method for domain-agnostic parameter handling.
+    /// Tools should use this instead of directly accessing input.get("hardcoded_name")
+    pub fn get_param_with_aliases(
+        &self,
+        input: &serde_json::Value,
+        param_name: &str,
+    ) -> Option<serde_json::Value> {
+        // Try primary name first
+        if let Some(val) = input.get(param_name) {
+            return Some(val.clone());
+        }
+        // Try aliases from config
+        if let Some(aliases) = self.parameter_aliases.get(param_name) {
+            for alias in aliases {
+                if let Some(val) = input.get(alias) {
+                    return Some(val.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Get a numeric parameter value with alias fallback
+    pub fn get_numeric_param_with_aliases(
+        &self,
+        input: &serde_json::Value,
+        param_name: &str,
+    ) -> Option<f64> {
+        self.get_param_with_aliases(input, param_name)
+            .and_then(|v| v.as_f64())
+    }
+
+    /// Get a string parameter value with alias fallback
+    pub fn get_string_param_with_aliases(
+        &self,
+        input: &serde_json::Value,
+        param_name: &str,
+    ) -> Option<String> {
+        self.get_param_with_aliases(input, param_name)
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+    }
+
+    /// Check if parameter_aliases are configured
+    pub fn has_parameter_aliases(&self) -> bool {
+        !self.parameter_aliases.is_empty()
     }
 }
 
@@ -268,6 +351,47 @@ impl ToolDefinition {
     }
 }
 
+/// P22 FIX: Tool metadata for factory use
+///
+/// This metadata is used by DomainToolFactory to dynamically create tools
+/// from config instead of hardcoding tool metadata in Rust code.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolSchemaMetadata {
+    /// Display name for UI (e.g., "Eligibility Check")
+    #[serde(default)]
+    pub display_name: String,
+    /// Icon identifier (e.g., "calculator", "location", "phone")
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Whether the tool requires domain config to function
+    #[serde(default = "default_true")]
+    pub requires_domain_config: bool,
+    /// Whether the tool requires external integrations (CRM, calendar, etc.)
+    #[serde(default)]
+    pub requires_integrations: bool,
+    /// Timeout in seconds for tool execution
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u64,
+    /// Name aliases for backward compatibility
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// P22 FIX: Execution type for factory-based tool creation
+    /// Values: "calculation", "lookup", "integration", "generic"
+    #[serde(default)]
+    pub execution_type: Option<String>,
+    /// P22 FIX: Calculator method for calculation-type tools
+    #[serde(default)]
+    pub calculator_method: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_timeout() -> u64 {
+    30
+}
+
 /// Schema definition for a single tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSchema {
@@ -284,6 +408,9 @@ pub struct ToolSchema {
     /// Tool category for grouping (e.g., "calculation", "communication", "crm")
     #[serde(default)]
     pub category: Option<String>,
+    /// P22 FIX: Tool metadata for factory use (loaded from config)
+    #[serde(default)]
+    pub metadata: Option<ToolSchemaMetadata>,
 }
 
 impl ToolSchema {
@@ -395,6 +522,75 @@ impl ToolSchema {
                 "required": required,
             }
         })
+    }
+
+    // ====== P22 FIX: Metadata Accessor Methods ======
+
+    /// Get display name (from metadata or fall back to name)
+    pub fn display_name(&self) -> &str {
+        self.metadata
+            .as_ref()
+            .filter(|m| !m.display_name.is_empty())
+            .map(|m| m.display_name.as_str())
+            .unwrap_or(&self.name)
+    }
+
+    /// Get icon identifier (if set)
+    pub fn icon(&self) -> Option<&str> {
+        self.metadata.as_ref().and_then(|m| m.icon.as_deref())
+    }
+
+    /// Check if tool requires domain config
+    pub fn requires_domain_config(&self) -> bool {
+        self.metadata
+            .as_ref()
+            .map(|m| m.requires_domain_config)
+            .unwrap_or(true)
+    }
+
+    /// Check if tool requires external integrations
+    pub fn requires_integrations(&self) -> bool {
+        self.metadata
+            .as_ref()
+            .map(|m| m.requires_integrations)
+            .unwrap_or(false)
+    }
+
+    /// Get timeout in seconds
+    pub fn timeout_secs(&self) -> u64 {
+        self.metadata
+            .as_ref()
+            .map(|m| m.timeout_secs)
+            .unwrap_or(30)
+    }
+
+    /// Get name aliases for backward compatibility
+    pub fn aliases(&self) -> &[String] {
+        self.metadata
+            .as_ref()
+            .map(|m| m.aliases.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Check if a name matches this tool (including aliases)
+    pub fn matches_name(&self, name: &str) -> bool {
+        self.name == name || self.aliases().iter().any(|a| a == name)
+    }
+
+    /// P22 FIX: Get execution type for factory-based creation
+    /// Returns "generic" if not specified
+    pub fn execution_type(&self) -> &str {
+        self.metadata
+            .as_ref()
+            .and_then(|m| m.execution_type.as_deref())
+            .unwrap_or("generic")
+    }
+
+    /// P22 FIX: Get calculator method for calculation-type tools
+    pub fn calculator_method(&self) -> Option<&str> {
+        self.metadata
+            .as_ref()
+            .and_then(|m| m.calculator_method.as_deref())
     }
 }
 
@@ -538,6 +734,7 @@ tools:
             description: "A test tool".to_string(),
             enabled: None,
             category: Some("test".to_string()),
+            metadata: None, // P23 FIX: Added missing field
             parameters: vec![
                 ToolParameter {
                     name: "required_param".to_string(),

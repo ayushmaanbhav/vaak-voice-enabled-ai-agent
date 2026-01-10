@@ -185,38 +185,37 @@ impl KnowledgeLoader {
     /// Create a sample knowledge file for reference
     ///
     /// This creates an example YAML file showing the expected format.
+    /// P21 FIX: Uses domain-agnostic sample data
     pub fn create_sample_file(path: &Path) -> Result<(), RagError> {
         let sample = KnowledgeFile {
             version: Some("1.0".to_string()),
             documents: vec![
                 KnowledgeDocument {
-                    id: "gold_loan_intro_001".to_string(),
-                    title: "What is a Gold Loan?".to_string(),
-                    content: "A gold loan is a secured loan where you pledge your gold ornaments \
-                              or jewelry as collateral to borrow money. The loan amount is \
-                              typically 75-90% of the gold's market value."
+                    id: "service_intro_001".to_string(),
+                    title: "About Our Service".to_string(),
+                    content: "Our service provides quick and easy solutions tailored to your needs. \
+                              We offer competitive rates and flexible terms to meet your requirements."
                         .to_string(),
                     category: Some("faq".to_string()),
                     language: "en".to_string(),
                     keywords: vec![
-                        "gold loan".to_string(),
-                        "secured loan".to_string(),
-                        "collateral".to_string(),
+                        "service".to_string(),
+                        "introduction".to_string(),
+                        "overview".to_string(),
                     ],
                 },
                 KnowledgeDocument {
-                    id: "gold_loan_benefits_001".to_string(),
-                    title: "Benefits of Gold Loan".to_string(),
-                    content: "Gold loans offer several benefits: quick disbursal (often within \
-                              30 minutes), lower interest rates compared to personal loans, \
-                              no credit score requirements, and flexible repayment options."
+                    id: "service_benefits_001".to_string(),
+                    title: "Benefits of Our Service".to_string(),
+                    content: "Our service offers several benefits: quick processing, \
+                              competitive rates, minimal documentation, and flexible options."
                         .to_string(),
                     category: Some("product".to_string()),
                     language: "en".to_string(),
                     keywords: vec![
                         "benefits".to_string(),
                         "quick".to_string(),
-                        "low interest".to_string(),
+                        "competitive".to_string(),
                     ],
                 },
             ],

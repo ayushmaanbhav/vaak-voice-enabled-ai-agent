@@ -49,6 +49,12 @@ pub use domain::{
     ActionContext, ActionTemplate, ActionTemplatesConfig, GoalEntry, GoalsConfig,
     // View types
     AgentDomainView, CompetitorInfo, LlmDomainView, MonthlySavings, ToolsDomainView,
+    // P21 FIX: Domain bridge for trait-based factory methods
+    DomainBridge,
+    // P21 FIX: Extraction patterns for domain-agnostic slot extraction
+    ExtractionPatternsConfig,
+    // P23 FIX: Config validator for startup validation
+    ConfigValidator, ValidationResult, ValidationSeverity,
 };
 
 use thiserror::Error;

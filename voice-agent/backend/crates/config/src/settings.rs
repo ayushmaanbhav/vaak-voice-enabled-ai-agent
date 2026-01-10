@@ -674,7 +674,8 @@ fn default_qdrant_endpoint() -> String {
     endpoints::QDRANT_DEFAULT.to_string()
 }
 fn default_qdrant_collection() -> String {
-    "gold_loan_knowledge".to_string()
+    // P18 FIX: Use generic default; actual value comes from domain config
+    "domain_knowledge".to_string()
 }
 fn default_vector_dim() -> usize {
     1024
